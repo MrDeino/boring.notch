@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 Phase: 9
 Plan: Not started
 Status: Milestone complete
-Last activity: 2026-10-14
+Last activity: 2026-10-15 - Completed quick task 261014-x18: expand gap and fade, run log viewer, activity line
 
 Progress: [██████████] 100%
 
@@ -106,4 +106,5 @@ Resume file: None
 | 261014-rm9 | Closed-notch hairline pinned to the visible notch bottom at any height; image paste/drop chips uploaded via /api/chat/image through the send queue | 2026-10-14 | .planning/quick/261014-rm9-hairline-pin-and-image-paste |
 | 261014-s3q | No closed hairline; content-sized asymmetric wings; one view tree for smooth expand/collapse; 850-wide expanded level; draft in shared store; fresh fetch after send/answer; rail stays put; growing composer; notes click-to-type and grow; prompt context above cards | 2026-10-14 | .planning/quick/261014-s3q-wings-fit-smooth-bigger-expand-notes-dra |
 | 261014-tmq | Live status parses the new spinner format + serve `live`; segment hidden at expanded; stick-to-bottom scroll with New messages pill; drag-select auto-copy; CLI-like tool rows with description | 2026-10-14 | .planning/quick/261014-tmq-live-status-scroll-segment-selection-too |
+| 261014-x18 | Expanded composer on 12pt bottom padding; fade-out/spring/fade-in expand instead of reflow; blue run activity line; run log overlay from cards and rail dots | 2026-10-15 | .planning/quick/261014-x18-expand-gap-and-fade-run-log-viewer-activ |
 | 261014-q90 | Wings: runs + chat working (elapsed, count), queued done/failed, paused music yields, music-playing ✻/✓ | 2026-10-14 | .planning/quick/261014-q90-live-activity-wings |
