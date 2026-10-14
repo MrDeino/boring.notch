@@ -83,8 +83,8 @@
 
 ### Phase B approvals (Phase 9)
 
-- [ ] **APR-01**: A Claude Code PreToolUse/Notification hook posts pending approvals to serve
-- [ ] **APR-02**: The closed notch drops down the approval panel (Allow ⌥⏎ / Deny ⌥⎋ / More…)
+- [x] **APR-01**: A Claude Code PreToolUse/Notification hook posts pending approvals to serve
+- [x] **APR-02**: The closed notch drops down the approval panel (Allow ⌥⏎ / Deny ⌥⎋ / More…)
 - [ ] **APR-03**: ⌥⏎ / ⌥⎋ answer the pending approval globally via a sandbox-safe hotkey API
 - [ ] **APR-04**: The panel frame is sized to its content instead of the fixed `windowSize` plus an expand step
 
@@ -158,8 +158,8 @@
 | LIVE-03 | Phase 8 | Complete |
 | LIVE-04 | Phase 8 | Complete |
 | LIVE-05 | Phase 8 | Complete |
-| APR-01 | Phase 9 | Pending |
-| APR-02 | Phase 9 | Pending |
+| APR-01 | Phase 9 | Complete |
+| APR-02 | Phase 9 | Complete |
 | APR-03 | Phase 9 | Pending |
 | APR-04 | Phase 9 | Pending |
 
