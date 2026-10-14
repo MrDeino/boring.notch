@@ -212,13 +212,5 @@ func wingLabel(promptTitle: String?, waitingDenials: [String]?) -> String {
     return "Needs you"
 }
 
-// ponytail: character-count width estimate for 11pt text, upgrade = measure with NSFont if UAT shows clipping.
-func wingSideWidth(_ kind: WingKind, notchWidth: CGFloat, elapsed: String = "") -> CGFloat {
-    let outer: CGFloat, est: CGFloat
-    switch kind {
-    case .working(let n): outer = 285; est = CGFloat(elapsed.count) * 6.7 + (n > 1 ? 18 : 0)
-    case .needsYou(let l): outer = 305; est = CGFloat(l.count) * 6.5 + 8
-    case .finished(let p, _): outer = 285; est = CGFloat(p.count) * 6.2
-    }
-    return max(((outer - 28 - notchWidth) / 2), est).rounded(.up)
-}
+/// Horizontal offset that keeps the middle notch rect centred over the hardware notch when the wings differ in width.
+func wingShift(left: CGFloat, right: CGFloat) -> CGFloat { ((right - left) / 2).rounded() }

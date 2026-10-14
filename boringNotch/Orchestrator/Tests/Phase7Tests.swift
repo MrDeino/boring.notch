@@ -145,11 +145,6 @@ func runPhase7Tests() {
     precondition(longestWorking(chatElapsed: nil, runs: notRunning, now: now) == nil)
     precondition(wingLabel(promptTitle: "Bash command", waitingDenials: nil) == "Bash?" && wingLabel(promptTitle: "Edit file?", waitingDenials: nil) == "Edit?")
     precondition(wingLabel(promptTitle: nil, waitingDenials: ["Write"]) == "Write?" && wingLabel(promptTitle: nil, waitingDenials: nil) == "Needs you" && wingLabel(promptTitle: "", waitingDenials: []) == "Needs you")
-    precondition(wingSideWidth(.working(1), notchWidth: 185, elapsed: "0:41") == 36 && wingSideWidth(.needsYou("Bash?"), notchWidth: 185) == 46)
-    precondition(wingSideWidth(.finished("notch-dd", failed: false), notchWidth: 185) >= 36 && wingSideWidth(.finished("notch-dd", failed: false), notchWidth: 185) >= 8 * 6.2)
-    precondition(wingSideWidth(.needsYou("A much longer label"), notchWidth: 185) > wingSideWidth(.needsYou("Bash?"), notchWidth: 185))
-    precondition(wingSideWidth(.finished("a-very-long-project-name", failed: false), notchWidth: 185) > wingSideWidth(.finished("notch-dd", failed: false), notchWidth: 185))
-    precondition(wingSideWidth(.working(3), notchWidth: 185, elapsed: "1:02:41") > wingSideWidth(.working(1), notchWidth: 185, elapsed: "1:02:41"))
-    precondition(wingSideWidth(.working(1), notchWidth: 185, elapsed: "1:02:41") >= 7 * 6.7)
-    precondition(2 * wingSideWidth(.working(1), notchWidth: 185, elapsed: "0:41") + 185 + 28 == 285 && 2 * wingSideWidth(.needsYou("Bash?"), notchWidth: 185) + 185 + 28 == 305)
+    precondition(wingShift(left: 23, right: 35) == 6 && wingShift(left: 16, right: 56) == 20 && wingShift(left: 30, right: 30) == 0)
+    precondition(wingShift(left: 40, right: 20) == -10 && wingShift(left: 20, right: 25) == 3)
 }

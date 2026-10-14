@@ -7,6 +7,7 @@ import SwiftUI
 struct ClosedReplica: View {
     @ObservedObject var vm: BoringViewModel
     var music = false
+    @ObservedObject var wings = OrchestratorWingsModel.shared
 
     var body: some View {
         Group {
@@ -31,7 +32,11 @@ struct ClosedReplica: View {
         .background(.black)
         .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12))
         .overlay { OrchestratorClosedIndicators() }
+        .offset(x: music ? 0 : wings.shiftX)
         .frame(width: 440, height: 56, alignment: .top)
+        .overlay(alignment: .top) { // where the hardware notch is
+            Rectangle().stroke(Color.red, lineWidth: 1).frame(width: vm.closedNotchSize.width, height: vm.closedNotchSize.height)
+        }
         .background(Color(white: 0.35))
         .environmentObject(vm)
     }
@@ -69,10 +74,21 @@ extension Snap {
             window.contentView = host
             try? await Task.sleep(for: .milliseconds(500))
             host.layoutSubtreeIfNeeded()
-            if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+            let rep0 = host.bitmapImageRepForCachingDisplay(in: host.bounds)
+            if let rep = rep0 {
                 host.cacheDisplay(in: host.bounds, to: rep)
                 try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("closed-\(name).png"))
             }
+            if !music, let rep = rep0 {
+                func black(_ x: Int) -> Bool { (rep.colorAt(x: x, y: 2)?.usingColorSpace(.deviceRGB)?.brightnessComponent ?? 1) < 0.05 }
+                let xs = (0..<rep.pixelsWide).filter(black)
+                let scale = CGFloat(rep.pixelsWide) / 440
+                if let a = xs.first, let b = xs.last {
+                    let centre = (CGFloat(a) + CGFloat(b + 1)) / 2 / scale
+                    let shift = OrchestratorWingsModel.shared.shiftX
+                    print("wings \(name): shift=\(shift) centre=\(abs(centre - (220 + shift)) <= 1 ? "ok" : "off") (\(centre))")
+                }
+            } else if music { print("wings \(name): shift=\(OrchestratorWingsModel.shared.shiftX)") }
             window.contentView = nil
             print("closed-\(name): \(String(describing: OrchestratorWingsModel.shared.kind))")
         }
@@ -97,5 +113,9 @@ extension Snap {
         await shot("11-music-needs-you", music: true)
         await apply(working, []); await shot("15-wings-38", height: 38)
         await apply(idle, [run("w", "notch", "waiting", ago: 60)]); await shot("16-needs-you-38", height: 38)
+        await apply(idle, [r1]); await apply(idle, [run("r1", "notch", "failed", ago: 4320)]); await shot("17-finished-failed-38", height: 38)
+        try? await Task.sleep(for: .seconds(4))
+        await apply(working, [r1, r2]); await shot("18-working-hour-count-38", height: 38)
     }
 }
+

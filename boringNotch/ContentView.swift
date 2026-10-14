@@ -120,6 +120,7 @@ struct ContentView: View {
                     )
                 
                 mainLayout
+                    .offset(x: vm.notchState == .closed ? wings.shiftX : 0)
                     .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
                     .conditionalModifier(true) { view in
                         let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)

@@ -7,6 +7,8 @@ import Combine
 final class OrchestratorWingsModel: ObservableObject {
     static let shared = OrchestratorWingsModel()
     @Published private(set) var kind: WingKind? = nil
+    /// Offset that re-centres the closed shape when the wings differ in width; 0 while no wing is on screen.
+    @Published private(set) var shiftX: CGFloat = 0
     private let manager = OrchestratorManager.shared
     private var baseline = RunsBaseline()
     private var queue: [(project: String, failed: Bool)] = []
@@ -43,6 +45,11 @@ final class OrchestratorWingsModel: ObservableObject {
         }
     }
 
+    func setShift(_ x: CGFloat) {
+        guard x != shiftX else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { shiftX = x }
+    }
+
     private func recompute() {
         var k: WingKind? = nil
         if manager.hasLoaded && !manager.offline {
@@ -62,21 +69,24 @@ struct OrchestratorWingsView: View {
     @ObservedObject var model = OrchestratorWingsModel.shared
     @ObservedObject var manager = OrchestratorManager.shared
     @State private var anchor: (elapsed: TimeInterval, at: Date) = (0, .now)
+    @State private var leftW: CGFloat = 0
+    @State private var rightW: CGFloat = 0
 
     var body: some View {
         if let k = model.kind {
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 let elapsed = elapsedText(ctx.date)
-                let side = wingSideWidth(k, notchWidth: vm.closedNotchSize.width, elapsed: elapsed)
                 HStack(spacing: 0) {
-                    left(k).frame(width: side, alignment: .leading)
+                    left(k).padding(.trailing, 8).measured($leftW)
                     Rectangle().fill(.black).frame(width: vm.closedNotchSize.width)
-                    right(k, elapsed: elapsed).frame(width: side, alignment: .trailing)
+                    right(k, elapsed: elapsed).padding(.leading, 8).measured($rightW)
                 }
             }
             .frame(height: vm.effectiveClosedNotchHeight)
             .transition(.opacity)
             .onAppear { anchor = (manager.liveStatus?.elapsed ?? 0, .now) }
+            .onChange(of: wingShift(left: leftW, right: rightW), initial: true) { _, x in model.setShift(x) }
+            .onDisappear { model.setShift(0) }
             .onChange(of: manager.liveStatus?.elapsed) { _, e in anchor = (e ?? 0, .now) }
         }
     }
@@ -118,8 +128,19 @@ struct OrchestratorWingsView: View {
                 .background(OT.C.orangeBg, in: RoundedRectangle(cornerRadius: 9))
                 .lineLimit(1).fixedSize()
         case .finished(let project, _):
-            Text(verbatim: project).font(.system(size: 11)).foregroundStyle(OT.C.text4).lineLimit(1)
+            Text(verbatim: project).font(.system(size: 11)).foregroundStyle(OT.C.text4).lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: 200, alignment: .leading).fixedSize(horizontal: true, vertical: false)
         }
+    }
+}
+
+private extension View {
+    /// Reports this view's width into `width`.
+    func measured(_ width: Binding<CGFloat>) -> some View {
+        background(GeometryReader { g in
+            Color.clear.onAppear { width.wrappedValue = g.size.width }
+                .onChange(of: g.size.width) { _, w in width.wrappedValue = w }
+        })
     }
 }
 
