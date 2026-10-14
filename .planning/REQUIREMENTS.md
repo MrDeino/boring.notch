@@ -1,0 +1,66 @@
+# Requirements: Boring Notch — Orchestrator Fork
+
+**Defined:** 2026-10-14
+**Core Value:** Answer and steer the Claude Code orchestrator from the notch without switching to a terminal — and never break the music player doing it.
+
+## v1 Requirements
+
+### Build & Integrity
+
+- [ ] **BLD-01**: The fork builds from the command line with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild` (ad-hoc signed, entitlements intact)
+- [ ] **BLD-02**: Music / now-playing (playback controls, artwork, closed-notch music activity) works exactly as before after every phase
+- [ ] **BLD-03**: Orchestrator code lives in new files under one folder; upstream files get only small, isolated hooks; no new third-party dependencies
+
+### Orchestrator Tab (read-only)
+
+- [ ] **TAB-01**: User can open an "Orchestrator" tab beside the existing tabs in the opened notch
+- [ ] **TAB-02**: User sees the tail of the orchestrator chat screen (from `GET /api/chat`), trimmed to fit
+- [ ] **TAB-03**: User sees a compact runs strip: project, state, short prompt per run (from `GET /api/state`)
+- [ ] **TAB-04**: User sees usage bars for the 5-hour and 7-day windows with their reset times
+- [ ] **TAB-05**: User sees "orchestrator offline" with a hint (serve on 127.0.0.1:4777) when serve is unreachable
+- [ ] **TAB-06**: Data refreshes about every 2s while the notch is open and more slowly while closed
+
+### Interaction
+
+- [ ] **INT-01**: User can type a one-line message and press Enter to send it to the orchestrator (`POST /api/chat {text}`)
+- [ ] **INT-02**: When a Claude Code question/permission prompt with numbered options is on screen, user sees its options as buttons; tapping one sends that digit (`{key}`)
+- [ ] **INT-03**: User can cancel a prompt with an Esc control
+- [ ] **INT-04**: When the chat is not running, user sees a Start button that starts it (`POST /api/chat/start`)
+- [ ] **INT-05**: User can end the chat with an End button after confirming (`POST /api/chat/stop`)
+- [ ] **INT-06**: The notch stays open while the user is typing in the message box
+
+### Compact & Expand
+
+- [ ] **CMP-01**: With the notch closed, user sees a small Claude usage indicator
+- [ ] **CMP-02**: With the notch closed, user sees a dot when any run is `waiting` or the chat shows a question/permission prompt
+- [ ] **EXP-01**: User can expand the notch further downward (same window) to see a larger chat view
+- [ ] **EXP-02**: In the expanded notch, user can see and type into the full live terminal (`/term` in a WKWebView)
+- [ ] **EXP-03**: Clicking anywhere outside the expanded notch collapses it back
+
+## v2 Requirements
+
+- **V2-01**: Auto-open the notch when a prompt appears (toggle, default off)
+- **V2-02**: Colour-coded attention dot (waiting run vs chat prompt)
+- **V2-03**: Option buttons for multi-select prompts
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Spawning tmux/node/processes | App is sandboxed; HTTP API only |
+| Separate terminal window/popover | Agreed design is expand-down inside the notch |
+| Run controls (stop/resume/merge) from the notch | Orchestrator chat owns those; keeps the notch small |
+| Auto-approve prompts | Unsafe |
+| ANSI terminal emulation in SwiftUI | `/term` WKWebView covers full fidelity |
+| Multi-line composer, notifications | Not requested |
+| Improving stock features other than music | Not used |
+| Signing/notarization/distribution, upstream PRs | Personal local build |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| (filled by roadmap) | | |
+
+---
+*Requirements defined: 2026-10-14*

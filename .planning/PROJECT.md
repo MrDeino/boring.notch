@@ -46,12 +46,15 @@ Answer and steer the Claude Code orchestrator from the notch without switching t
 - Tabs: `NotchViews` enum (`boringNotch/enums/generic.swift`: home, shelf), `components/Tabs/TabSelectionView.swift`, rendered from `ContentView.swift`. Notch sizing in `boringNotch/sizing/`.
 - App is sandboxed with `com.apple.security.network.client` already in `boringNotch.entitlements`.
 - Orchestrator: Claude Code chat in tmux session `orchestrator`, served by `node orch.js serve` at `http://127.0.0.1:4777` (LaunchAgent, always on).
-  - `GET /api/state` → `{runs:[{id, project, status: running|waiting|done|failed|stopped|stuck, prompt}], sessions, events, usage:{five_hour:{used_percentage, resets_at}, seven_day:{…}}}` (resets_at = epoch seconds)
+  - `GET /api/state` → `{runs:[{id, project, state: running|waiting|done|failed|stopped|stuck, prompt}]  (field is `state`, not `status`), sessions, events, usage:{five_hour:{used_percentage, resets_at}, seven_day:{…}}}` (resets_at = epoch seconds)
   - `GET /api/chat` → `{running: bool, screen: string}` (plain text, last ~200 lines)
   - `POST /api/chat` (header `x-orch: 1`) JSON `{text}` (types text + Enter) or `{key}` ∈ Enter, Escape, Up, Down, Tab, 1–9. 409 if not running.
   - `POST /api/chat/start`, `POST /api/chat/stop` (header `x-orch: 1`); dispatched runs unaffected.
   - `/term` — ttyd web terminal; its websocket requires `Origin: http://127.0.0.1:4777`, which a WKWebView loading that URL satisfies.
-- Plain HTTP to 127.0.0.1 may need an ATS exception (`NSAllowsLocalNetworking`) in Info.plist.
+- ATS/sandbox already allow it: Info.plist has `NSAllowsArbitraryLoads`, entitlements have `network.client`. No changes needed.
+- Notch windows hard-code `canBecomeKey = false` (non-activating panel) — typing needs a gated key-window hook.
+- Tabs only show when Shelf is enabled (`BoringHeader.swift:19`).
+- Build proven 2026-10-14: `xcodebuild -project boringNotch.xcodeproj -scheme boringNotch -configuration Debug CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build` → BUILD SUCCEEDED (ad-hoc; keep entitlements, don't use CODE_SIGNING_ALLOWED=NO).
 
 ## Constraints
 
