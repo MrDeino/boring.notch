@@ -221,10 +221,10 @@ Plans:
   4. The input box ghost text uses serve's `{text, suggested}` (from `tmux capture-pane -e`) instead of guessing
   5. The Running capsule shows "ctx N%"; music unaffected
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 08-01-PLAN.md — serve `input`/`context` in the chat payload: exact ghost text (LIVE-04), ctx N% capsule (LIVE-05), split apply path
+- [x] 08-01-PLAN.md — serve `input`/`context` in the chat payload: exact ghost text (LIVE-04), ctx N% capsule (LIVE-05), split apply path
 - [ ] 08-02-PLAN.md — SSE `/api/events` consumer with polling fallback and 30 s retry (LIVE-01)
 - [ ] 08-03-PLAN.md — streaming caret (LIVE-02) and ▸ diff frame 12 card (LIVE-03)
 
@@ -269,5 +269,5 @@ Plans:
 | 5. 2a Structured Chat | 3/3 | Complete   | 2026-10-14 |
 | 6. 2a Prompt Cards | 3/3 | Complete   | 2026-10-14 |
 | 7. 2a Runs Board, Expand Levels & Wings | 5/5 | Complete   | 2026-10-14 |
-| 8. Phase B Live Data | 0/3 | Planned | - |
+| 8. Phase B Live Data | 1/3 | In Progress|  |
 | 9. Phase B Approvals | 0/0 | Not planned | - |

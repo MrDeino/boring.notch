@@ -78,8 +78,8 @@
 - [ ] **LIVE-01**: The manager consumes serve's SSE stream for blocks and state, falling back to polling
 - [ ] **LIVE-02**: Streaming assistant text shows the caret
 - [ ] **LIVE-03**: ▸ diff expands an Edit row into the diff card
-- [ ] **LIVE-04**: Input-box ghost text uses serve's `suggested` flag (`capture-pane -e`)
-- [ ] **LIVE-05**: The Running capsule shows context %
+- [x] **LIVE-04**: Input-box ghost text uses serve's `suggested` flag (`capture-pane -e`)
+- [x] **LIVE-05**: The Running capsule shows context %
 
 ### Phase B approvals (Phase 9)
 
@@ -156,8 +156,8 @@
 | LIVE-01 | Phase 8 | Pending |
 | LIVE-02 | Phase 8 | Pending |
 | LIVE-03 | Phase 8 | Pending |
-| LIVE-04 | Phase 8 | Pending |
-| LIVE-05 | Phase 8 | Pending |
+| LIVE-04 | Phase 8 | Complete |
+| LIVE-05 | Phase 8 | Complete |
 | APR-01 | Phase 9 | Pending |
 | APR-02 | Phase 9 | Pending |
 | APR-03 | Phase 9 | Pending |
