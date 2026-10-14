@@ -90,6 +90,19 @@ final class OrchestratorTranscriptStore: ObservableObject {
         }
         return false
     }
+
+    @Published private(set) var submitting = false
+
+    /// Clear + send as one operation: never alongside another submit or a manager POST, so C-u can't wipe the box for nothing.
+    // ponytail: a manager POST starting between C-u and the text still drops the send (draft is kept); one manager op fixes it when the manager is free to edit.
+    func submit(_ text: String) async -> Bool {
+        let m = OrchestratorManager.shared
+        guard !submitting, !m.sending else { return false }
+        submitting = true
+        defer { submitting = false }
+        guard await clearRealLineIfNeeded(), !m.sending else { return false }
+        return await m.sendText(text)
+    }
 }
 
 struct OrchestratorChatView: View {
@@ -254,7 +267,7 @@ struct OrchestratorChatView: View {
             .frame(width: 20, height: 20)
         }
         .buttonStyle(.plain)
-        .disabled(blank || manager.sending)
+        .disabled(blank || manager.sending || store.submitting)
     }
 
     /// Terminal draft -> field on focus; key monitor lifecycle.
@@ -342,8 +355,9 @@ struct OrchestratorChatView: View {
     private func submit() {
         let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { stopTyping(); return }
+        guard !manager.sending, !store.submitting else { return } // Enter is ignored like the disabled send button
         stopTyping()
-        Task { if await store.clearRealLineIfNeeded(), await manager.sendText(t) { draft = ""; fromTerminal = false } }
+        Task { if await store.submit(t) { draft = ""; fromTerminal = false } }
     }
 }
 
