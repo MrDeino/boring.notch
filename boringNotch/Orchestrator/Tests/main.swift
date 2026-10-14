@@ -80,4 +80,8 @@ if let logPath = ProcessInfo.processInfo.environment["ORCH_MOCK_LOG"] {
 }
 
 runPhase3Tests()
+runPhase4Tests()
+runPhase5Tests()
+runPhase6Tests()
+runPhase7Tests()
 print("OK")

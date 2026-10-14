@@ -1,0 +1,12 @@
+{"running": true, "blocks": [
+ {"id": "11111111-aaaa-bbbb-cccc-000000000001", "kind": "user", "text": "Tidy the notch transcript styling"},
+ {"id": "toolu_01Read", "kind": "tool", "name": "Read", "target": "/Users/x/proj/OrchestratorView.swift", "result": "import SwiftUI (+286 lines)"},
+ {"id": "toolu_02Edit", "kind": "tool", "name": "Edit", "target": "/Users/x/proj/OrchestratorView.swift", "result": "updated", "added": 12, "removed": 4,
+  "diff": [{"oldStart": 10, "newStart": 10, "lines": [" ctx", "-old", "+new"]}]},
+ {"id": "toolu_03Bash", "kind": "tool", "name": "Bash", "target": "git status", "result": null},
+ {"id": "th1", "kind": "thinking", "text": "hmm"},
+ {"id": 7, "kind": "prose", "text": "int id"},
+ {"id": {}, "kind": "prose"},
+ {"id": "p-notext", "kind": "prose"},
+ {"id": "p-md", "kind": "prose", "text": "Done. **bold** and [link](https://x.y)"}
+]}

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Phases 2 and 3 executed; on-screen UAT pending
-last_updated: "2026-10-14T02:00:00.000Z"
-last_activity: 2026-10-14 -- Phase 3 merged into phase 2 branch
+stopped_at: Phases 2 and 3 executed and merged; on-screen UAT pending
+last_updated: "2026-10-14T05:07:08.922Z"
+last_activity: 2026-10-14
 progress:
-  total_phases: 3
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_phases: 9
+  completed_phases: 7
+  total_plans: 20
+  completed_plans: 20
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-14)
 
 **Core value:** Answer and steer the Claude Code orchestrator from the notch without switching to a terminal — and never break the music player doing it.
-**Current focus:** On-screen UAT for Phases 2 and 3
+**Current focus:** Phases 5–7 merged into orch/261014045709-9a3d; post-merge fixes; on-screen UAT pending
 
 ## Current Position
 
-Phase: 3 of 3 — Phases 2 (Sending & Prompt Answers) and 3 (Compact Indicators & Expand-Down) EXECUTED
-Plan: 2 of 2
-Status: Phases 2 and 3 executed and verified at code level; on-screen UAT pending (02-HUMAN-UAT.md, 03-HUMAN-UAT.md). Phase 1 UAT passed 2026-10-14.
-Last activity: 2026-10-14 -- Completed quick task 261014-gkq: chat chrome strip, typing activation, header Start/End, tap to expand
+Phase: 05–07 (2a) — merged
+Plan: all plans complete
+Status: Merged; awaiting human UAT
+Last activity: 2026-10-14
 
 Progress: [██████████] 100%
 
@@ -55,10 +55,19 @@ Progress: [██████████] 100%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- 2026-10-14 (user): ⌃U and suggestion-accept (Tab/→) are local only — no `C-u`/`Tab` POST; every send clears Claude's box first. Supersedes the POST half of Phase 5 D-10.
+- 2026-10-14 post-merge (5+6+7): `OrchestratorManager.refresh(fresh:)` waits out an in-flight poll and fetches again (prompt re-check before answering); `sendText(_:clearFirst:)` runs the box clear and the text inside one `sending` window, so a prompt answer can't land in between; the expanded column's chat shows full prose and scrolls (`OrchestratorChatView(scrolls:)`).
 - [Roadmap]: 3 coarse phases; BLD-02/BLD-03 mapped to Phase 1 but every phase has a music-still-works criterion
 - [Roadmap]: `detectPrompt(screen)` built in Phase 1 (pure fn + assert check); fixtures refined from real captures in Phase 2
 - [Roadmap]: Phase 2 opens with the gated `canBecomeKey` spike
 - [User 2026-10-14]: Closed-notch attention dot shows even while music plays (dot at notch edge alongside music); built in Phase 3, Phase 1 must expose `needsAttention` state independent of music
+
+### Roadmap Evolution
+
+- 2026-10-14: Phases 4–9 added for the 2a redesign (design handoff in `.planning/design/orchestrator-2a/`): 4 Foundation, 5 Structured chat, 6 Prompt cards, 7 Runs board/expand levels/wings, 8 Phase B live data, 9 Phase B approvals. Phases 5, 6, 7 will execute in parallel after Phase 4 (merge map: `.planning/design/orchestrator-2a/MERGE-MAP.md`).
+- [User 2026-10-14]: Chat rows come from serve's transcript endpoint `GET /api/chat/blocks?since=<id>`, not screen parsing. Waiting run cards show the run's question and a button that sends that context into the orchestrator chat — no Allow/Deny/resume of runs from the notch.
+
+- [User 2026-10-14]: Phase 7 wave 2 (07-02, 07-03, 07-04) runs one plan at a time; commit-range checks stay as written.
 
 ### Pending Todos
 
@@ -79,7 +88,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-14T01:13:11.913Z
+Last session: 2026-10-14T05:07:08.914Z
 Stopped at: Phases 2 and 3 executed and merged; on-screen UAT pending
 Resume file: None
 

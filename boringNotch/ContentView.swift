@@ -19,6 +19,7 @@ struct ContentView: View {
     @ObservedObject var webcamManager = WebcamManager.shared
 
     @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @ObservedObject private var wings = OrchestratorWingsModel.shared
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
@@ -53,7 +54,7 @@ struct ContentView: View {
         NotchShape(
             topCornerRadius: topCornerRadius,
             bottomCornerRadius: ((vm.notchState == .open) && Defaults[.cornerRadiusScaling])
-                ? cornerRadiusInsets.opened.bottom
+                ? (vm.notchSize.height > openNotchSize.height + 1 ? OT.R.notchExpanded : cornerRadiusInsets.opened.bottom)
                 : cornerRadiusInsets.closed.bottom
         )
     }
@@ -204,7 +205,7 @@ struct ContentView: View {
             }
         }
         .padding(.bottom, 8)
-        .frame(maxWidth: windowSize.width, maxHeight: windowSize.height + max(0, vm.notchSize.height - openNotchSize.height), alignment: .top)
+        .notchRootFrame(notchHeight: vm.notchSize.height)
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,
@@ -291,6 +292,8 @@ struct ContentView: View {
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
                           MusicLiveActivity()
                               .frame(alignment: .center)
+                      } else if vm.notchState == .closed && !vm.hideOnClosed && !coordinator.expandingView.show && wings.kind != nil {
+                          OrchestratorWingsView()
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
                           BoringFaceAnimation()
                        } else if vm.notchState == .open {
@@ -482,6 +485,7 @@ struct ContentView: View {
                 ),
                 alignment: .center
             )
+            .overlay(alignment: .leading) { OrchestratorMusicNeedsDot().offset(x: -8) }
         }
         .frame(
             height: vm.effectiveClosedNotchHeight,

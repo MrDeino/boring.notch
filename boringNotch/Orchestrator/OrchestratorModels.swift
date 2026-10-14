@@ -39,6 +39,25 @@ struct OrchestratorRun: Decodable, Equatable {
     let agent: String?
     let prompt: String?
     let state: String?
+    let startedAt: String?
+    let lastOutput: String?
+    let result: String?
+    let denials: [String]?
+    let latest: String?
+    let activity: RunActivity?
+
+    private enum CodingKeys: String, CodingKey { case id, project, ws, agent, prompt, state, startedAt, lastOutput, result, denials, latest, activity }
+
+    /// Lenient (WR-05): a field of the wrong type becomes nil and null denials are dropped,
+    /// so one odd run never fails StateResponse and takes the tab offline.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func str(_ k: CodingKeys) -> String? { try? c.decodeIfPresent(String.self, forKey: k) }
+        id = str(.id); project = str(.project); ws = str(.ws); agent = str(.agent); prompt = str(.prompt)
+        state = str(.state); startedAt = str(.startedAt); lastOutput = str(.lastOutput); result = str(.result); latest = str(.latest)
+        denials = (try? c.decodeIfPresent([String?].self, forKey: .denials))?.compactMap { $0 }
+        activity = try? c.decodeIfPresent(RunActivity.self, forKey: .activity)
+    }
 
     /// ForEach id that survives a nil id.
     var stableID: String { id ?? "\(project ?? "")|\(prompt ?? "")" }
@@ -49,6 +68,9 @@ struct OrchestratorRun: Decodable, Equatable {
             .first { !$0.isEmpty } ?? ""
     }
 }
+
+struct RunActivity: Decodable, Equatable { let step: String?; let agents: [RunAgent]? }
+struct RunAgent: Decodable, Equatable { let type: String?; let desc: String? }
 
 struct OrchestratorUsage: Decodable, Equatable {
     let fiveHour: UsageWindow?
@@ -70,43 +92,10 @@ func stripRuns(_ runs: [OrchestratorRun], limit: Int) -> [OrchestratorRun] {
     return Array((runs.filter(isLive) + runs.filter { !isLive($0) }).prefix(limit))
 }
 
-struct PromptOption: Equatable {
-    let number: Int
-    let label: String
-}
-
-/// Numbered options of a Claude Code prompt on the screen, [] when none.
-// ponytail: bottom-window heuristic: the last option must be within the last 4 non-blank lines
-// and be followed by the "Esc to cancel" footer; retune if Claude Code adds more footer lines.
-func detectPrompt(screen: String) -> [PromptOption] {
-    let line = #/^[ \u{a0}]*(❯[ \u{a0}]*)?(\d+)\.[ \u{a0}]+(.+)$/#
-    let trim = CharacterSet(charactersIn: " \u{a0}\t\r│")
-    let lines = screen.split(separator: "\n", omittingEmptySubsequences: false)
-        .map { $0.trimmingCharacters(in: trim) }.filter { !$0.isEmpty }.suffix(25)
-    var run: [PromptOption] = []
-    var marked = false
-    var best: [PromptOption] = []
-    var bestEnd = -1
-    for (i, s) in lines.enumerated() {
-        guard let m = try? line.wholeMatch(in: s), let n = Int(m.2), n <= 9 else {
-            if let m = try? line.wholeMatch(in: s), let n = Int(m.2), n > 9 { run = []; marked = false }
-            continue
-        }
-        if n == 1 { run = []; marked = false }
-        guard n == run.count + 1 else { run = []; marked = false; continue }
-        run.append(PromptOption(number: n, label: String(m.3).trimmingCharacters(in: trim)))
-        if m.1 != nil { marked = true }
-        if run.count >= 2 && marked { best = run; bestEnd = i }
-    }
-    // Live prompts end with an "Esc to cancel" footer; a numbered draft in the input box has none.
-    let footer = lines.dropFirst(bestEnd + 1).contains { $0.localizedCaseInsensitiveContains("esc to cancel") }
-    return bestEnd >= 0 && bestEnd >= lines.count - 4 && footer ? best : []
-}
-
 enum OrchestratorPost: Equatable {
     case text(String), key(String), start, stop
 
-    static let allowedKeys: Set<String> = ["Enter", "Escape", "Up", "Down", "Tab", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+    static let allowedKeys: Set<String> = ["Enter", "Escape", "Up", "Down", "Tab", "C-u", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
     /// nil when the input would be rejected by the server (empty text, unknown key).
     func request(base: URL) -> URLRequest? {

@@ -1,0 +1,15 @@
+SYNTHETIC fixture (ASSUMED layout, not captured from Claude Code) - replace with a real capture at UAT
+────────────────────────────────────────────────────────────
+ ←  ☒ Window  ☐ Color  ✔ Submit  →
+
+Which accent colour?
+
+  1. Orange
+     Matches the needs-you dot.
+❯ 2. Blue
+     Calmer, system accent.
+  3. Type something.
+────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel

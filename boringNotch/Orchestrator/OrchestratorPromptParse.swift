@@ -1,0 +1,192 @@
+import Foundation
+
+struct PromptOption: Equatable {
+    let number: Int
+    let label: String
+}
+
+/// Numbered options of a Claude Code prompt on the screen, [] when none.
+func detectPrompt(screen: String) -> [PromptOption] {
+    scanPrompt(screen, window: 40)?.options ?? [] // same window as detectPromptCard, so they never disagree
+}
+
+/// Shared scan behind detectPrompt and detectPromptCard: trimmed non-blank lines plus where the winning
+/// option run sits and which option carries the ❯ pointer.
+// ponytail: bottom-window heuristic: the last option must be within the last 4 non-blank lines
+// and be followed by the "Esc to cancel" footer; retune if Claude Code adds more footer lines.
+private func scanPrompt(_ screen: String, window: Int) -> (lines: [String], options: [PromptOption], indices: [Int], marked: Int?)? {
+    let line = #/^[ \u{a0}]*(❯[ \u{a0}]*)?(\d+)\.[ \u{a0}]+(.+)$/#
+    let trim = CharacterSet(charactersIn: " \u{a0}\t\r│")
+    let lines = Array(screen.split(separator: "\n", omittingEmptySubsequences: false)
+        .map { $0.trimmingCharacters(in: trim) }.filter { !$0.isEmpty }.suffix(window))
+    var run: [PromptOption] = []
+    var runIdx: [Int] = []
+    var markedNo: Int?
+    var best: [PromptOption] = []
+    var bestIdx: [Int] = []
+    var bestMarked: Int?
+    var bestEnd = -1
+    for (i, s) in lines.enumerated() {
+        guard let m = try? line.wholeMatch(in: s), let n = Int(m.2), n <= 9 else {
+            if let m = try? line.wholeMatch(in: s), let n = Int(m.2), n > 9 { run = []; runIdx = []; markedNo = nil }
+            continue
+        }
+        if n == 1 { run = []; runIdx = []; markedNo = nil }
+        guard n == run.count + 1 else { run = []; runIdx = []; markedNo = nil; continue }
+        run.append(PromptOption(number: n, label: String(m.3).trimmingCharacters(in: trim)))
+        runIdx.append(i)
+        if m.1 != nil { markedNo = n }
+        if run.count >= 2 && markedNo != nil { best = run; bestIdx = runIdx; bestMarked = markedNo; bestEnd = i }
+    }
+    // Live prompts end with an "Esc to cancel" footer; a numbered draft in the input box has none.
+    let footer = lines.dropFirst(bestEnd + 1).contains { $0.localizedCaseInsensitiveContains("esc to cancel") }
+    guard bestEnd >= 0 && bestEnd >= lines.count - 4 && footer else { return nil }
+    return (lines, best, bestIdx, bestMarked)
+}
+
+struct PromptCardOption: Equatable {
+    enum Role: Equatable { case normal, deny, freeText, chat }
+    let number: Int
+    let label: String
+    var detail: String? = nil
+    var role: Role = .normal
+}
+
+struct PromptCard: Equatable {
+    enum Kind: Equatable { case permission, question }
+    var title: String? = nil
+    var purpose: String? = nil
+    var body: String? = nil
+    var options: [PromptOption]
+    var kind: Kind
+    var header: String? = nil
+    var progress: String? = nil
+    var question: String? = nil
+    var items: [PromptCardOption] = []
+    var highlighted: Int? = nil
+}
+
+/// What makes two cards "the same prompt" (excludes `highlighted`, which follows the TUI's cursor).
+struct PromptIdentity: Equatable {
+    let kind: PromptCard.Kind
+    let text: [String?]
+    let labels: [String]
+}
+func promptIdentity(_ c: PromptCard) -> PromptIdentity {
+    PromptIdentity(kind: c.kind, text: [c.title, c.question, c.body], labels: c.items.map(\.label) + c.options.map(\.label))
+}
+
+private func isRule(_ s: String, _ ch: Character) -> Bool { s.count >= 10 && s.allSatisfy { $0 == ch } }
+
+/// nil when no prompt is on screen.
+func detectPromptCard(screen: String) -> PromptCard? {
+    guard let sc = scanPrompt(screen, window: 40) else { return nil }
+    let lines = sc.lines
+    let first = sc.indices[0], last = sc.indices[sc.indices.count - 1]
+    let full: (String) -> Bool = { isRule($0, "─") }
+    let dashed: (String) -> Bool = { isRule($0, "╌") }
+    let isFooter: (String) -> Bool = { $0.localizedCaseInsensitiveContains("esc to cancel") || $0.localizedCaseInsensitiveContains("enter to select") }
+    let after = lines.dropFirst(last + 1)
+    let ruleAbove = (0..<first).reversed().first { full(lines[$0]) }
+    let chipIdx = ((ruleAbove.map { $0 + 1 } ?? 0)..<first).first { "←☐☒✔".contains(lines[$0].first!) }
+    var kind = PromptCard.Kind.permission
+    if chipIdx != nil || after.contains(where: { $0.localizedCaseInsensitiveContains("enter to select") }) { kind = .question }
+    if after.contains(where: { $0.localizedCaseInsensitiveContains("toggle") }) { kind = .permission }
+
+    var items: [PromptCardOption] = []
+    for (k, o) in sc.options.enumerated() {
+        var it = PromptCardOption(number: o.number, label: o.label)
+        if o.label.hasPrefix("Type something") { it.role = .freeText } else if o.label == "Chat about this" { it.role = .chat }
+        if kind == .question && it.role == .normal {
+            let end = k + 1 < sc.indices.count ? sc.indices[k + 1] : lines.count
+            let d = lines[(sc.indices[k] + 1)..<end].prefix { !full($0) && !dashed($0) && !isFooter($0) }
+            it.detail = d.isEmpty ? nil : d.joined(separator: " ")
+        }
+        items.append(it)
+    }
+    var card = PromptCard(options: sc.options, kind: kind, items: items, highlighted: sc.marked)
+    if kind == .question {
+        let from = chipIdx ?? ruleAbove ?? -1
+        let q = lines[(from + 1)..<first].joined(separator: " ")
+        card.question = q.isEmpty ? nil : q
+        if let c = chipIdx {
+            var chips: [(done: Bool, label: String)] = []
+            var cur: (done: Bool, label: String)?
+            for ch in lines[c] {
+                if "☐☒✔".contains(ch) { if let x = cur { chips.append(x) }; cur = (ch == "☒", "") }
+                else if ch != "←" && ch != "→" { cur?.label.append(ch) }
+            }
+            if let x = cur { chips.append(x) }
+            chips = chips.map { ($0.done, $0.label.trimmingCharacters(in: .whitespaces)) }.filter { $0.label != "Submit" }
+            let answered = chips.filter { $0.done }.count
+            if !chips.isEmpty {
+                card.header = chips[min(answered, chips.count - 1)].label
+                card.progress = chips.count > 1 ? "\(min(answered + 1, chips.count)) of \(chips.count)" : nil
+            }
+        }
+    } else {
+        // Only a label that means "cancel" is drawn as the red deny pill; anything else stays normal.
+        let cancels: (String) -> Bool = { l in ["no", "cancel", "reject"].contains { l.lowercased().hasPrefix($0) } }
+        if let d = card.items.lastIndex(where: { $0.role == .normal && cancels($0.label) }) { card.items[d].role = .deny }
+        if first > 0 {
+            card.question = lines[first - 1]
+            if let r = (0..<(first - 1)).reversed().first(where: { full(lines[$0]) }) {
+                let block = lines[(r + 1)..<(first - 1)].filter { !$0.hasPrefix("Tip:") }
+                card.title = block.first
+                let dashes = block.indices.filter { dashed(block[$0]) }
+                let rest = block.dropFirst()
+                card.purpose = rest.prefix { !dashed($0) }.first
+                if dashes.count >= 2 {
+                    let body = block[(dashes[0] + 1)..<dashes[1]]
+                    // ponytail: a body whose lines all start with a line number is an Edit/Write diff and is dropped;
+                    // confirm against real Edit/Write captures.
+                    let numbered = body.allSatisfy { $0.wholeMatch(of: #/\d+\s.*/#) != nil }
+                    card.body = body.isEmpty || numbered ? nil : body.joined(separator: "\n")
+                }
+            }
+        }
+    }
+    return card
+}
+
+/// Pill text for a permission option; the full label stays the tooltip.
+func shortLabel(_ label: String) -> String {
+    var s = label
+    if let r = s.range(of: " · ") { s = String(s[..<r.lowerBound]) }
+    if let r = s.range(of: #"\s*\([^)]*\)$"#, options: .regularExpression) { s.removeSubrange(r) }
+    if s == "Yes" { return "Allow" }
+    if s.hasPrefix("No") { return "Deny" }
+    if let m = s.wholeMatch(of: #/Yes, and always allow access to (.+?) from this project/#) { return "Always in \(m.1)" }
+    if s.contains("switch to auto mode") { return "Auto mode" }
+    if s.hasPrefix("Yes, allow all edits") { return "All edits" }
+    if let m = s.wholeMatch(of: #/Yes, and don't ask again for (.+)/#) { return "Always: \(m.1)" }
+    for p in ["Yes, and ", "Yes, "] where s.hasPrefix(p) {
+        s = String(s.dropFirst(p.count))
+        return s.prefix(1).uppercased() + s.dropFirst()
+    }
+    return s.count > 22 ? String(s.prefix(21)) + "…" : s
+}
+
+/// Move the ❯ highlight by delta within the option numbers, clamped.
+func moveHighlight(_ current: Int?, by delta: Int, in numbers: [Int]) -> Int? {
+    guard !numbers.isEmpty else { return nil }
+    guard let c = current, let i = numbers.firstIndex(of: c) else { return numbers[0] }
+    return numbers[max(0, min(numbers.count - 1, i + delta))]
+}
+
+enum PromptKey: Equatable { case answer(Int), escape, up, down, select, pass }
+
+func promptKey(keyCode: UInt16, characters: String?, commandLike: Bool, editingText: Bool, kind: PromptCard.Kind, numbers: Set<Int>) -> PromptKey {
+    if editingText || commandLike { return .pass }
+    if keyCode == 53 { return .escape }
+    if let c = characters, c.count == 1, let n = Int(c), (1...9).contains(n), numbers.contains(n) { return .answer(n) }
+    if kind == .question {
+        switch keyCode {
+        case 126: return .up
+        case 125: return .down
+        case 36, 76: return .select
+        default: break
+        }
+    }
+    return .pass
+}
