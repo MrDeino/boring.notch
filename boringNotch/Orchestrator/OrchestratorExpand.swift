@@ -76,14 +76,19 @@ final class OrchestratorExpand: ObservableObject {
             ?? vms.values.first { v in v.vm.flatMap { windows[key($0)]?.w } === window }?.vm
         guard let vm else { return false }
         let cur = level(for: vm)
+        let next: ExpandLevel
         switch sc {
-        case .deeper: setLevel(nextLevel(cur, .deeper), vm: vm, window: window)
-        case .back: back(vm)
-        case .terminal: setLevel(.terminal, vm: vm, window: window)
+        case .deeper: next = nextLevel(cur, .deeper)
+        case .back: next = nextLevel(cur, .back)
+        case .terminal: next = .terminal
         case .toggleRail:
             guard cur != .open else { return false }
             OrchestratorRailState.shared.toggle()
+            return true
         }
+        // No-op shortcuts pass through (⌘↑ in the composer, ⌘↓/⌘T inside ttyd).
+        guard next != cur else { return false }
+        setLevel(next, vm: vm, window: window)
         return true
     }
 
