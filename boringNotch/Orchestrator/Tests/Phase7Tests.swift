@@ -76,4 +76,50 @@ func runPhase7Tests() {
     precondition(boardStatusLine(runs: [], promptActive: false, liveText: "Working…", chatRunning: true) == "Orchestrator: Working…")
     precondition(boardStatusLine(runs: [], promptActive: false, liveText: nil, chatRunning: true) == "Orchestrator: idle")
     precondition(boardStatusLine(runs: [], promptActive: false, liveText: nil, chatRunning: false) == "Orchestrator: stopped")
+
+    // pollInterval
+    precondition(pollInterval(notchOpen: true, chatRunning: true) == 2 && pollInterval(notchOpen: true, chatRunning: false) == 2)
+    precondition(pollInterval(notchOpen: false, chatRunning: true) == 3 && pollInterval(notchOpen: false, chatRunning: false) == 10)
+    precondition(pollInterval(notchOpen: false, chatRunning: true, offline: true) == 10 && pollInterval(notchOpen: true, chatRunning: true, offline: true) == 10)
+
+    // nextLevel, expandedHeight, shortcut
+    precondition(nextLevel(.open, .deeper) == .expanded && nextLevel(.expanded, .deeper) == .expanded && nextLevel(.terminal, .deeper) == .terminal)
+    precondition([ExpandLevel.open, .expanded, .terminal].allSatisfy { nextLevel($0, .terminal) == .terminal })
+    precondition(nextLevel(.terminal, .back) == .expanded && nextLevel(.expanded, .back) == .open && nextLevel(.open, .back) == .open)
+    precondition(expandedHeight(screenHeight: 982) == 440 && expandedHeight(screenHeight: 900) == 405 && expandedHeight(screenHeight: 1440) == 440 && expandedHeight(screenHeight: 400) == 300)
+    precondition(shortcut(keyCode: 125, chars: nil, commandOnly: true) == .deeper && shortcut(keyCode: 126, chars: nil, commandOnly: true) == .back)
+    precondition(shortcut(keyCode: 17, chars: "t", commandOnly: true) == .terminal && shortcut(keyCode: 0, chars: "T", commandOnly: true) == .terminal)
+    precondition(shortcut(keyCode: 42, chars: "\\", commandOnly: true) == .toggleRail)
+    precondition(shortcut(keyCode: 125, chars: nil, commandOnly: false) == nil && shortcut(keyCode: 17, chars: "t", commandOnly: false) == nil)
+    precondition(shortcut(keyCode: 36, chars: "\r", commandOnly: true) == nil && shortcut(keyCode: 53, chars: nil, commandOnly: true) == nil)
+
+    // transitions
+    precondition(runStates([mk("a", "running"), try! d.decode(OrchestratorRun.self, from: Data("{}".utf8))]) == ["a": "running"])
+    precondition(!newlyWaiting(old: nil, new: [mk("a", "waiting")]))
+    precondition(newlyWaiting(old: ["a": "running"], new: [mk("a", "waiting")]))
+    precondition(!newlyWaiting(old: ["a": "waiting"], new: [mk("a", "waiting")]))
+    precondition(newlyWaiting(old: [:], new: [mk("b", "waiting")]))
+    precondition(!newlyWaiting(old: ["a": "waiting"], new: [mk("a", "running")]))
+    precondition(finishedTransition(old: nil, new: [mk("a", "done")]) == nil)
+    precondition(finishedTransition(old: ["a": "running"], new: [mk("a", "done")])?.id == "a")
+    precondition(finishedTransition(old: ["a": "stuck"], new: [mk("a", "done")])?.id == "a")
+    precondition(finishedTransition(old: ["a": "running"], new: [mk("a", "failed")]) == nil)
+    precondition(finishedTransition(old: ["a": "running"], new: [mk("a", "stopped")]) == nil)
+    precondition(finishedTransition(old: [:], new: [mk("a", "done")]) == nil)
+    let early = try! d.decode(OrchestratorRun.self, from: Data(#"{"id":"e","state":"done","startedAt":"2026-10-14T01:00:00.000Z"}"#.utf8))
+    let late = try! d.decode(OrchestratorRun.self, from: Data(#"{"id":"l","state":"done","startedAt":"2026-10-14T02:00:00.000Z"}"#.utf8))
+    precondition(finishedTransition(old: ["e": "running", "l": "running"], new: [early, late])?.id == "l")
+
+    // wings
+    precondition(wingKind(needsYou: true, needsLabel: "Bash?", finishedProject: "p", working: true) == .needsYou("Bash?"))
+    precondition(wingKind(needsYou: false, needsLabel: "", finishedProject: "p", working: true) == .finished("p"))
+    precondition(wingKind(needsYou: false, needsLabel: "", finishedProject: nil, working: true) == .working)
+    precondition(wingKind(needsYou: false, needsLabel: "", finishedProject: nil, working: false) == nil)
+    precondition(wingLabel(promptTitle: "Bash command", waitingDenials: nil) == "Bash?" && wingLabel(promptTitle: "Edit file?", waitingDenials: nil) == "Edit?")
+    precondition(wingLabel(promptTitle: nil, waitingDenials: ["Write"]) == "Write?" && wingLabel(promptTitle: nil, waitingDenials: nil) == "Needs you" && wingLabel(promptTitle: "", waitingDenials: []) == "Needs you")
+    precondition(wingSideWidth(.working, notchWidth: 185) == 36 && wingSideWidth(.needsYou("Bash?"), notchWidth: 185) == 46)
+    precondition(wingSideWidth(.finished("notch-dd"), notchWidth: 185) >= 36 && wingSideWidth(.finished("notch-dd"), notchWidth: 185) >= 8 * 6.2)
+    precondition(wingSideWidth(.needsYou("A much longer label"), notchWidth: 185) > wingSideWidth(.needsYou("Bash?"), notchWidth: 185))
+    precondition(wingSideWidth(.finished("a-very-long-project-name"), notchWidth: 185) > wingSideWidth(.finished("notch-dd"), notchWidth: 185))
+    precondition(2 * wingSideWidth(.working, notchWidth: 185) + 185 + 28 == 285 && 2 * wingSideWidth(.needsYou("Bash?"), notchWidth: 185) + 185 + 28 == 305)
 }
