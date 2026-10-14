@@ -74,6 +74,7 @@ Answer and steer the Claude Code orchestrator from the notch without switching t
 | Terminal via WKWebView on /term | ttyd already served; Origin check satisfied by loading that URL | — Pending |
 | Poll ~2s open, slower closed | Cheap, no push channel available | — Pending |
 | New files for orchestrator code, small hooks into tabs/ContentView | Keep upstream merges easy | — Pending |
+| Attention dot still shows over music on the closed notch (small dot at notch edge alongside music) | A waiting question must never be hidden (user, 2026-10-14) | — Pending (built in Phase 3) |
 
 ## Evolution
 

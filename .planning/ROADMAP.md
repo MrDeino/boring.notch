@@ -46,7 +46,7 @@ Three phases along the dependency chain build → manager → input → indicato
 **Depends on**: Phase 2
 **Requirements**: CMP-01, CMP-02, EXP-01, EXP-02, EXP-03
 **Success Criteria** (what must be TRUE):
-  1. With the notch closed, user sees a small Claude usage indicator, and a dot appears when any run is `waiting` or the chat shows a prompt (music activity takes precedence when playing)
+  1. With the notch closed, user sees a small Claude usage indicator, and a dot appears when any run is `waiting` or the chat shows a prompt — and the dot still shows while music is playing on the closed notch (small dot at the notch edge alongside the music activity; a waiting question is never hidden — user decision 2026-10-14)
   2. An expand control grows the same notch window further down to show a larger chat view
   3. In the expanded notch, user can see and type into the live `/term` terminal (WKWebView created only while expanded; "terminal in use" shown if ttyd's single client is taken)
   4. Clicking anywhere outside the expanded notch collapses it back to normal size

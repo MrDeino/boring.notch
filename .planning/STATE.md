@@ -41,6 +41,7 @@ Recent decisions affecting current work:
 - [Roadmap]: 3 coarse phases; BLD-02/BLD-03 mapped to Phase 1 but every phase has a music-still-works criterion
 - [Roadmap]: `detectPrompt(screen)` built in Phase 1 (pure fn + assert check); fixtures refined from real captures in Phase 2
 - [Roadmap]: Phase 2 opens with the gated `canBecomeKey` spike
+- [User 2026-10-14]: Closed-notch attention dot shows even while music plays (dot at notch edge alongside music); built in Phase 3, Phase 1 must expose `needsAttention` state independent of music
 
 ### Pending Todos
 
