@@ -289,7 +289,7 @@ struct ContentView: View {
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
-                      } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
+                      } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed && (musicManager.isPlaying || wings.kind == nil) {
                           MusicLiveActivity()
                               .frame(alignment: .center)
                       } else if vm.notchState == .closed && !vm.hideOnClosed && !coordinator.expandingView.show && wings.kind != nil {
@@ -485,7 +485,7 @@ struct ContentView: View {
                 ),
                 alignment: .center
             )
-            .overlay(alignment: .leading) { OrchestratorMusicNeedsDot().offset(x: -8) }
+            .overlay(alignment: .leading) { OrchestratorMusicIndicator().offset(x: -8) }
         }
         .frame(
             height: vm.effectiveClosedNotchHeight,
@@ -590,7 +590,7 @@ struct ContentView: View {
     }
 
     private func handleUpGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        guard vm.notchState == .open && !vm.isHoveringCalendar else { return }
+        guard vm.notchState == .open && !vm.isHoveringCalendar && coordinator.currentView != .orchestrator else { return }
 
         withAnimation(animationSpring) {
             gestureProgress = (translation / Defaults[.gestureSensitivity]) * -20

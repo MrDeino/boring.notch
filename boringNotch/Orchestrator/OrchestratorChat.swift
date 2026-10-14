@@ -16,6 +16,10 @@ final class OrchestratorTranscriptStore: ObservableObject {
     @Published private(set) var inputLine: String? = nil
     @Published private(set) var boxIsDraft = false
     @Published private(set) var idleStatus: String? = nil
+    @Published private(set) var pending: [PendingMessage] = []
+    private var knownUserIDs: Set<String> = []
+    private var nextPendingID = 0
+    private var draining = false
 
     private var base: URL?
     private var session: URLSession?
@@ -76,6 +80,60 @@ final class OrchestratorTranscriptStore: ObservableObject {
         if fallback { fallback = false }
         needsFull = false
         failures = 0
+        reconcile()
+    }
+
+    private func reconcile() {
+        guard !pending.isEmpty else { return }
+        let r = reconcilePending(pending, blocks: blocks, known: knownUserIDs, now: Date())
+        if r.known != knownUserIDs { knownUserIDs = r.known }
+        if r.pending != pending {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { pending = r.pending }
+        }
+    }
+
+    func enqueue(_ text: String) {
+        // Older identical messages must not claim the new row.
+        for b in blocks where b.kind == .user { knownUserIDs.insert(b.id) }
+        nextPendingID += 1
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            pending.append(PendingMessage(id: nextPendingID, text: text, state: .queued, sentAt: nil))
+        }
+        drain()
+    }
+
+    private func setPending(_ id: Int, _ state: PendingMessage.State, sentAt: Date? = nil) {
+        guard let i = pending.firstIndex(where: { $0.id == id }) else { return }
+        pending[i].state = state
+        pending[i].sentAt = sentAt
+    }
+
+    // ponytail: a failed send marks only its own row and the queue moves on, so nothing sticks behind a dead row.
+    private func drain() {
+        guard !draining else { return }
+        draining = true
+        Task { @MainActor in
+            let manager = OrchestratorManager.shared
+            while let p = pending.first(where: { $0.state == .queued }) {
+                // Never type queued text into a permission/question prompt.
+                while manager.sending || !manager.promptOptions.isEmpty { try? await Task.sleep(for: .milliseconds(50)) }
+                guard pending.contains(where: { $0.id == p.id && $0.state == .queued }) else { continue }
+                setPending(p.id, .sending)
+                let ok = await manager.sendText(p.text) { await self.clearRealLine() }
+                setPending(p.id, ok ? .sent : .failed, sentAt: ok ? Date() : nil)
+            }
+            draining = false
+        }
+    }
+
+    func retry(_ id: Int) {
+        setPending(id, .queued)
+        drain()
+    }
+
+    func restore(_ id: Int) -> String? {
+        guard let i = pending.firstIndex(where: { $0.id == id }) else { return nil }
+        return withAnimation { pending.remove(at: i) }.text
     }
 
     /// D-03 fallback, but one transient failure keeps the rows we hold (no flicker to chatTail and back).
@@ -100,18 +158,14 @@ final class OrchestratorTranscriptStore: ObservableObject {
         guard let base, let session else { return false }
         return (try? await sendOrchestratorPost(.key("C-u"), base: base, session: session)) == 200
     }
-
-    /// Clear + send as one manager operation: no other POST can land between C-u and the text.
-    func submit(_ text: String) async -> Bool {
-        await OrchestratorManager.shared.sendText(text) { await self.clearRealLine() }
-    }
 }
 
 #if ORCH_SNAPSHOT
 extension OrchestratorTranscriptStore {
     /// Snapshot harness only: fixture blocks instead of /api/chat/blocks.
-    func snapshotSet(blocks: [ChatBlock]) {
+    func snapshotSet(blocks: [ChatBlock], pending: [PendingMessage] = []) {
         self.blocks = blocks
+        self.pending = pending
         fallback = blocks.isEmpty
     }
 }
@@ -132,8 +186,10 @@ struct OrchestratorChatView: View {
     private let showComposer: Bool
     private let proseLineLimit: Int?
     private let maxRows: Int
+    private let expanded: Bool
 
-    init(showComposer: Bool = true, proseLineLimit: Int? = 4, maxRows: Int = 12) {
+    init(showComposer: Bool = true, proseLineLimit: Int? = 4, maxRows: Int = 12, expanded: Bool = false) {
+        self.expanded = expanded
         self.showComposer = showComposer
         self.proseLineLimit = proseLineLimit
         self.maxRows = maxRows
@@ -177,6 +233,7 @@ struct OrchestratorChatView: View {
         .onChange(of: manager.promptOptions) { _, o in if !o.isEmpty { stopTyping() } }
         // Phase 4
         .onChange(of: manager.statusMenuOpen) { _, open in if open { stopTyping() } }
+        .onChange(of: manager.notesOpen) { _, open in if open { stopTyping() } }
     }
 
     private var rows: some View {
@@ -191,9 +248,13 @@ struct OrchestratorChatView: View {
                 }
             } else {
                 ForEach(store.blocks.suffix(maxRows)) { b in
-                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit)
+                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+            }
+            ForEach(store.pending) { p in
+                pendingRow(p)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if let ls = manager.liveStatus {
                 OrchestratorLiveStatusRow(status: ls)
@@ -204,10 +265,34 @@ struct OrchestratorChatView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func pendingRow(_ p: PendingMessage) -> some View {
+        VStack(alignment: expanded ? .trailing : .leading, spacing: 2) {
+            ChatBlockRow(block: ChatBlock(pendingID: "pending-\(p.id)", text: p.text), proseLineLimit: proseLineLimit, expanded: expanded)
+                .opacity(0.5)
+            if p.state == .failed {
+                HStack(spacing: 8) {
+                    Text("Not sent").foregroundStyle(OT.C.redText)
+                    Button("Retry") { store.retry(p.id) }.buttonStyle(.plain)
+                    Button("Edit") {
+                        if let t = store.restore(p.id) {
+                            draft = draft.isEmpty ? t : t + " " + draft
+                            fromTerminal = false
+                            if showComposer { startTyping() }
+                        }
+                    }.buttonStyle(.plain)
+                }
+                .font(OT.F.meta)
+                .foregroundStyle(OT.C.text5)
+                .padding(.leading, expanded ? 0 : 16)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: expanded ? .trailing : .leading)
+    }
+
     private static let bottomID = "bottom"
     /// Changes whenever a row is added or the status row appears/disappears.
     private var pinKey: String {
-        "\(store.fallback ? fallbackLines.count : store.blocks.count)|\(store.blocks.last?.id ?? "")|\(manager.liveStatus != nil)|\(store.idleStatus ?? "")"
+        "\(store.fallback ? fallbackLines.count : store.blocks.count)|\(store.blocks.last?.id ?? "")|\(manager.liveStatus != nil)|\(store.pending.count)|\(store.idleStatus ?? "")"
     }
 
     /// chatTail lines minus spinner lines (the status row shows those).
@@ -302,7 +387,7 @@ struct OrchestratorChatView: View {
             .frame(width: 20, height: 20)
         }
         .buttonStyle(.plain)
-        .disabled(blank || manager.sending)
+        .disabled(blank)
     }
 
     /// Terminal draft -> field on focus; key monitor lifecycle.
@@ -393,31 +478,96 @@ struct OrchestratorChatView: View {
     private func submit() {
         let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { stopTyping(); return }
-        guard !manager.sending else { return } // Enter is ignored like the disabled send button
         // A terminal draft not pulled in on focus would be C-u'd unseen: pull it in front and wait for a second Enter.
         if !fromTerminal, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
             draft = l + " " + draft
             fromTerminal = true
             return
         }
-        stopTyping()
-        Task {
-            if await store.submit(t) { draft = ""; fromTerminal = false }
-            else { flashTag("Couldn't send", error: true, ms: 2000) } // draft is kept
-        }
+        store.enqueue(t)
+        draft = ""
+        fromTerminal = false
     }
 }
 
 private struct ChatBlockRow: View {
     let block: ChatBlock
     let proseLineLimit: Int?
+    var expanded = false
+    @State private var folded = false
+
+    private var hasDiffCard: Bool {
+        expanded && block.kind == .tool && ["Edit", "Write"].contains(block.name ?? "") && !(block.diff ?? []).isEmpty
+    }
 
     /// Leading marker column like Claude Code's terminal (❯ user, ⏺ prose/tool); wrapped text hangs after it.
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            marker.frame(width: 10, alignment: .center)
-            content.frame(maxWidth: .infinity, alignment: .leading)
+    /// Expanded view only: user messages are right-aligned bubbles and Edit rows fold out into a diff card.
+    @ViewBuilder var body: some View {
+        if expanded && block.kind == .user {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                Text(verbatim: block.text ?? "")
+                    .font(.system(size: 12)).foregroundStyle(OT.C.text2)
+                    .padding(.vertical, 6).padding(.horizontal, 10)
+                    .background(OT.C.raised, in: UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 12, bottomTrailingRadius: 4, topTrailingRadius: 12))
+                    .containerRelativeFrame(.horizontal, alignment: .trailing) { w, _ in w * 0.8 }
+            }
+        } else if hasDiffCard {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                marker.frame(width: 10, alignment: .center)
+                diffCard.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                marker.frame(width: 10, alignment: .center)
+                content.frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+    }
+
+    private func diffLine(_ r: DiffRow) -> some View {
+        let sign: String = r.kind == .removed ? "-" : r.kind == .added ? "+" : " "
+        let num: String = r.number.map { " \($0)" } ?? ""
+        let fg: Color = r.kind == .removed ? Color(red: 1, green: 157 / 255, blue: 151 / 255) : r.kind == .added ? Color(red: 126 / 255, green: 230 / 255, blue: 154 / 255) : OT.C.text6
+        let bg: Color = r.kind == .removed ? Color(red: 1, green: 105 / 255, blue: 97 / 255).opacity(0.12)
+            : r.kind == .added ? Color(red: 48 / 255, green: 209 / 255, blue: 88 / 255).opacity(0.12) : Color.clear
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(verbatim: sign + num).frame(minWidth: 34, alignment: .leading)
+            Text(verbatim: r.text).lineLimit(1).truncationMode(.tail)
+            Spacer(minLength: 0)
+        }
+        .font(OT.F.monoChip)
+        .foregroundStyle(fg)
+        .padding(.horizontal, 10)
+        .background(bg)
+    }
+
+    private var diffCard: some View {
+        let rows = diffRows(block.diff ?? [])
+        return VStack(alignment: .leading, spacing: 0) {
+            Button { withAnimation(.easeOut(duration: 0.15)) { folded.toggle() } } label: {
+                HStack(spacing: 6) {
+                    Text(verbatim: folded ? "▸" : "▾").font(OT.F.meta).foregroundStyle(OT.C.text6)
+                    Text(verbatim: block.name ?? "Edit").font(OT.F.monoChip.weight(.medium)).foregroundStyle(OT.C.text3)
+                    Text(verbatim: toolTargetDisplay(name: block.name, target: block.target))
+                        .font(OT.F.monoPath).foregroundStyle(OT.C.text2).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 6)
+                    if let a = block.added { Text(verbatim: "+\(a)").font(OT.F.monoChip).foregroundStyle(OT.C.green) }
+                    if let r = block.removed { Text(verbatim: "\u{2212}\(r)").font(OT.F.monoChip).foregroundStyle(OT.C.redText) }
+                }
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if !folded {
+                VStack(alignment: .leading, spacing: 1.5) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, r in diffLine(r) }
+                }
+                .padding(.bottom, 6)
+            }
+        }
+        .background(OT.C.diffCard, in: RoundedRectangle(cornerRadius: 9))
+        .clipShape(RoundedRectangle(cornerRadius: 9))
     }
 
     @ViewBuilder private var marker: some View {
@@ -435,7 +585,8 @@ private struct ChatBlockRow: View {
 
     /// U+FE0E keeps ⏺ a text glyph (not the emoji button).
     private func dot(_ c: Color) -> some View {
-        Text(verbatim: "\u{23FA}\u{FE0E}").font(.system(size: 10)).foregroundStyle(c)
+        Circle().fill(c).frame(width: 7, height: 7)
+            .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 0.5 }
     }
 
     @ViewBuilder private var content: some View {

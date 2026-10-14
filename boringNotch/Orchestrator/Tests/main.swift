@@ -84,4 +84,8 @@ runPhase4Tests()
 runPhase5Tests()
 runPhase6Tests()
 runPhase7Tests()
+runQuickPugTests()
+runQuickQeiTests()
+runQuickR8wTests()
+if ProcessInfo.processInfo.environment["ORCH_NOTES_MOCK"] != nil { await runQuickR8wMock() }
 print("OK")

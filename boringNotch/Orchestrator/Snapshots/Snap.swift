@@ -112,6 +112,21 @@ private let markerBlocks = blocks(#"""
 ]}
 """#)
 
+/// Long user message, a Read, an Edit with two hunks (context, removed, added), then prose.
+private let editBlocks = blocks(#"""
+{"running":true,"blocks":[
+ {"id":"e1","kind":"user","text":"Can you make the expanded view show my messages as bubbles and fold the Edit diffs out, the way the design frame shows them? Keep the open notch as it is."},
+ {"id":"e2","kind":"tool","name":"Read","target":"/Users/x/proj/OrchestratorChat.swift","result":"import SwiftUI (+520 lines)"},
+ {"id":"e3","kind":"tool","name":"Edit","target":"/Users/x/proj/OrchestratorChat.swift","result":"updated","added":3,"removed":2,"diff":[
+   {"oldStart":58,"newStart":58,"lines":[" let a = 1","-let b = old","+let b = new","+let c = 3"," let d = 4"]},
+   {"oldStart":120,"newStart":121,"lines":["-    return x","+    return y"]}]},
+ {"id":"e4","kind":"prose","text":"Done: user messages now render as right-aligned bubbles in the expanded column, and Edit rows fold out into a diff card."}
+]}
+"""#)
+
+private let shortNote = "Remember to ask about the Railway migration.\n\n- notch: back-nav for question chips\n- notes drop-down autosaves after 1s\n- check usage ring colour at 90%"
+private let longNote = (1...30).map { "Note line \($0): a longer scratch line that wraps when the panel is narrow enough to need it." }.joined(separator: "\n")
+
 struct Scene {
     let name: String
     var loaded = true
@@ -120,6 +135,11 @@ struct Scene {
     var runsBoard = false
     var expanded = false
     var railCollapsed = false
+    var pressed: Int?
+    var note: String?
+    var pending: [Int: Bool] = [:]
+    var sends: [PendingMessage] = []
+    var notes: (String, NotesStatus)?
 }
 
 @MainActor
@@ -128,6 +148,7 @@ struct Snap {
     static func main() async {
         if CommandLine.arguments.contains("--transition") { await transition(); return }
         if CommandLine.arguments.contains("--hittest") { await hitTest(); return }
+        if CommandLine.arguments.contains("--closed") { await closed(); return }
         let useImageRenderer = CommandLine.arguments.contains("--image-renderer")
         let out = URL(fileURLWithPath: "/tmp/notch-snapshots")
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
@@ -157,6 +178,25 @@ struct Snap {
             Scene(name: "14-chat-idle-suggestion", chat: chat(fixture("idle-suggestion.txt")), blocks: shortBlocks),
             Scene(name: "15-chat-markers", chat: chat(""), blocks: markerBlocks),
             Scene(name: "16-expanded-markers", chat: chat(""), blocks: markerBlocks, expanded: true),
+            Scene(name: "23-expanded-bubbles-edit", chat: chat(""), blocks: editBlocks, expanded: true),
+            Scene(name: "24-chat-edit-compact", chat: chat(""), blocks: editBlocks),
+            Scene(name: "25-chat-pending", chat: chat(""), blocks: markerBlocks, sends: [
+                PendingMessage(id: 1, text: "Thanks — now fix the build error", state: .sent, sentAt: Date()),
+                PendingMessage(id: 2, text: "and then run the tests", state: .queued, sentAt: nil)]),
+            Scene(name: "26-chat-not-sent", chat: chat(""), blocks: markerBlocks, sends: [
+                PendingMessage(id: 1, text: "Please also go through every remaining file in the Orchestrator folder and tidy the comments so they match the new naming, then summarise", state: .failed, sentAt: nil)]),
+            Scene(name: "27-expanded-pending", chat: chat(""), blocks: editBlocks, expanded: true, sends: [
+                PendingMessage(id: 1, text: "ok", state: .sending, sentAt: nil),
+                PendingMessage(id: 2, text: "Please also go through every remaining file in the Orchestrator folder and tidy the comments so they match the new naming, then summarise", state: .failed, sentAt: nil)]),
+            Scene(name: "28-notes-open", chat: chat(""), blocks: markerBlocks, notes: (shortNote, .saved)),
+            Scene(name: "29-notes-couldnt-save", chat: chat(""), blocks: markerBlocks, notes: (shortNote, .failed)),
+            Scene(name: "30-notes-expanded", chat: chat(""), blocks: markerBlocks, expanded: true, notes: (longNote, .idle)),
+            Scene(name: "17-question-multiselect", chat: chat(fixture("multiselect-1.txt")), expanded: true),
+            Scene(name: "18-question-multiselect-toggled", chat: chat(fixture("multiselect-1.txt")), expanded: true, pending: [1: true, 2: true]),
+            Scene(name: "19-question-multiq-tabs", chat: chat(fixture("multiq-tab2.txt")), expanded: true),
+            Scene(name: "20-question-review-submit", chat: chat(fixture("review-submit.txt")), expanded: true),
+            Scene(name: "21-permission-pressed", chat: chat(fixture("phase6-edit.txt")), pressed: 1),
+            Scene(name: "22-permission-retry-note", chat: chat(fixture("phase6-edit.txt")), note: "Didn't go through"),
         ]
 
         let savedRail = Defaults[.orchRunsRailCollapsed]
@@ -165,8 +205,10 @@ struct Snap {
             let vm = BoringViewModel()
             let m = OrchestratorManager.shared
             await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: state, runsBoard: s.runsBoard)
-            OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks)
+            OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
+            PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending)
+            if let n = s.notes { OrchestratorNotesStore.shared.snapshotSet(text: n.0, status: n.1); m.notesOpen = true }
 
             let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 480),
                                   styleMask: .borderless, backing: .buffered, defer: false)
@@ -194,6 +236,8 @@ struct Snap {
                 window.contentView = nil
             }
             OrchestratorExpand.shared.reset()
+            m.notesOpen = false
+            PromptCardController.shared.snapshotSet()
             if let png { try? png.write(to: url); print("wrote", url.path) } else { print("FAILED", s.name) }
         }
     }
@@ -332,6 +376,11 @@ struct Snap {
                 line.append("capsule opens menu: \(m.statusMenuOpen)")
                 ok = ok && m.statusMenuOpen
                 m.statusMenuOpen = false
+                m.notesOpen = false
+                await click(17, x: 590) // notes button, right of the capsule
+                line.append("notes button opens panel: \(m.notesOpen)")
+                ok = ok && m.notesOpen
+                m.notesOpen = false
             }
             // Below the visible notch (only exists while the window is taller than the notch).
             if H > vm.notchSize.height + 30 {
@@ -343,7 +392,7 @@ struct Snap {
             window.contentView = nil
             window.orderOut(nil)
         }
-        print(ok ? "OK: composer, segment and capsule respond to clicks" : "FAIL: a click target did not respond")
+        print(ok ? "OK: composer, segment, capsule and notes button respond to clicks" : "FAIL: a click target did not respond")
     }
 }
 

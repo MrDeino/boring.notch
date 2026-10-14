@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.299
+▝▜██████▀  Opus 5.5 (1M context) · Claude Max
+ ▝▝   ▝▝   /private/var/folders/fb/mb8cnk7s78zb5zxh_d3qjqvc0000gn/T/tmp.tEZk1pnCYZ
+
+
+❯ Use the AskUserQuestion tool once with two questions and do nothing else: question 1 header 'Fruit', multiSelect true, options apple, banana, cherry; question 2 header 'Color', single select,       
+  options red, blue.                                                                                                                                                                                    
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Fruit  ☐ Color  ✔ Submit  →
+
+Review your answers
+
+⚠ You have not answered all questions
+               
+ ● Which fruits do you want?
+   → cherry, apple  
+
+Ready to submit your answers?
+         
+❯ 1. Submit answers                                                                                                                                                                                     
+  2. Cancel         
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                        
+
+
+
+                                        
+                                                     

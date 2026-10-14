@@ -39,17 +39,36 @@ private func scanPrompt(_ screen: String, window: Int) -> (lines: [String], opti
         if run.count >= 2 && markedNo != nil { best = run; bestIdx = runIdx; bestMarked = markedNo; bestEnd = i }
     }
     // Live prompts end with an "Esc to cancel" footer; a numbered draft in the input box has none.
+    // The question review step has no footer; its "Ready to submit" line stands in.
     let footer = lines.dropFirst(bestEnd + 1).contains { $0.localizedCaseInsensitiveContains("esc to cancel") }
+        || lines.contains { $0 == "Ready to submit your answers?" }
     guard bestEnd >= 0 && bestEnd >= lines.count - 4 && footer else { return nil }
     return (lines, best, bestIdx, bestMarked)
+}
+
+/// Observed in Claude Code 2.1.299: Shift-Tab (BTab) moves to the previous question chip, ticks kept,
+/// and also leaves the review step. Left does the same; BTab chosen since it never moves a cursor.
+let promptBackKey = "BTab"
+
+/// Keys to move from chip `cur` to chip `k` (Tab forward, BTab back); nil when equal or forward from review.
+func tabKeys(from cur: Int, to k: Int, review: Bool) -> [String]? {
+    if k > cur { return review ? nil : Array(repeating: "Tab", count: k - cur) }
+    return k < cur ? Array(repeating: promptBackKey, count: cur - k) : nil
 }
 
 struct PromptCardOption: Equatable {
     enum Role: Equatable { case normal, deny, freeText, chat }
     let number: Int
-    let label: String
+    var label: String
     var detail: String? = nil
     var role: Role = .normal
+    /// Multi-select checkbox state; nil on rows without a checkbox.
+    var checked: Bool? = nil
+}
+
+struct PromptTab: Equatable {
+    let label: String
+    let done: Bool
 }
 
 struct PromptCard: Equatable {
@@ -64,6 +83,20 @@ struct PromptCard: Equatable {
     var question: String? = nil
     var items: [PromptCardOption] = []
     var highlighted: Int? = nil
+    var multiSelect = false
+    /// Question chips in order, the Submit chip last when the screen shows one.
+    var tabs: [PromptTab] = []
+    /// Index into `tabs` of the question on screen (the Submit chip on the review step).
+    var currentTab: Int? = nil
+    /// The "Review your answers" step.
+    var review = false
+}
+
+/// Optimistic checkbox state: a pending toggle wins until the screen agrees, then it drops.
+func mergeChecked(screen: [Int: Bool], pending: [Int: Bool]) -> (shown: [Int: Bool], pending: [Int: Bool]) {
+    var shown = screen, left = pending
+    for (n, v) in pending { if screen[n] == v { left[n] = nil } else { shown[n] = v } }
+    return (shown, left)
 }
 
 /// What makes two cards "the same prompt" (excludes `highlighted`, which follows the TUI's cursor).
@@ -91,12 +124,15 @@ func detectPromptCard(screen: String) -> PromptCard? {
     let chipIdx = ((ruleAbove.map { $0 + 1 } ?? 0)..<first).first { "←☐☒✔".contains(lines[$0].first!) }
     var kind = PromptCard.Kind.permission
     if chipIdx != nil || after.contains(where: { $0.localizedCaseInsensitiveContains("enter to select") }) { kind = .question }
-    if after.contains(where: { $0.localizedCaseInsensitiveContains("toggle") }) { kind = .permission }
 
     var items: [PromptCardOption] = []
     for (k, o) in sc.options.enumerated() {
         var it = PromptCardOption(number: o.number, label: o.label)
-        if o.label.hasPrefix("Type something") { it.role = .freeText } else if o.label == "Chat about this" { it.role = .chat }
+        if let m = o.label.wholeMatch(of: #/\[( |✔|x|X)\] (.*)/#) {
+            it.label = String(m.2)
+            if !it.label.hasPrefix("Type something") { it.checked = m.1 != " " }
+        }
+        if it.label.hasPrefix("Type something") { it.role = .freeText } else if it.label == "Chat about this" { it.role = .chat }
         if kind == .question && it.role == .normal {
             let end = k + 1 < sc.indices.count ? sc.indices[k + 1] : lines.count
             let d = lines[(sc.indices[k] + 1)..<end].prefix { !full($0) && !dashed($0) && !isFooter($0) }
@@ -104,7 +140,11 @@ func detectPromptCard(screen: String) -> PromptCard? {
         }
         items.append(it)
     }
-    var card = PromptCard(options: sc.options, kind: kind, items: items, highlighted: sc.marked)
+    // Options carry no checkbox glyph either, so toggling never changes the card's identity.
+    var card = PromptCard(options: zip(sc.options, items).map { PromptOption(number: $0.number, label: $1.label) },
+                          kind: kind, items: items, highlighted: sc.marked)
+    card.multiSelect = items.contains { $0.checked != nil }
+    if card.multiSelect { card.kind = .question; kind = .question }
     if kind == .question {
         let from = chipIdx ?? ruleAbove ?? -1
         let q = lines[(from + 1)..<first].joined(separator: " ")
@@ -117,12 +157,26 @@ func detectPromptCard(screen: String) -> PromptCard? {
                 else if ch != "←" && ch != "→" { cur?.label.append(ch) }
             }
             if let x = cur { chips.append(x) }
-            chips = chips.map { ($0.done, $0.label.trimmingCharacters(in: .whitespaces)) }.filter { $0.label != "Submit" }
-            let answered = chips.filter { $0.done }.count
-            if !chips.isEmpty {
-                card.header = chips[min(answered, chips.count - 1)].label
-                card.progress = chips.count > 1 ? "\(min(answered + 1, chips.count)) of \(chips.count)" : nil
+            chips = chips.map { ($0.done, $0.label.trimmingCharacters(in: .whitespaces)) }
+            card.tabs = chips.map { PromptTab(label: $0.label, done: $0.done) }
+            let qs = chips.filter { $0.label != "Submit" }
+            if !qs.isEmpty {
+                // ponytail: plain text can't show which chip is highlighted. First unanswered chip, except a
+                // multi-select with ticks is already counted ☒ while still showing: then the last answered one.
+                var cur = qs.firstIndex { !$0.done } ?? qs.count - 1
+                if card.multiSelect, items.contains(where: { $0.checked == true }), let l = qs.lastIndex(where: { $0.done }) { cur = l }
+                card.currentTab = cur
+                card.header = qs[cur].label
+                card.progress = qs.count > 1 ? "\(cur + 1) of \(qs.count)" : nil
             }
+        }
+        if lines[(chipIdx ?? -1) + 1 ..< first].first == "Review your answers" {
+            let l = Array(lines[((chipIdx ?? -1) + 2)..<first])
+            card.review = true
+            card.question = "Review your answers"
+            card.body = l.dropLast().joined(separator: "\n") // last line is "Ready to submit your answers?"
+            card.currentTab = card.tabs.count - 1
+            card.header = nil; card.progress = nil
         }
     } else {
         // Only a label that means "cancel" is drawn as the red deny pill; anything else stays normal.

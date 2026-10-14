@@ -66,9 +66,8 @@ func runPhase6Tests() {
     precondition(nr.title == nil)
     precondition(nr.question == "Do you want to proceed?")
     precondition(nr.items[1].role == .deny)
-    let ms = fixture("question").replacingOccurrences(of: "Enter to select", with: "Space to toggle · Enter to select")
-    let msc = detectPromptCard(screen: ms)!
-    precondition(msc.kind == .permission)
+    let msc = detectPromptCard(screen: fixture("multiselect-1"))!
+    precondition(msc.kind == .question && msc.multiSelect)
     precondition(!msc.items.contains { $0.role == .deny }) // "cherry" is not a cancel
     let ok = detectPromptCard(screen: "Proceed?\n❯ 1. Yes\n  2. Yes, always\n Esc to cancel\n")!
     precondition(ok.items.allSatisfy { $0.role == .normal })

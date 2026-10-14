@@ -49,11 +49,24 @@ struct OrchestratorHeaderTrailing: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var expand = OrchestratorExpand.shared
     @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @ObservedObject var manager = OrchestratorManager.shared
     @State private var anchor = NSView()
 
     var body: some View {
         HStack(spacing: 6) {
             OrchestratorStatusCapsule()
+            if coordinator.currentView == .orchestrator && !manager.offline && manager.hasLoaded {
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        if manager.notesOpen { manager.notesOpen = false; OrchestratorNotesStore.shared.flush() }
+                        else { manager.statusMenuOpen = false; manager.notesOpen = true; OrchestratorNotesStore.shared.load() }
+                    }
+                } label: {
+                    Image(systemName: "note.text").font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(OT.C.text).frame(width: 24, height: 24)
+                        .background(manager.notesOpen ? OT.C.selected2 : OT.C.raised, in: Circle())
+                }.buttonStyle(.plain).help("Notes")
+            }
             if coordinator.currentView == .orchestrator && expand.level(for: vm) != .open {
                 Button { expand.back(vm) } label: {
                     Image(systemName: "chevron.up").font(.system(size: 11, weight: .semibold))
@@ -102,6 +115,7 @@ struct OrchestratorStatusCapsule: View {
         Button {
             guard s != .connecting && s != .offline else { return }
             withAnimation(.easeOut(duration: 0.15)) {
+                if manager.notesOpen { manager.notesOpen = false; OrchestratorNotesStore.shared.flush() }
                 if coordinator.currentView != .orchestrator {
                     coordinator.currentView = .orchestrator
                     manager.statusMenuOpen = true
@@ -228,5 +242,136 @@ struct OrchestratorStatusMenu: View {
             .frame(height: 3)
         }
         .padding(.vertical, 3).padding(.horizontal, 8)
+    }
+}
+
+// Notepad drop-down: GET /api/notes on open, autosave (raw full text) ~1s after the last keystroke.
+enum NotesStatus: Equatable { case loading, loadFailed, idle, saving, saved, failed }
+
+@MainActor
+final class OrchestratorNotesStore: ObservableObject {
+    static let shared = OrchestratorNotesStore()
+    @Published var text = ""
+    @Published private(set) var status = NotesStatus.loading
+    private var loaded = false, dirty = false
+    private var synced = "" // what the server has; onChange from our own load is not an edit
+    private var saveTask: Task<Void, Never>?
+
+    func load() {
+        guard !dirty else { return } // unsaved/failed edits win over a reload; they are retried by save
+        status = .loading; loaded = false
+        Task {
+            do {
+                let t = try await fetchOrchestratorNotes(base: OrchestratorManager.baseURL, session: OrchestratorManager.shared.session)
+                guard !dirty else { return }
+                text = t; synced = t; loaded = true; status = .idle
+            } catch { status = .loadFailed }
+        }
+    }
+
+    /// Editor onChange. Ignored until the last GET succeeded, so a failed load never overwrites the server's notes.
+    func edited() {
+        guard loaded, text != synced else { return }
+        dirty = true
+        saveTask?.cancel()
+        saveTask = Task { try? await Task.sleep(for: .seconds(1)); if !Task.isCancelled { await save() } }
+    }
+
+    func save() async {
+        saveTask?.cancel()
+        guard loaded, dirty else { return }
+        dirty = false; status = .saving
+        let sent = text
+        let code = (try? await sendOrchestratorPost(.notes(sent), base: OrchestratorManager.baseURL, session: OrchestratorManager.shared.session)) ?? nil
+        if code == 200 { status = .saved; synced = sent; if text != sent { dirty = true } } else { status = .failed; dirty = true }
+    }
+
+    /// Close: don't lose the last second of typing.
+    func flush() { if dirty { Task { await save() } } }
+
+    #if ORCH_SNAPSHOT
+    func snapshotSet(text t: String, status s: NotesStatus) { text = t; synced = t; status = s; loaded = true; dirty = false }
+    #endif
+}
+
+struct OrchestratorNotesPanel: View {
+    @ObservedObject var store = OrchestratorNotesStore.shared
+    @ObservedObject var manager = OrchestratorManager.shared
+    @State private var keyWindow: NSWindow?
+    @State private var anchor = NSView()
+    @State private var keyMonitor: Any?
+    @FocusState private var focused: Bool
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Notes").foregroundColor(OT.C.text5)
+                Spacer(minLength: 0)
+                switch store.status {
+                case .loading: Text("Loading…").foregroundColor(OT.C.text5)
+                case .saving: Text("Saving…").foregroundColor(OT.C.text5)
+                case .saved: Text("Saved").foregroundColor(OT.C.text5)
+                case .failed: Text("Couldn't save").foregroundColor(OT.C.redText)
+                case .loadFailed:
+                    Button { store.load() } label: { Text("Couldn't load · Retry").foregroundColor(OT.C.redText) }.buttonStyle(.plain)
+                case .idle: EmptyView()
+                }
+            }
+            .font(OT.F.meta).padding(.horizontal, 6)
+            TextEditor(text: $store.text)
+                .focused($focused)
+                .font(OT.F.ui).foregroundColor(OT.C.text)
+                .scrollContentBackground(.hidden)
+                .disabled(store.status == .loading || store.status == .loadFailed)
+                .onChange(of: store.text) { _, _ in store.edited() }
+        }
+        .padding(5)
+        .frame(width: 300)
+        .frame(maxHeight: .infinity)
+        .background(RoundedRectangle(cornerRadius: OT.R.cardL).fill(OT.C.raised))
+        .overlay(RoundedRectangle(cornerRadius: OT.R.cardL).stroke(OT.C.selected, lineWidth: 1))
+        .shadow(color: .black.opacity(0.6), radius: 15, y: 10)
+        .background(WindowAnchor(view: anchor))
+        .onChange(of: focused) { _, f in f ? startTyping() : stopTyping() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { n in
+            if let w = keyWindow, (n.object as? NSWindow) === w { stopTyping() }
+        }
+        .onDisappear { stopTyping() }
+    }
+
+    // Same hand-over as OrchestratorChatView: take the key while editing, give it back after.
+    private func startTyping() {
+        guard let w = anchor.window, !OrchestratorKeyGate.terminalWantsKey else { return }
+        manager.beginTyping(in: w)
+        keyWindow = w
+        OrchestratorKeyGate.activate()
+        w.makeKey()
+        DispatchQueue.main.async { if manager.wantsKeyboard { w.makeKey() } }
+        installEsc()
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            if keyWindow === w, !w.isKeyWindow { stopTyping() }
+        }
+    }
+
+    private func stopTyping() {
+        if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
+        focused = false
+        guard let w = keyWindow else { return }
+        let wasKey = w.isKeyWindow
+        w.makeFirstResponder(nil)
+        manager.endTyping()
+        keyWindow = nil
+        OrchestratorKeyGate.restore(refocus: wasKey)
+    }
+
+    private func installEsc() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53, event.window === keyWindow else { return event }
+            store.flush(); stopTyping(); close()
+            return nil
+        }
     }
 }

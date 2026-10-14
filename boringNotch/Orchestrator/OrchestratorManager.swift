@@ -19,6 +19,8 @@ final class OrchestratorManager: ObservableObject {
     /// Chat | Runs segment state.
     @Published var showRunsBoard = false
     @Published var statusMenuOpen = false
+    /// Notes drop-down; mutually exclusive with the status menu.
+    @Published var notesOpen = false
     @Published private(set) var prompt: PromptCard? = nil
     @Published private(set) var liveStatus: LiveStatus? = nil
     var capsuleStatus: CapsuleState {
@@ -30,15 +32,13 @@ final class OrchestratorManager: ObservableObject {
         didSet {
             // Typing teardown is owned by OrchestratorView (close() is blocked while typing).
             if notchOpen && !oldValue { Task { await refresh() } }
-            if !notchOpen { OrchestratorExpand.shared.reset(); statusMenuOpen = false }
+            if !notchOpen { OrchestratorExpand.shared.reset(); statusMenuOpen = false; notesOpen = false }
         }
     }
 
     @Published private(set) var wantsKeyboard = false
     @Published private(set) var sending = false
-    @Published private(set) var optionsLocked = false
     private var typing = false
-    private var lockGen = 0
 
     /// The one notch panel allowed to become key (one panel per display).
     private(set) weak var keyboardWindow: NSWindow?
@@ -95,19 +95,19 @@ final class OrchestratorManager: ObservableObject {
     func startChat() async { await post(.start) }
     func stopChat() async { await post(.stop) }
 
-    func pressOption(_ n: Int) {
-        guard !optionsLocked, (1...9).contains(n) else { return }
-        optionsLocked = true
-        lockGen += 1
-        let gen = lockGen
-        Task {
-            await post(.key(String(n)))
-            try? await Task.sleep(for: .seconds(3))
-            if lockGen == gen { optionsLocked = false }
+    /// A key sequence in one `sending` window. Stops at the first non-200; true only if every key landed.
+    func pressKeys(_ keys: [String]) async -> Bool {
+        guard !sending else { return false }
+        sending = true
+        defer { sending = false }
+        for k in keys {
+            guard (try? await sendOrchestratorPost(.key(k), base: Self.baseURL, session: session)) == 200 else { await refresh(); return false }
         }
+        await refresh()
+        return true
     }
 
-    private let session: URLSession = {
+    let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
         c.timeoutIntervalForRequest = 3
         c.timeoutIntervalForResource = 5
@@ -124,7 +124,7 @@ final class OrchestratorManager: ObservableObject {
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.refresh()
-                let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning, offline: self.offline)
+                let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning || self.runs.contains { $0.state == "running" }, offline: self.offline)
                 try? await Task.sleep(for: .seconds(secs))
             }
         }
@@ -174,7 +174,7 @@ final class OrchestratorManager: ObservableObject {
         if runs != rs { runs = rs }
         if usage != st.usage { usage = st.usage }
         let po = running ? detectPrompt(screen: s) : []
-        if promptOptions != po { promptOptions = po; optionsLocked = false }
+        if promptOptions != po { promptOptions = po }
         let pc = running ? detectPromptCard(screen: s) : nil
         if prompt != pc { prompt = pc }
         let ls = running ? parseLiveStatus(screen: s) : nil
@@ -189,6 +189,7 @@ final class OrchestratorManager: ObservableObject {
         if prompt != nil { prompt = nil }
         if liveStatus != nil { liveStatus = nil }
         statusMenuOpen = false
+        notesOpen = false
     }
 }
 

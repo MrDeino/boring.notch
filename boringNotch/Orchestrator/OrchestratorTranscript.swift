@@ -166,3 +166,68 @@ func proseAttributed(_ s: String) -> AttributedString {
     for run in a.runs { a[run.range].link = nil }
     return a
 }
+
+struct DiffRow: Equatable {
+    enum Kind { case context, removed, added }
+    let kind: Kind
+    let number: Int?
+    let text: String
+}
+
+/// Unified-diff hunk lines as numbered rows: context and added show the new line number, removed the old one.
+/// A line without a ' '/'-'/'+' prefix ("\ No newline") is context with no number and advances nothing.
+func diffRows(_ hunks: [ChatDiffHunk]) -> [DiffRow] {
+    var rows: [DiffRow] = []
+    for h in hunks {
+        var old = h.oldStart, new = h.newStart
+        for l in h.lines ?? [] {
+            switch l.first {
+            case "-": rows.append(DiffRow(kind: .removed, number: old, text: String(l.dropFirst()))); old = old.map { $0 + 1 }
+            case "+": rows.append(DiffRow(kind: .added, number: new, text: String(l.dropFirst()))); new = new.map { $0 + 1 }
+            case " ": rows.append(DiffRow(kind: .context, number: new, text: String(l.dropFirst()))); old = old.map { $0 + 1 }; new = new.map { $0 + 1 }
+            default: rows.append(DiffRow(kind: .context, number: nil, text: l))
+            }
+        }
+    }
+    return rows
+}
+
+// MARK: - Optimistic sends
+
+struct PendingMessage: Equatable, Identifiable {
+    enum State { case queued, sending, sent, failed }
+    let id: Int
+    let text: String
+    var state: State
+    var sentAt: Date?
+}
+
+func normalizeChatText(_ s: String) -> String {
+    s.split(whereSeparator: { $0.isWhitespace || $0 == "\u{a0}" }).joined(separator: " ")
+}
+
+func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: Set<String>, now: Date, staleAfter: TimeInterval = 30) -> (pending: [PendingMessage], known: Set<String>) {
+    var known = known
+    var out: [PendingMessage] = []
+    for p in pending {
+        if p.state != .queued {
+            let want = normalizeChatText(p.text)
+            if let b = blocks.last(where: { $0.kind == .user && !known.contains($0.id) && normalizeChatText($0.text ?? "") == want }) {
+                known.insert(b.id)
+                continue
+            }
+            // ponytail: a sent message whose block text differs (e.g. a slash command) is dropped after staleAfter;
+            // upgrade = serve echoing a client id.
+            if p.state == .sent, let t = p.sentAt, now.timeIntervalSince(t) > staleAfter { continue }
+        }
+        out.append(p)
+    }
+    return (out, known)
+}
+
+extension ChatBlock {
+    init(pendingID: String, text: String) {
+        id = pendingID; kind = .user; self.text = text
+        name = nil; target = nil; result = nil; added = nil; removed = nil; diff = nil
+    }
+}
