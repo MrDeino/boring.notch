@@ -21,6 +21,7 @@ struct BoringHeader: View {
                 } else if vm.notchState == .open {
                     EmptyView()
                 }
+                OrchestratorHeaderSegment()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .opacity(vm.notchState == .closed ? 0 : 1)
@@ -42,7 +43,7 @@ struct BoringHeader: View {
                         OpenNotchHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon)
                             .transition(.scale(scale: 0.8).combined(with: .opacity))
                     } else {
-                        OrchestratorUsageBadge()
+                        OrchestratorHeaderTrailing()
                         if Defaults[.showMirror] {
                             Button(action: {
                                 vm.toggleCameraPreview()
@@ -59,8 +60,6 @@ struct BoringHeader: View {
                             }
                             .buttonStyle(PlainButtonStyle())
                         }
-                        OrchestratorChatButton()
-                        OrchestratorRunsButton()
                         if Defaults[.showBatteryIndicator] {
                             BoringBatteryView(
                                 batteryWidth: 30,

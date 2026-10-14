@@ -34,7 +34,11 @@ struct OrchestratorTabContent: View {
 
 struct OrchestratorView: View {
     @ObservedObject var expand = OrchestratorExpand.shared
+    @ObservedObject var manager = OrchestratorManager.shared
     @EnvironmentObject var vm: BoringViewModel
+    @State private var anchor = NSView()
+
+    private func close() { withAnimation(.easeOut(duration: 0.15)) { manager.statusMenuOpen = false } }
 
     var body: some View {
         Group {
@@ -45,104 +49,20 @@ struct OrchestratorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// Header button that shows/hides the runs panel; from another tab it jumps to Orchestrator first.
-struct OrchestratorRunsButton: View {
-    @ObservedObject var manager = OrchestratorManager.shared
-    @ObservedObject var coordinator = BoringViewCoordinator.shared
-
-    var body: some View {
-        Button {
-            if coordinator.currentView != .orchestrator {
-                coordinator.currentView = .orchestrator
-                manager.showRunsBoard = true
-            } else {
-                manager.showRunsBoard.toggle()
-            }
-        } label: {
-            Capsule()
-                .fill(.black)
-                .frame(width: 30, height: 30)
-                .overlay {
-                    Image(systemName: "list.bullet.rectangle")
-                        .foregroundColor(manager.showRunsBoard ? .white : .gray)
-                        .imageScale(.medium)
+        .opacity(manager.statusMenuOpen ? 0.35 : 1)
+        .allowsHitTesting(!manager.statusMenuOpen)
+        .overlay(alignment: .topTrailing) {
+            if manager.statusMenuOpen {
+                ZStack(alignment: .topTrailing) {
+                    Color.clear.contentShape(Rectangle()).onTapGesture { close() }
+                    OrchestratorStatusMenu(openTerminal: {
+                        OrchestratorExpand.shared.setLevel(.terminal, vm: vm, window: anchor.window)
+                    })
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
                 }
-        }
-        .buttonStyle(PlainButtonStyle())
-        .help("Runs")
-    }
-}
-
-/// Header Start/End icon next to the runs button; End asks Yes/No first.
-struct OrchestratorChatButton: View {
-    @ObservedObject var manager = OrchestratorManager.shared
-    @State private var confirmEnd = false
-
-    var body: some View {
-        if manager.hasLoaded && !manager.offline {
-            if confirmEnd {
-                HStack(spacing: 4) {
-                    Text("End chat?").foregroundStyle(.orange)
-                    Button("Yes") { confirmEnd = false; Task { await manager.stopChat() } }
-                    Button("No") { confirmEnd = false }
-                }
-                .font(.system(size: 10))
-                .controlSize(.small)
-            } else {
-                Button {
-                    if manager.chatRunning {
-                        confirmEnd = true
-                        Task { try? await Task.sleep(for: .seconds(4)); confirmEnd = false }
-                    } else {
-                        Task { await manager.startChat() }
-                    }
-                } label: {
-                    Capsule()
-                        .fill(.black)
-                        .frame(width: 30, height: 30)
-                        .overlay {
-                            Image(systemName: manager.chatRunning ? "stop.circle" : "play.circle")
-                                .foregroundColor(.gray)
-                                .imageScale(.medium)
-                        }
-                }
-                .buttonStyle(PlainButtonStyle())
-                .disabled(manager.sending)
-                .help(manager.chatRunning ? "End chat" : "Start chat")
             }
         }
-    }
-}
-
-/// Tiny 5h/7d usage in the open-notch header; hover swaps in reset times.
-struct OrchestratorUsageBadge: View {
-    @ObservedObject var manager = OrchestratorManager.shared
-    @State private var hovering = false
-
-    var body: some View {
-        if let u = manager.usage {
-            VStack(alignment: .trailing, spacing: 0) {
-                row("5h", u.fiveHour) { $0.formatted(date: .omitted, time: .shortened) }
-                row("7d", u.sevenDay) { $0.formatted(.dateTime.weekday(.abbreviated).hour().minute()) }
-            }
-            .font(.system(size: 9, weight: .medium, design: .rounded))
-            .monospacedDigit()
-            .padding(.trailing, 4)
-            .onHover { hovering = $0 }
-        }
-    }
-
-    private func row(_ title: String, _ w: UsageWindow?, reset: (Date) -> String) -> some View {
-        let pct = w?.usedPercentage
-        let text = hovering
-            ? (w?.resetsDate.map(reset) ?? "—")
-            : (pct.map { "\(Int($0.rounded()))%" } ?? "—")
-        return HStack(spacing: 3) {
-            Text(verbatim: title).foregroundStyle(.gray)
-            Text(verbatim: text).foregroundStyle((pct ?? 0) >= 80 ? Color.orange : Color.white)
-        }
+        .background(WindowAnchor(view: anchor))
+        .onDisappear { manager.statusMenuOpen = false }
     }
 }
