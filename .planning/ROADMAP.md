@@ -12,7 +12,7 @@ Phases 4–9 rebuild the tab to the high-fidelity design handoff (option 2a, `.p
 - [ ] **Phase 2: Sending & Prompt Answers** - Type messages, answer numbered prompts, Esc, start/end the chat from the notch (built and verified at code level 2026-10-14; awaiting human UAT)
 - [ ] **Phase 3: Compact Indicators & Expand-Down** - Closed-notch usage + attention dot; notch grows down for larger chat and live terminal (built and verified at code level 2026-10-14; awaiting human UAT)
 - [x] **Phase 4: 2a Foundation** - Design tokens, OrchestratorView split, Chat | Runs segment + status capsule header, status menu, stopped/offline/connecting screens, shared seams for 5–7 (completed 2026-10-14)
-- [ ] **Phase 5: 2a Structured Chat** - Transcript rows from serve's GET /api/chat/blocks, live status, composer and message box (suggestion, Tab, ⌃U, terminal draft), row-insert motion (parallel with 6, 7)
+- [x] **Phase 5: 2a Structured Chat** - Transcript rows from serve's GET /api/chat/blocks, live status, composer and message box (suggestion, Tab, ⌃U, terminal draft), row-insert motion (parallel with 6, 7) (completed 2026-10-14)
 - [ ] **Phase 6: 2a Prompt Cards** - Permission decision card, vertical question list, richer detectPrompt, 1–9/esc while hovered, 'Something else…' and 'Chat about this' (parallel with 5, 7)
 - [ ] **Phase 7: 2a Runs Board, Expand Levels & Wings** - Runs board, open→expanded→terminal levels with runs rail, closed-notch live-activity wings (parallel with 5, 6)
 - [ ] **Phase 8: Phase B Live Data** - SSE push from serve, streaming caret, ▸ diff expansion, suggested flag, context %
@@ -136,12 +136,12 @@ Plans:
   4. The message box shows Claude Code's suggestion as ghost text with Tab/→ accept (also POSTs Tab), ⌃U clears locally and POSTs `{key:"C-u"}` with a "line cleared" tag, and a terminal draft is pulled in on focus with "from terminal · "
   5. New rows animate in from the bottom; clicking the transcript still opens the terminal; music unaffected
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 05-01-PLAN.md — Transcript pure core (TDD): blocks decode (both shapes), merge by id, since-chain reset, input-box parse, ghost-vs-draft, clear-to-caret, tool display strings
 - [x] 05-02-PLAN.md — Blocks store (GET /api/chat/blocks?since=, chatTail fallback), frame 01 rows, live/idle status rows, insert motion
-- [ ] 05-03-PLAN.md — Frame 02/02b composer: pill, ring, hint row, ghost suggestion + Tab/→ accept, ⌃U (C-u), terminal draft, C-u before send, UAT list
+- [x] 05-03-PLAN.md — Frame 02/02b composer: pill, ring, hint row, ghost suggestion + Tab/→ accept, ⌃U (C-u), terminal draft, C-u before send, UAT list
 
 **Merge points:** no shared-file edits (state on OrchestratorTranscriptStore); OrchestratorChatView gains only defaulted init params
 
@@ -257,7 +257,7 @@ Plans:
 | 2. Sending & Prompt Answers | 2/2 | Awaiting UAT | - |
 | 3. Compact Indicators & Expand-Down | 2/2 | Awaiting UAT | - |
 | 4. 2a Foundation | 3/3 | Awaiting UAT | - |
-| 5. 2a Structured Chat | 2/3 | In Progress|  |
+| 5. 2a Structured Chat | 3/3 | Complete   | 2026-10-14 |
 | 6. 2a Prompt Cards | 0/3 | Planned | - |
 | 7. 2a Runs Board, Expand Levels & Wings | 0/5 | Planned | - |
 | 8. Phase B Live Data | 0/0 | Not planned | - |
