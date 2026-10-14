@@ -69,7 +69,16 @@ Plans:
   4. Clicking anywhere outside the expanded notch collapses it back to normal size
   5. Music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Closed-notch attention dot (shown with music) + usage hairline overlay
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-02-PLAN.md — Expand-down: same window grows to larger chat, live /term terminal (gated key), click-outside collapse
+
 **UI hint**: yes
 
 ## Progress
