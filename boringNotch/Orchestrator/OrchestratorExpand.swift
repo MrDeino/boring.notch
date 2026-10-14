@@ -60,7 +60,9 @@ final class OrchestratorExpand: ObservableObject {
         shrinkTask?.cancel()
         for k in Array(expanded) {
             let win = windows[k]?.w
+            let vm = vms[k]?.vm
             finish(k)
+            if let vm, vm.notchState == .open { vm.notchSize = openNotchSize }
             win?.setFrame(pinnedFrame(current: win?.frame ?? .zero, newHeight: windowSize.height), display: true)
         }
     }
