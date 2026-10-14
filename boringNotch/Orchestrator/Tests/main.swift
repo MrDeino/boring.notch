@@ -74,4 +74,6 @@ if let logPath = ProcessInfo.processInfo.environment["ORCH_MOCK_LOG"] {
         precondition(e["method"] == "POST" && e["path"] == paths[i] && e["xorch"] == "1" && e["ctype"] == "application/json" && e["host"] == "127.0.0.1:4799" && e["body"] == bodies[i])
     }
 }
+
+runPhase3Tests()
 print("OK")

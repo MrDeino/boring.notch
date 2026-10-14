@@ -43,6 +43,7 @@ struct OrchestratorView: View {
         .onChange(of: manager.chatRunning) { _, running in if !running { stopTyping() } }
         .onChange(of: manager.offline) { _, off in if off { stopTyping() } }
         .onChange(of: manager.promptOptions) { _, o in if !o.isEmpty { stopTyping() } }
+        .overlay { OrchestratorExpandOverlay() }
     }
 
     @ViewBuilder private var chat: some View {

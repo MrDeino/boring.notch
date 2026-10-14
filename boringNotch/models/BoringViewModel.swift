@@ -190,7 +190,7 @@ class BoringViewModel: NSObject, ObservableObject {
     }
 
     func open() {
-        self.notchSize = openNotchSize
+        self.notchSize = OrchestratorExpand.shared.openSize(for: self)
         self.notchState = .open
         OrchestratorManager.shared.notchOpen = true
         
