@@ -9,7 +9,7 @@ final class OrchestratorExpand: ObservableObject {
     @Published private(set) var expanded: Set<String> = []
     private var extra: [String: CGFloat] = [:]
     private var windows: [String: WeakWindow] = [:]
-    private var shrinkTask: Task<Void, Never>?
+    private var shrinkTasks: [String: Task<Void, Never>] = [:]
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var previousApp: NSRunningApplication?
@@ -32,7 +32,7 @@ final class OrchestratorExpand: ObservableObject {
         extra[k] = e
         windows[k] = WeakWindow(window)
         if let a = NSWorkspace.shared.frontmostApplication, a != NSRunningApplication.current { previousApp = a }
-        shrinkTask?.cancel()
+        shrinkTasks[k]?.cancel()
         window.setFrame(pinnedFrame(current: window.frame, newHeight: windowHeight(base: windowSize.height, notchHeight: openNotchSize.height + e, openHeight: openNotchSize.height)), display: true)
         expanded.insert(k)
         vms[k] = WeakVM(vm)
@@ -47,9 +47,9 @@ final class OrchestratorExpand: ObservableObject {
         let win = windows[k]?.w
         finish(k, refocus: refocus)
         if vm.notchState == .open { withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) { vm.notchSize = openNotchSize } }
-        shrinkTask?.cancel()
+        shrinkTasks[k]?.cancel()
         // Let the spring finish before the window stops covering the expanded area.
-        shrinkTask = Task { [weak win] in
+        shrinkTasks[k] = Task { [weak win] in
             try? await Task.sleep(for: .milliseconds(450))
             guard !Task.isCancelled, let win else { return }
             win.setFrame(pinnedFrame(current: win.frame, newHeight: windowSize.height), display: true)
@@ -59,8 +59,8 @@ final class OrchestratorExpand: ObservableObject {
     /// Notch closed or tab left: collapse everything now, no animation.
     func reset() {
         guard !expanded.isEmpty else { return }
-        shrinkTask?.cancel()
         for k in Array(expanded) {
+            shrinkTasks[k]?.cancel()
             let win = windows[k]?.w
             let vm = vms[k]?.vm
             finish(k)
