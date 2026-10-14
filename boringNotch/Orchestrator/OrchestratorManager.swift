@@ -8,10 +8,15 @@ final class OrchestratorManager: ObservableObject {
     @Published private(set) var offline = false
     @Published private(set) var chatRunning = false
     @Published private(set) var screen = ""
+    @Published private(set) var runs: [OrchestratorRun] = []
+    @Published private(set) var usage: OrchestratorUsage?
+    @Published private(set) var promptOptions: [PromptOption] = []
+    /// A run is waiting or the chat shows a prompt. Deliberately independent of music/tab/notch state.
+    var needsAttention: Bool { runs.contains { $0.state == "waiting" } || !promptOptions.isEmpty }
     /// False until the first response or error, so the view doesn't flash "offline".
     @Published private(set) var hasLoaded = false
 
-    /// Fed by BoringViewModel open()/close(); opening triggers an immediate refresh.
+    /// Fed by notch open/close hooks; opening triggers an immediate refresh.
     var notchOpen = false {
         didSet { if notchOpen && !oldValue { Task { await refresh() } } }
     }
@@ -47,12 +52,19 @@ final class OrchestratorManager: ObservableObject {
 
     func refresh() async {
         do {
-            let r: ChatResponse = try await get("api/chat")
+            async let chat: ChatResponse = get("api/chat")
+            async let state: StateResponse = get("api/state")
+            let (r, st) = try await (chat, state)
             if offline { offline = false }
             let running = r.running ?? false
             if chatRunning != running { chatRunning = running }
             let s = r.screen ?? ""
             if screen != s { screen = s }
+            let rs = st.runs ?? []
+            if runs != rs { runs = rs }
+            if usage != st.usage { usage = st.usage }
+            let po = running ? detectPrompt(screen: s) : []
+            if promptOptions != po { promptOptions = po }
         } catch {
             if !offline { offline = true }
         }
