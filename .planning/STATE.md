@@ -99,3 +99,4 @@ Resume file: None
 | 261014-f03 | Orchestrator tab default, usage in header, roomier chat/runs | 2026-10-14 | .planning/quick/261014-f03-orch-tab-default-usage-topbar |
 | 261014-f4d | Orchestrator chat-only body, runs panel behind header button (replaces gear) | 2026-10-14 | .planning/quick/261014-f4d-orchestrator-runs-toggle |
 | 261014-gkq | Chat: strip TUI input box, app activation for typing, Start/End in header, tap chat to expand | 2026-10-14 | .planning/quick/261014-gkq-orch-chat-chrome-keyboard-layout |
+| 261014-q90 | Wings: runs + chat working (elapsed, count), queued done/failed, paused music yields, music-playing ✻/✓ | 2026-10-14 | .planning/quick/261014-q90-live-activity-wings |
