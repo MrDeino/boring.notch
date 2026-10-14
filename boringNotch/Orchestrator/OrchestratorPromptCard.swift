@@ -23,7 +23,8 @@ final class PromptCardController: ObservableObject {
     private var dwell: Task<Void, Never>?
     private var hovering = false
     private var mounted = 0
-    @Published var fieldEditing = false
+    /// Editing ending with the pointer outside re-runs the exit dwell, else the key-take outlives the hover.
+    @Published var fieldEditing = false { didSet { if oldValue, !fieldEditing, !hovering { hover(false, window: nil) } } }
     @Published var focusField = false
     @Published var freeText = ""
     @Published private(set) var submitting = false
