@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Phases 2 and 3 executed and merged; on-screen UAT pending
+stopped_at: Phase 4 executed and verified at code level; on-screen UAT pending (04-HUMAN-UAT.md); Phases 5/6/7 ready to run in parallel
 last_updated: "2026-10-14T03:41:26.780Z"
 last_activity: 2026-10-14
 progress:
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-14)
 
 **Core value:** Answer and steer the Claude Code orchestrator from the notch without switching to a terminal — and never break the music player doing it.
-**Current focus:** Execute Phase 4 (2a Foundation), then Phases 5, 6, 7 in parallel; Phase 2/3 on-screen UAT still pending
+**Current focus:** Phases 5, 6, 7 in parallel (separate branches from this one); on-screen UAT pending for Phases 2, 3, 4
 
 ## Current Position
 
-Phase: 4 of 9 — 2a redesign planned (Phases 4–7 have checked plans; 8–9 not planned)
-Plan: 2 of 2
-Status: Phase complete — ready for verification
+Phase: 4 of 9 — Phase 4 (2a Foundation) EXECUTED; verification human_needed
+Plan: 3 of 3
+Status: Code-level verification passed (5/5); 7 on-screen checks pending in 04-HUMAN-UAT.md; review WR-01/WR-02 fixed
 Last activity: 2026-10-14
 
 Progress: [█████░░░░░] 45%
@@ -64,6 +64,8 @@ Recent decisions affecting current work:
 
 - 2026-10-14: Phases 4–9 added for the 2a redesign (design handoff in `.planning/design/orchestrator-2a/`): 4 Foundation, 5 Structured chat, 6 Prompt cards, 7 Runs board/expand levels/wings, 8 Phase B live data, 9 Phase B approvals. Phases 5, 6, 7 will execute in parallel after Phase 4 (merge map: `.planning/design/orchestrator-2a/MERGE-MAP.md`).
 - [User 2026-10-14]: Chat rows come from serve's transcript endpoint `GET /api/chat/blocks?since=<id>`, not screen parsing. Waiting run cards show the run's question and a button that sends that context into the orchestrator chat — no Allow/Deny/resume of runs from the notch.
+
+- [User 2026-10-14]: Phase 7 wave 2 (07-02, 07-03, 07-04) runs one plan at a time; commit-range checks stay as written.
 
 ### Pending Todos
 

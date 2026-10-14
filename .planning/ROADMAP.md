@@ -194,7 +194,7 @@ Plans:
 **Wave 1**
 - [ ] 07-01-PLAN.md — OrchestratorRun fields + pure helpers (TDD): elapsed, latest action, waiting question, Ask-in-chat message, sort, pollInterval 3s, nextLevel, expandedHeight, wing kind/width
 
-**Wave 2** *(blocked on 07-01; disjoint files)*
+**Wave 2** *(blocked on 07-01; disjoint files — run ONE AT A TIME, user 2026-10-14: commit-range checks assume serial commits)*
 - [ ] 07-02-PLAN.md — Runs board (frame 05), waiting card with question + Ask in chat (no Allow/Deny), bottom status line
 - [ ] 07-03-PLAN.md — Closed-notch wings (frame 00), music dot overlay, corner-dot hide, radius 26 (ContentView: one else-if after music)
 - [ ] 07-04-PLAN.md — Expand level machine, ⌘ shortcut monitor, transcriptTapped → .expanded, framed terminal (frame 10), ⌃ collapse button
@@ -256,7 +256,7 @@ Plans:
 | 1. Read-only Orchestrator Tab | 2/2 | Complete   | 2026-10-14 |
 | 2. Sending & Prompt Answers | 2/2 | Awaiting UAT | - |
 | 3. Compact Indicators & Expand-Down | 2/2 | Awaiting UAT | - |
-| 4. 2a Foundation | 3/3 | Complete   | 2026-10-14 |
+| 4. 2a Foundation | 3/3 | Awaiting UAT | - |
 | 5. 2a Structured Chat | 0/3 | Planned | - |
 | 6. 2a Prompt Cards | 0/3 | Planned | - |
 | 7. 2a Runs Board, Expand Levels & Wings | 0/5 | Planned | - |
