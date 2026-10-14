@@ -51,6 +51,7 @@ enum OT {
         static let pill30: CGFloat = 15
         static let pill28: CGFloat = 14
         static let keycap: CGFloat = 4
+        static let approvalPanel: CGFloat = 22
     }
     enum S {
         static let header: CGFloat = 34

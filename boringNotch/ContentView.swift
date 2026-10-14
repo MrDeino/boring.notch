@@ -20,6 +20,7 @@ struct ContentView: View {
 
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject private var wings = OrchestratorWingsModel.shared
+    @ObservedObject private var approvals = OrchestratorApprovalCenter.shared
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
@@ -55,7 +56,7 @@ struct ContentView: View {
             topCornerRadius: topCornerRadius,
             bottomCornerRadius: ((vm.notchState == .open) && Defaults[.cornerRadiusScaling])
                 ? (vm.notchSize.height > openNotchSize.height + 1 ? OT.R.notchExpanded : cornerRadiusInsets.opened.bottom)
-                : cornerRadiusInsets.closed.bottom
+                : (approvals.approval != nil && vm.notchState == .closed ? OT.R.approvalPanel : cornerRadiusInsets.closed.bottom)
         )
     }
 
@@ -290,6 +291,8 @@ struct ContentView: View {
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
+                      } else if vm.notchState == .closed && !vm.hideOnClosed && approvals.approval != nil {
+                          OrchestratorApprovalPanel(onMore: { OrchestratorManager.shared.showRunsBoard = false; coordinator.currentView = .orchestrator; doOpen() })
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed && (musicManager.isPlaying || wings.kind == nil) {
                           MusicLiveActivity()
                               .frame(alignment: .center)
@@ -532,6 +535,7 @@ struct ContentView: View {
             }
             
             guard vm.notchState == .closed,
+                  approvals.approval == nil,
                   !coordinator.sneakPeek.show,
                   Defaults[.openNotchOnHover] else { return }
             

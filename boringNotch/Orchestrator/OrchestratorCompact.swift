@@ -7,6 +7,7 @@ struct OrchestratorClosedIndicators: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var wings = OrchestratorWingsModel.shared
     @ObservedObject var music = MusicManager.shared
+    @ObservedObject var approvals = OrchestratorApprovalCenter.shared
 
     /// The wing or the music dot already shows the attention state.
     private var dotCovered: Bool {
@@ -16,7 +17,7 @@ struct OrchestratorClosedIndicators: View {
 
     var body: some View {
         if vm.notchState == .closed && !vm.hideOnClosed && vm.effectiveClosedNotchHeight > 0
-            && !coordinator.helloAnimationRunning && !manager.offline {
+            && !coordinator.helloAnimationRunning && !manager.offline && approvals.approval == nil {
             ZStack {
                 if manager.needsAttention && !dotCovered {
                     Circle().fill(.orange).frame(width: 6, height: 6)
