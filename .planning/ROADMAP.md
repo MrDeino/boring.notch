@@ -6,7 +6,7 @@ Three phases along the dependency chain build → manager → input → indicato
 
 ## Phases
 
-- [ ] **Phase 1: Read-only Orchestrator Tab** - Fork builds from CLI; tab shows chat tail, runs, usage, offline state, with polling
+- [x] **Phase 1: Read-only Orchestrator Tab** - Fork builds from CLI; tab shows chat tail, runs, usage, offline state, with polling (completed 2026-10-14)
 - [ ] **Phase 2: Sending & Prompt Answers** - Type messages, answer numbered prompts, Esc, start/end the chat from the notch
 - [ ] **Phase 3: Compact Indicators & Expand-Down** - Closed-notch usage + attention dot; notch grows down for larger chat and live terminal
 
@@ -26,7 +26,7 @@ Three phases along the dependency chain build → manager → input → indicato
   4. Data visibly refreshes about every 2s while the notch is open and polls more slowly while closed
   5. `detectPrompt(screen)` is a pure function with an assert-based check covering the idle input box (no prompt) and a numbered-options prompt; music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 **Wave 1**
 
@@ -34,7 +34,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Runs strip + 5h/7d usage bars (GET /api/state), detectPrompt + needsAttention, diff/music checks
+- [x] 01-02-PLAN.md — Runs strip + 5h/7d usage bars (GET /api/state), detectPrompt + needsAttention, diff/music checks
 
 **UI hint**: yes
 
@@ -76,6 +76,6 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Read-only Orchestrator Tab | 1/2 | In Progress|  |
+| 1. Read-only Orchestrator Tab | 2/2 | Complete   | 2026-10-14 |
 | 2. Sending & Prompt Answers | 0/TBD | Not started | - |
 | 3. Compact Indicators & Expand-Down | 0/TBD | Not started | - |
