@@ -112,10 +112,10 @@ Plans:
   4. Stopped, offline and connecting states show the specified copy and layout; message box, prompt options, Esc, expand/terminal, attention dot and usage hairline still work
   5. Music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 04-01-PLAN.md — Seams + tokens: pure helpers (PromptCard, parseLiveStatus, capsuleState, pollInterval, ExpandLevel), Phase4-7 test runners, 11 files registered in pbxproj, manager + expand hooks
+- [x] 04-01-PLAN.md — Seams + tokens: pure helpers (PromptCard, parseLiveStatus, capsuleState, pollInterval, ExpandLevel), Phase4-7 test runners, 11 files registered in pbxproj, manager + expand hooks
 - [ ] 04-02-PLAN.md — View split (Chat, PromptCard, RunsBoard), stopped/offline/connecting screens, thin shell with expand-level hook
 - [ ] 04-03-PLAN.md — Chat | Runs segment, status capsule + usage ring, in-notch status menu, BoringHeader swap
 
@@ -256,7 +256,7 @@ Plans:
 | 1. Read-only Orchestrator Tab | 2/2 | Complete   | 2026-10-14 |
 | 2. Sending & Prompt Answers | 2/2 | Awaiting UAT | - |
 | 3. Compact Indicators & Expand-Down | 2/2 | Awaiting UAT | - |
-| 4. 2a Foundation | 0/3 | Planned | - |
+| 4. 2a Foundation | 1/3 | In Progress|  |
 | 5. 2a Structured Chat | 0/3 | Planned | - |
 | 6. 2a Prompt Cards | 0/3 | Planned | - |
 | 7. 2a Runs Board, Expand Levels & Wings | 0/5 | Planned | - |

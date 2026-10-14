@@ -41,13 +41,13 @@
 
 ### Foundation (Phase 4)
 
-- [ ] **FND-01**: Orchestrator views take colours, type sizes, radii and spacing from one tokens file that matches the handoff's Design tokens
+- [x] **FND-01**: Orchestrator views take colours, type sizes, radii and spacing from one tokens file that matches the handoff's Design tokens
 - [ ] **FND-02**: `OrchestratorView.swift` is a thin shell; Chat, PromptCard, RunsBoard and StatusCapsule live in their own files, behaviour unchanged
 - [ ] **FND-03**: The open-notch header shows a Chat | Runs N segment (count orange while a run waits, gray otherwise, hidden offline) that replaces `OrchestratorRunsButton`
 - [ ] **FND-04**: The header shows one status capsule (Running / Idle / Needs you / Stopped / Offline / Connecting, 12px 5h usage ring) that replaces `OrchestratorUsageBadge` and `OrchestratorChatButton`
 - [ ] **FND-05**: Clicking the capsule opens the status menu inside the notch: 5h/7d usage with resets and bars, Open terminal, Interrupt (1s debounce), End chat with 4s confirm or Start chat when stopped; the content dims to 35% while open
 - [ ] **FND-06**: Stopped (07), offline (08) and connecting (09) screens match the handoff copy and layout
-- [ ] **FND-07**: Shared seams for the parallel phases exist: `PromptCard` model and `manager.prompt`, live-status parse (`manager.liveStatus` with elapsed), and an expand-level API on `OrchestratorExpand`
+- [x] **FND-07**: Shared seams for the parallel phases exist: `PromptCard` model and `manager.prompt`, live-status parse (`manager.liveStatus` with elapsed), and an expand-level API on `OrchestratorExpand`
 
 ### Structured chat (Phase 5)
 
@@ -131,13 +131,13 @@
 | EXP-01 | Phase 3 | Complete |
 | EXP-02 | Phase 3 | Complete |
 | EXP-03 | Phase 3 | Complete |
-| FND-01 | Phase 4 | Pending |
+| FND-01 | Phase 4 | Complete |
 | FND-02 | Phase 4 | Pending |
 | FND-03 | Phase 4 | Pending |
 | FND-04 | Phase 4 | Pending |
 | FND-05 | Phase 4 | Pending |
 | FND-06 | Phase 4 | Pending |
-| FND-07 | Phase 4 | Pending |
+| FND-07 | Phase 4 | Complete |
 | CHAT-01 | Phase 5 | Pending |
 | CHAT-02 | Phase 5 | Pending |
 | CHAT-03 | Phase 5 | Pending |
