@@ -186,3 +186,14 @@ final class OrchestratorExpand: ObservableObject {
         OrchestratorKeyGate.restore(refocus: refocus)
     }
 }
+
+extension View {
+    /// ContentView's root frame. The expanded window is resized at once (top pinned) while the notch
+    /// height springs, so the root must fill the window top-aligned: a root shorter than the window is
+    /// centred by NSHostingView, which slides the notch's top edge down mid-animation. When the window
+    /// is windowSize tall (stock open/close) this is the same as the upstream frame.
+    func notchRootFrame(notchHeight: CGFloat) -> some View {
+        frame(maxWidth: windowSize.width, maxHeight: windowSize.height + max(0, notchHeight - openNotchSize.height), alignment: .top)
+            .frame(maxHeight: .infinity, alignment: .top)
+    }
+}

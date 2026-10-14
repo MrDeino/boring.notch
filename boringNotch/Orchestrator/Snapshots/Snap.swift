@@ -15,6 +15,15 @@ struct NotchReplica: View {
     @ObservedObject var vm: BoringViewModel
 
     var body: some View {
+        core
+            .frame(width: openNotchSize.width, height: vm.notchSize.height + shadowPadding, alignment: .top)
+            .background(Color(white: 0.35))
+            .clipped()
+            .environmentObject(vm)
+    }
+
+    /// The notch itself: ContentView's mainLayout (header + tab body, paddings, shape, fixed height).
+    var core: some View {
         VStack(alignment: .leading) {
             VStack(alignment: .leading) {
                 header.frame(height: max(24, vm.effectiveClosedNotchHeight))
@@ -28,10 +37,6 @@ struct NotchReplica: View {
         .background(.black)
         .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 24, bottomTrailingRadius: 24))
         .frame(height: vm.notchSize.height)
-        .frame(width: openNotchSize.width, height: vm.notchSize.height + shadowPadding, alignment: .top)
-        .background(Color(white: 0.35))
-        .clipped()
-        .environmentObject(vm)
     }
 
     /// BoringHeader with the tab icons drawn as placeholders.
@@ -109,6 +114,7 @@ struct Scene {
 @main
 struct Snap {
     static func main() async {
+        if CommandLine.arguments.contains("--transition") { await transition(); return }
         let useImageRenderer = CommandLine.arguments.contains("--image-renderer")
         let out = URL(fileURLWithPath: "/tmp/notch-snapshots")
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
@@ -176,4 +182,62 @@ struct Snap {
             if let png { try? png.write(to: url); print("wrote", url.path) } else { print("FAILED", s.name) }
         }
     }
+
+    /// Height changes in a fixed window, like the app: the window is resized at once (top pinned) and
+    /// vm.notchSize springs. Steps sample a 0.4/0.82 spring incl. overshoot. Prints the notch's top y
+    /// (first black row at the centre column) and the window top for each step, old vs new root frame.
+    static func transition() async {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        let out = URL(fileURLWithPath: "/tmp/notch-snapshots")
+        try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        await OrchestratorManager.shared.snapshotApply(loaded: true, chat: ChatResponse(running: true, screen: ""), state: StateResponse(runs: [], usage: nil))
+        OrchestratorTranscriptStore.shared.snapshotSet(blocks: longBlocks)
+        let full = expandedHeight(screenHeight: 900)
+        let grow: [CGFloat] = [190, 240, 320, 390, 418, 409, full]
+        let shrink: [CGFloat] = [full, 340, 260, 205, 183, 188, 190]
+        let stock: [CGFloat] = [34, 90, 150, 185, 196, 190] // music open: closed -> open in the stock window
+        let runs: [(String, [CGFloat], CGFloat)] = [
+            ("grow", grow, full + shadowPadding), ("collapse", shrink, full + shadowPadding), ("stock-open", stock, windowSize.height),
+        ]
+        var moved = false
+        for pinned in [false, true] {
+            for (name, steps, winH) in runs {
+                var tops: [String] = []
+                for (i, h) in steps.enumerated() {
+                    let vm = BoringViewModel()
+                    vm.notchSize = CGSize(width: openNotchSize.width, height: h)
+                    let core = NotchReplica(vm: vm).core.environmentObject(vm)
+                    let root = Group {
+                        if pinned { core.notchRootFrame(notchHeight: h) }
+                        else { core.frame(maxWidth: windowSize.width, maxHeight: windowSize.height + max(0, h - openNotchSize.height), alignment: .top) }
+                    }
+                    let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: openNotchSize.width, height: winH),
+                                          styleMask: .borderless, backing: .buffered, defer: false)
+                    window.backgroundColor = NSColor(white: 0.35, alpha: 1)
+                    let topBefore = window.frame.maxY
+                    let host = NSHostingView(rootView: root)
+                    window.contentView = host
+                    try? await Task.sleep(for: .milliseconds(80))
+                    host.layoutSubtreeIfNeeded()
+                    guard let rep = window.contentView?.bitmapImageRepForCachingDisplay(in: host.bounds) else { continue }
+                    host.cacheDisplay(in: host.bounds, to: rep)
+                    let x = rep.pixelsWide / 2
+                    let top = (0..<rep.pixelsHigh).first { y in (rep.colorAt(x: x, y: y)?.brightnessComponent ?? 1) < 0.05 }
+                        .map { CGFloat($0) * host.bounds.height / CGFloat(rep.pixelsHigh) } ?? -1
+                    let winMoved = abs(window.frame.maxY - topBefore) > 0.5
+                    if top != 0 || winMoved { moved = moved || pinned }
+                    tops.append("h=\(Int(h)):top=\(Int(top))\(winMoved ? "(window top moved)" : "")")
+                    if [1, 3].contains(i) || name == "stock-open" && i == 2 {
+                        try? rep.representation(using: .png, properties: [:])?
+                            .write(to: out.appendingPathComponent("transition-\(pinned ? "new" : "old")-\(name)-\(i).png"))
+                    }
+                    window.contentView = nil
+                }
+                print("\(pinned ? "new" : "old") \(name): " + tops.joined(separator: "  "))
+            }
+        }
+        print(moved ? "FAIL: top edge moved with the new root frame" : "OK: top edge pinned at y=0 in every step (new root frame)")
+    }
 }
+
