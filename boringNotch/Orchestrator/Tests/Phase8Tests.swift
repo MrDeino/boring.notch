@@ -58,4 +58,8 @@ func runPhase8Tests() {
     precondition(!caretVisible(live: true, working: true, kind: .user, id: "a", newestID: "a"))
     precondition(!caretVisible(live: true, working: true, kind: .prose, id: "a", newestID: "b"))
     precondition(!caretVisible(live: true, working: true, kind: .prose, id: "a", newestID: nil))
+    precondition(shouldFetchBlocks(streaming: false, running: true, newPrompt: false))
+    precondition(!shouldFetchBlocks(streaming: true, running: true, newPrompt: false))
+    precondition(shouldFetchBlocks(streaming: true, running: true, newPrompt: true))
+    precondition(shouldFetchBlocks(streaming: true, running: false, newPrompt: false))
 }

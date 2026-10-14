@@ -256,12 +256,15 @@ final class OrchestratorManager: ObservableObject {
         let cp = running ? r.context?.percent.flatMap { $0 >= 0 ? $0 : nil } : nil
         if contextPercent != cp { contextPercent = cp }
         OrchestratorTranscriptStore.shared.applyScreen(r)
-        // Blocks first: a new card must appear with its context (Phase 8: ingest blocks before publishing a prompt).
-        // While streaming, blocks arrive as events; only a stopped chat still needs the store to clear.
-        if !(streaming && running) { await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, chatRunning: running) }
         let po = running ? detectPrompt(screen: s) : []
-        if promptOptions != po { promptOptions = po }
         let pc = running ? detectPromptCard(screen: s) : nil
+        // Blocks first: a new card must appear with its context (Phase 8: ingest blocks before publishing a prompt).
+        // While streaming, blocks arrive as events, except a chat event with a new prompt, which fetches them first.
+        let newPrompt = pc != nil && pc != prompt || !po.isEmpty && po != promptOptions
+        if shouldFetchBlocks(streaming: streaming, running: running, newPrompt: newPrompt) {
+            await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, chatRunning: running)
+        }
+        if promptOptions != po { promptOptions = po }
         if prompt != pc { prompt = pc }
         let ls = running ? liveStatusFor(screen: s, live: r.live) : nil
         if liveStatus != ls { liveStatus = ls }
