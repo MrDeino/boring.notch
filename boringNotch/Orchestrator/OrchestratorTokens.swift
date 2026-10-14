@@ -26,6 +26,7 @@ enum OT {
         static let red = Color(hex: 0xFF453A)
         static let redText = Color(hex: 0xFF6961)
         static let redBg = Color(hex: 0x2A1A19)
+        static let run = Color(hex: 0x60A5FA) // dashboard --run
     }
     enum F {
         static let title = Font.system(size: 14, weight: .semibold)

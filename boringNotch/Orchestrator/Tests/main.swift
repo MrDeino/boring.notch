@@ -90,6 +90,7 @@ runQuickR8wTests()
 runQuickRm9Tests()
 runQuickS3qTests()
 runQuickTmqTests()
+runQuickX18Tests()
 runPhase8Tests()
 runPhase9Tests()
 if ProcessInfo.processInfo.environment["ORCH_APPROVAL_MOCK"] != nil { await runPhase9Mock() }

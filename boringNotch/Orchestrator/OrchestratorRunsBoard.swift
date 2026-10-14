@@ -77,6 +77,10 @@ struct OrchestratorRunCard: View {
                         Text(verbatim: runElapsed(run, now: now)).font(.system(size: 10)).foregroundStyle(OT.C.text5)
                     }
                 }
+                if let act = runActivityLine(run.activity) {
+                    Text(verbatim: act).font(.system(size: 11)).foregroundStyle(OT.C.run)
+                        .lineLimit(compact ? 1 : 2).truncationMode(.tail)
+                }
                 Text(verbatim: compact && state == "stuck" ? latestAction(run, now: now) : run.shortPrompt)
                     .font(.system(size: 11)).foregroundStyle(OT.C.text5).lineLimit(1)
                 if isWaiting {

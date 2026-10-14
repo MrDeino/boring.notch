@@ -142,7 +142,7 @@ struct OrchestratorRun: Decodable, Equatable {
     }
 }
 
-struct RunActivity: Decodable, Equatable { let step: String?; let agents: [RunAgent]? }
+struct RunActivity: Decodable, Equatable { let step: String?; let agents: [RunAgent]?; let doing: String? }
 struct RunAgent: Decodable, Equatable { let type: String?; let desc: String? }
 
 struct OrchestratorUsage: Decodable, Equatable {

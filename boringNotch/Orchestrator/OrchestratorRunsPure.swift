@@ -46,17 +46,48 @@ private func jsonField(_ key: String, in s: String) -> String? {
     return String(v)
 }
 
+/// Tool name + its main input field out of a "[Tool] {json" string (JSON may be truncated).
+private func toolField(_ tool: String, _ rest: String) -> String? {
+    let key: String
+    switch tool {
+    case "Bash": key = "command"
+    case "Edit", "Write", "Read", "MultiEdit", "NotebookEdit": key = "file_path"
+    case "Grep", "Glob": key = "pattern"
+    case "Task", "Agent": key = "description"
+    case "WebFetch": key = "url"
+    default: return nil
+    }
+    return jsonField(key, in: rest)
+}
+
 private func parseLatest(_ latest: String?) -> String? {
     guard let l = latest, let line = firstLine(l) else { return nil }
     guard let r = line.range(of: "^\\[(\\w+)\\] ", options: .regularExpression) else { return line }
     let tool = String(line[r].dropFirst().dropLast(2))
-    let rest = String(line[r.upperBound...])
-    switch tool {
-    case "Bash": return jsonField("command", in: rest).map { "$ " + $0 } ?? tool
-    case "Edit", "Write", "Read", "MultiEdit", "NotebookEdit": return jsonField("file_path", in: rest).map { tool + " " + $0 } ?? tool
-    case "Grep", "Glob": return jsonField("pattern", in: rest).map { tool + " " + $0 } ?? tool
-    default: return tool
-    }
+    guard ["Bash", "Edit", "Write", "Read", "MultiEdit", "NotebookEdit", "Grep", "Glob"].contains(tool),
+          let v = toolField(tool, String(line[r.upperBound...])) else { return tool }
+    return tool == "Bash" ? "$ " + v : tool + " " + v
+}
+
+/// "[Bash] {json" log line -> chip + summary; nil for prose / RESULT lines.
+func logToolLine(_ line: String) -> (tool: String, summary: String)? {
+    guard let first = line.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init),
+          let r = first.range(of: "^\\[(\\w+)\\] ", options: .regularExpression) else { return nil }
+    let tool = String(first[r].dropFirst().dropLast(2))
+    return (tool, toolField(tool, String(first[r.upperBound...])) ?? "")
+}
+
+func isRunID(_ s: String) -> Bool { s.range(of: "^[A-Za-z0-9_-]{1,64}$", options: .regularExpression) != nil }
+
+/// Dashboard activity line: "step → agent · desc — doing" (page.html).
+func runActivityLine(_ a: RunActivity?) -> String? {
+    guard let a else { return nil }
+    let doing = a.doing?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    var s = a.step ?? ""
+    for ag in a.agents ?? [] { s += " → " + (ag.type ?? "") + ((ag.desc ?? "").isEmpty ? "" : " · " + ag.desc!) }
+    if !doing.isEmpty { s += (s.isEmpty ? "" : " — ") + doing }
+    s = s.trimmingCharacters(in: .whitespaces)
+    return s.isEmpty ? nil : s
 }
 
 // ponytail: regex over serve's truncated "[Tool] {json" string; upgrade = serve sends parsed fields.
