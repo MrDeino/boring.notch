@@ -60,10 +60,30 @@ result: pending
 expected: play/pause/skip, artwork and the closed-notch music live activity are unchanged with the Orchestrator tab open and closed.
 result: pending
 
+### 13. Send clears the real box safely (CR-01)
+expected: With a two-line draft in the Claude box, or the cursor moved mid-line, sending from the notch sends nothing and keeps the notch draft. A normal send still works and the extra screen read (up to ~750ms) does not feel slow.
+result: pending
+
+### 14. Enter while busy (CR-02)
+expected: Pressing Enter while a prompt-option POST is in flight does nothing; the field stays focused and the Claude box is untouched.
+result: pending
+
+### 15. /clear (WR-03)
+expected: After /clear with the notch open and a new message, the transcript shows only the new conversation within ~2s; normal turns still append with the slide-in, no full-list flash.
+result: pending
+
+### 16. Unseen terminal draft (WR-04)
+expected: Type in the terminal, wait >2s, focus the notch with text already in the field and press Enter: the terminal draft is put in front with "from terminal · "; a second Enter sends the combined text.
+result: pending
+
+### 17. Brief serve outage (WR-05)
+expected: Stopping serve for one poll keeps the rows; they switch to the raw tail only after ~3 failed polls (or at once if no rows were loaded).
+result: pending
+
 ## Summary
-total: 12
+total: 17
 passed: 0
 issues: 0
-pending: 12
+pending: 17
 
 ## Gaps
