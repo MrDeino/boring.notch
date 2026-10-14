@@ -65,7 +65,13 @@ final class OrchestratorManager: ObservableObject {
     }
 
     func sendText(_ s: String) async -> Bool { await post(.text(s)) }
-    func pressEscape() async { await post(.key("Escape")) }
+    /// Debounced: Esc-Esc opens Claude Code's rewind picker.
+    func pressEscape() async {
+        guard Date().timeIntervalSince(lastEscape) > 1 else { return }
+        lastEscape = Date()
+        await post(.key("Escape"))
+    }
+    private var lastEscape = Date.distantPast
     func startChat() async { await post(.start) }
     func stopChat() async { await post(.stop) }
 
