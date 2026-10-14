@@ -13,9 +13,6 @@ struct OrchestratorView: View {
     @EnvironmentObject var vm: BoringViewModel
     @State private var anchor = NSView()
 
-    @State private var notesGrew = false
-    @State private var bodyHeight: CGFloat = 999
-
     private func close() {
         withAnimation(.easeOut(duration: 0.15)) {
             if manager.notesOpen { OrchestratorNotesStore.shared.flush() }
@@ -29,7 +26,6 @@ struct OrchestratorView: View {
         // notch's fixed-height frame centre it, pushing the header and the composer out of the notch.
         .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         .clipped()
-        .background(GeometryReader { g in Color.clear.onAppear { bodyHeight = g.size.height }.onChange(of: g.size.height) { _, h in bodyHeight = h } })
         .opacity(manager.statusMenuOpen || manager.notesOpen ? 0.35 : 1)
         .allowsHitTesting(!manager.statusMenuOpen && !manager.notesOpen)
         .overlay(alignment: .topTrailing) {
@@ -50,14 +46,6 @@ struct OrchestratorView: View {
             }
         }
         .background(WindowAnchor(view: anchor))
-        .onChange(of: manager.notesOpen) { _, open in
-            // Grow only when the open level lacks room for a usable editor; undo only what we grew.
-            if open, expand.level(for: vm) == .open, bodyHeight < 130 {
-                expand.setLevel(.expanded, vm: vm, window: anchor.window); notesGrew = true
-            } else if !open, notesGrew {
-                notesGrew = false; expand.setLevel(.open, vm: vm, window: anchor.window)
-            }
-        }
         .onDisappear { OrchestratorNotesStore.shared.flush(); manager.statusMenuOpen = false; manager.notesOpen = false }
     }
 }

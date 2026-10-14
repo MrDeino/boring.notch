@@ -301,7 +301,16 @@ struct OrchestratorNotesPanel: View {
     @State private var anchor = NSView()
     @State private var keyMonitor: Any?
     @FocusState private var focused: Bool
+    @EnvironmentObject var vm: BoringViewModel
+    /// The AppKit text view only exists while editing: it takes the click before the key gate can open.
+    @State private var editing = false
+    @State private var textH: CGFloat = 0
+    @State private var panelH: CGFloat = 0
+    /// Panel height at openNotchSize, taken once when the panel first lays out (animated heights would feed back).
+    @State private var baseH: CGFloat?
     let close: () -> Void
+
+    private var canEdit: Bool { store.status != .loading && store.status != .loadFailed }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -319,12 +328,23 @@ struct OrchestratorNotesPanel: View {
                 }
             }
             .font(OT.F.meta).padding(.horizontal, 6)
-            TextEditor(text: $store.text)
-                .focused($focused)
-                .font(OT.F.ui).foregroundColor(OT.C.text)
-                .scrollContentBackground(.hidden)
-                .disabled(store.status == .loading || store.status == .loadFailed)
-                .onChange(of: store.text) { _, _ in store.edited() }
+            if editing {
+                TextEditor(text: $store.text)
+                    .focused($focused)
+                    .font(OT.F.ui).foregroundColor(OT.C.text)
+                    .scrollContentBackground(.hidden)
+                    .onChange(of: store.text) { _, _ in store.edited() }
+                    .onAppear { DispatchQueue.main.async { if editing { focused = true } } }
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    Text(verbatim: store.text.isEmpty ? "Write a note" : store.text)
+                        .font(OT.F.ui).foregroundColor(store.text.isEmpty ? OT.C.text6 : OT.C.text)
+                        .padding(.horizontal, 5).padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: .infinity)
+                .overlay { if canEdit { Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() } } }
+            }
         }
         .padding(5)
         .frame(width: 300)
@@ -333,11 +353,32 @@ struct OrchestratorNotesPanel: View {
         .overlay(RoundedRectangle(cornerRadius: OT.R.cardL).stroke(OT.C.selected, lineWidth: 1))
         .shadow(color: .black.opacity(0.6), radius: 15, y: 10)
         .background(WindowAnchor(view: anchor))
-        .onChange(of: focused) { _, f in f ? startTyping() : stopTyping() }
+        .background(GeometryReader { g in Color.clear.onAppear { panelH = g.size.height }.onChange(of: g.size.height) { _, h in panelH = h } })
+        // Natural height of the text at the editor's width; drives the open notch's height.
+        .background(
+            Text(verbatim: store.text + "\n").font(OT.F.ui)
+                .padding(.horizontal, 5).frame(width: 290, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                .hidden()
+                .background(GeometryReader { g in Color.clear.onAppear { textH = g.size.height }.onChange(of: g.size.height) { _, h in textH = h } }),
+            alignment: .topLeading)
+        .onChange(of: textH) { _, _ in fitNotch() }
+        .onChange(of: panelH) { _, _ in fitNotch() }
+        .onAppear { fitNotch() }
+        .onChange(of: focused) { _, f in if !f { stopTyping() } }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { n in
             if let w = keyWindow, (n.object as? NSWindow) === w { stopTyping() }
         }
-        .onDisappear { stopTyping() }
+        .onDisappear { stopTyping(); OrchestratorExpand.shared.setFit("notes", extra: 0, vm: vm, window: anchor.window) }
+    }
+
+    /// Height the notch must gain at the open level for the whole text to show.
+    private func fitNotch() {
+        let expand = OrchestratorExpand.shared
+        guard expand.level(for: vm) == .open else { return expand.setFit("notes", extra: 0, vm: vm, window: anchor.window) }
+        guard panelH > 0 else { return }
+        if baseH == nil { baseH = panelH - (vm.notchSize.height - openNotchSize.height) }
+        let needed = textH + 42 // header row + spacing + paddings + editor inset
+        expand.setFit("notes", extra: needed - (baseH ?? panelH), vm: vm, window: anchor.window)
     }
 
     // Same hand-over as OrchestratorChatView: take the key while editing, give it back after.
@@ -345,6 +386,7 @@ struct OrchestratorNotesPanel: View {
         guard let w = anchor.window, !OrchestratorKeyGate.terminalWantsKey else { return }
         manager.beginTyping(in: w)
         keyWindow = w
+        editing = true
         OrchestratorKeyGate.activate()
         w.makeKey()
         DispatchQueue.main.async { if manager.wantsKeyboard { w.makeKey() } }
@@ -358,6 +400,7 @@ struct OrchestratorNotesPanel: View {
     private func stopTyping() {
         if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
         focused = false
+        editing = false
         guard let w = keyWindow else { return }
         let wasKey = w.isKeyWindow
         w.makeFirstResponder(nil)

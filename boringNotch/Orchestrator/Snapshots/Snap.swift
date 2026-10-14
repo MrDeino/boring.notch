@@ -214,6 +214,7 @@ struct Snap {
             Scene(name: "28-notes-open", chat: chat(""), blocks: markerBlocks, notes: (shortNote, .saved)),
             Scene(name: "29-notes-couldnt-save", chat: chat(""), blocks: markerBlocks, notes: (shortNote, .failed)),
             Scene(name: "30-notes-expanded", chat: chat(""), blocks: markerBlocks, expanded: true, notes: (longNote, .idle)),
+            Scene(name: "40-notes-long-open", chat: chat(""), blocks: markerBlocks, notes: (longNote, .idle)),
             Scene(name: "17-question-multiselect", chat: chat(fixture("multiselect-1.txt")), expanded: true),
             Scene(name: "18-question-multiselect-toggled", chat: chat(fixture("multiselect-1.txt")), expanded: true, pending: [1: true, 2: true]),
             Scene(name: "19-question-multiq-tabs", chat: chat(fixture("multiq-tab2.txt")), expanded: true),
@@ -499,6 +500,26 @@ struct Snap {
                 await click(17, x: 590) // notes button, right of the capsule
                 line.append("notes button opens panel: \(m.notesOpen)")
                 ok = ok && m.notesOpen
+                m.notesOpen = false
+                try? await Task.sleep(for: .milliseconds(1500)) // the button's own load() (GET) must settle before the fixture is set
+                // Notes editor: clicking anywhere in it must start editing (the AppKit text view used to take the
+                // click before the key gate opened). Never insert text: edits autosave via POST.
+                OrchestratorNotesStore.shared.snapshotSet(text: "line one\nline two", status: .idle)
+                m.notesOpen = true
+                try? await Task.sleep(for: .milliseconds(400))
+                let ex = host.bounds.width / 2 + vm.notchSize.width / 2 - 31 - 150, ey = (max(24, vm.closedNotchSize.height) + vm.notchSize.height - 12) / 2
+                let eHit = window.contentView?.superview?.hitTest(NSPoint(x: ex, y: H - ey)).map { String(describing: type(of: $0)) } ?? "nil"
+                var typedN: [Bool] = []
+                let subN = m.$wantsKeyboard.sink { typedN.append($0) }
+                await click(ey, x: ex)
+                let nFocused = window.firstResponder is NSTextView
+                subN.cancel()
+                line.append("notes editor hit \(eHit) at (\(Int(ex)), \(Int(ey)))")
+                line.append("notes editor click starts typing: \(typedN.contains(true)), editor focused: \(nFocused)")
+                ok = ok && typedN.contains(true) && nFocused
+                OrchestratorExpand.shared.releaseKey(window)
+                m.endTyping()
+                window.makeFirstResponder(nil)
                 m.notesOpen = false
             }
             // Below the visible notch (only exists while the window is taller than the notch).
