@@ -3,7 +3,7 @@ import SwiftUI
 struct OrchestratorView: View {
     @ObservedObject var manager = OrchestratorManager.shared
     @State private var draft = ""
-    @State private var confirmEnd = false
+    @EnvironmentObject var vm: BoringViewModel
     @State private var keyWindow: NSWindow?
     @State private var anchor = NSView()
     @FocusState private var fieldFocused: Bool
@@ -48,13 +48,9 @@ struct OrchestratorView: View {
 
     @ViewBuilder private var chat: some View {
         if !manager.chatRunning {
-            VStack(spacing: 6) {
-                Text("chat not running").font(.system(size: 11)).foregroundStyle(.gray)
-                Button("Start") { Task { await manager.startChat() } }
-                    .font(.system(size: 11))
-                    .disabled(manager.sending)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Text("chat not running · start it from the header")
+                .font(.system(size: 11)).foregroundStyle(.gray)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(spacing: 4) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -67,30 +63,33 @@ struct OrchestratorView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .contentShape(Rectangle())
+                .onTapGesture { expandChat() }
                 bottomBar
             }
         }
     }
 
-    private var bottomBar: some View {
-        HStack(spacing: 6) {
-            if manager.promptOptions.isEmpty {
-                ZStack {
-                    TextField("message orchestrator", text: $draft)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 11))
-                        .focused($fieldFocused)
-                        .onSubmit { submit() }
-                        .onExitCommand { stopTyping() }
-                        .allowsHitTesting(manager.wantsKeyboard)
-                    if !manager.wantsKeyboard {
-                        Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() }
-                    }
+    @ViewBuilder private var bottomBar: some View {
+        if manager.promptOptions.isEmpty {
+            ZStack {
+                TextField("message orchestrator", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11))
+                    .focused($fieldFocused)
+                    .onSubmit { submit() }
+                    .onExitCommand { stopTyping() }
+                    .allowsHitTesting(manager.wantsKeyboard)
+                if !manager.wantsKeyboard {
+                    Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() }
                 }
-                .padding(.horizontal, 6)
-                .frame(height: 22)
-                .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 5))
-            } else {
+            }
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity)
+            .frame(height: 22)
+            .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 5))
+        } else {
+            HStack(spacing: 6) {
                 // Free-text answers aren't supported from the notch yet, so don't offer a dead-end button.
                 ForEach(manager.promptOptions.filter { $0.label != "Type something." }, id: \.number) { o in
                     Button { manager.pressOption(o.number) } label: {
@@ -100,45 +99,48 @@ struct OrchestratorView: View {
                     .disabled(manager.optionsLocked || manager.sending)
                 }
                 Spacer(minLength: 0)
+                Button("esc") { Task { await manager.pressEscape() } }
+                    .disabled(manager.sending)
             }
-            Button("esc") { Task { await manager.pressEscape() } }
-                .disabled(manager.sending)
-            if confirmEnd {
-                Text("End chat?").foregroundStyle(.orange)
-                Button("Yes") { confirmEnd = false; Task { await manager.stopChat() } }
-                Button("No") { confirmEnd = false }
-            } else {
-                Button("End") {
-                    confirmEnd = true
-                    Task { try? await Task.sleep(for: .seconds(4)); confirmEnd = false }
-                }
-            }
+            .font(.system(size: 10))
+            .controlSize(.small)
         }
-        .font(.system(size: 10))
-        .controlSize(.small)
     }
 
-    /// Typing is only committed once this view's own panel is actually key, so it can't latch on.
+    /// Clicking the conversation opens the terminal below; it takes the keyboard itself.
+    private func expandChat() {
+        stopTyping(handBack: false)
+        OrchestratorExpand.shared.expand(vm: vm, window: anchor.window)
+    }
+
     private func startTyping() {
         guard let w = anchor.window else { return }
         manager.beginTyping(in: w) // canBecomeKey reads it
-        w.makeKey()
-        guard w.isKeyWindow else { manager.endTyping(); return }
         keyWindow = w
-        DispatchQueue.main.async { if manager.wantsKeyboard { fieldFocused = true } }
+        OrchestratorKeyGate.activate()
+        w.makeKey()
+        DispatchQueue.main.async {
+            guard manager.wantsKeyboard else { return }
+            w.makeKey() // again, in case activation reassigned key
+            fieldFocused = true
+        }
+        // Activation is asynchronous; give up (so typing can't latch on) only if the panel never became key.
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            if keyWindow === w, !w.isKeyWindow { stopTyping() }
+        }
     }
 
-    private func stopTyping() {
+    /// handBack false: something else (the terminal) takes focus next, so don't reactivate the previous app.
+    private func stopTyping(handBack: Bool = true) {
         fieldFocused = false
-        guard keyWindow != nil else { return } // another display's view owns the session
-        keyWindow?.makeFirstResponder(nil)
+        guard let w = keyWindow else { return } // another display's view owns the session
+        // No longer key = the user clicked into another app, which already took focus.
+        let wasKey = w.isKeyWindow
+        w.makeFirstResponder(nil)
         manager.endTyping()
-        // Panel never activates the app, so the frontmost app is the one the user was typing in.
-        if keyWindow?.isKeyWindow == true,
-           let front = NSWorkspace.shared.frontmostApplication, front != NSRunningApplication.current {
-            front.activate()
-        }
         keyWindow = nil
+        if handBack { OrchestratorKeyGate.restore(refocus: wasKey) }
     }
 
     private func submit() {
@@ -209,6 +211,47 @@ struct OrchestratorRunsButton: View {
         }
         .buttonStyle(PlainButtonStyle())
         .help("Runs")
+    }
+}
+
+/// Header Start/End icon next to the runs button; End asks Yes/No first.
+struct OrchestratorChatButton: View {
+    @ObservedObject var manager = OrchestratorManager.shared
+    @State private var confirmEnd = false
+
+    var body: some View {
+        if manager.hasLoaded && !manager.offline {
+            if confirmEnd {
+                HStack(spacing: 4) {
+                    Text("End chat?").foregroundStyle(.orange)
+                    Button("Yes") { confirmEnd = false; Task { await manager.stopChat() } }
+                    Button("No") { confirmEnd = false }
+                }
+                .font(.system(size: 10))
+                .controlSize(.small)
+            } else {
+                Button {
+                    if manager.chatRunning {
+                        confirmEnd = true
+                        Task { try? await Task.sleep(for: .seconds(4)); confirmEnd = false }
+                    } else {
+                        Task { await manager.startChat() }
+                    }
+                } label: {
+                    Capsule()
+                        .fill(.black)
+                        .frame(width: 30, height: 30)
+                        .overlay {
+                            Image(systemName: manager.chatRunning ? "stop.circle" : "play.circle")
+                                .foregroundColor(.gray)
+                                .imageScale(.medium)
+                        }
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(manager.sending)
+                .help(manager.chatRunning ? "End chat" : "Start chat")
+            }
+        }
     }
 }
 

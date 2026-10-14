@@ -59,6 +59,7 @@ struct BoringHeader: View {
                             }
                             .buttonStyle(PlainButtonStyle())
                         }
+                        OrchestratorChatButton()
                         OrchestratorRunsButton()
                         if Defaults[.showBatteryIndicator] {
                             BoringBatteryView(

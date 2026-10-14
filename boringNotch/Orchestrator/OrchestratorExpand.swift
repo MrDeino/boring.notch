@@ -12,7 +12,6 @@ final class OrchestratorExpand: ObservableObject {
     private var shrinkTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    private var previousApp: NSRunningApplication?
     private var vms: [ObjectIdentifier: WeakVM] = [:]
     private final class WeakVM { weak var vm: BoringViewModel?; init(_ v: BoringViewModel) { vm = v } }
     private final class WeakWindow { weak var w: NSWindow?; init(_ w: NSWindow?) { self.w = w } }
@@ -32,7 +31,6 @@ final class OrchestratorExpand: ObservableObject {
         let e = expandedExtra(screenHeight: window.screen?.frame.height ?? 900, openHeight: openNotchSize.height)
         extra[k] = e
         windows[k] = WeakWindow(window)
-        if let a = NSWorkspace.shared.frontmostApplication, a != NSRunningApplication.current { previousApp = a }
         shrinkTasks[k]?.cancel()
         window.setFrame(pinnedFrame(current: window.frame, newHeight: windowHeight(base: windowSize.height, notchHeight: openNotchSize.height + e, openHeight: openNotchSize.height)), display: true)
         expanded.insert(k)
@@ -112,36 +110,25 @@ final class OrchestratorExpand: ObservableObject {
     }
 
     /// Give keyboard focus back: resignKey() is only a notification hook, so drop the
-    /// first responder and reactivate the app that was frontmost when we expanded.
+    /// first responder and reactivate the app that was frontmost before the terminal took focus.
     func releaseKey(_ w: NSWindow?, refocus: Bool = true) {
         OrchestratorKeyGate.terminalWantsKey = false
         guard let w, w.isKeyWindow else { return }
         w.makeFirstResponder(nil)
-        if refocus { previousApp?.activate() }
+        OrchestratorKeyGate.restore(refocus: refocus)
     }
-}
-
-struct WindowAccessor: NSViewRepresentable {
-    var onWindow: (NSWindow?) -> Void
-    func makeNSView(context: Context) -> NSView {
-        let v = NSView()
-        DispatchQueue.main.async { onWindow(v.window) }
-        return v
-    }
-    func updateNSView(_ v: NSView, context: Context) { DispatchQueue.main.async { onWindow(v.window) } }
 }
 
 struct OrchestratorExpandOverlay: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var expand = OrchestratorExpand.shared
     @ObservedObject var manager = OrchestratorManager.shared
-    @State private var window: NSWindow?
     @State private var termState: TerminalState = .connecting
     @State private var termID = UUID()
 
     var body: some View {
         let isExp = expand.isExpanded(vm)
-        ZStack(alignment: .bottomTrailing) {
+        ZStack {
             if isExp {
                 Color.black
                 VStack(alignment: .leading, spacing: 1) {
@@ -167,19 +154,9 @@ struct OrchestratorExpandOverlay: View {
                     .padding(8)
                 }
             }
-            if isExp || (manager.hasLoaded && !manager.offline) {
-                Button {
-                    isExp ? expand.collapse(vm: vm) : expand.expand(vm: vm, window: window)
-                } label: {
-                    Image(systemName: isExp ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 12)).foregroundStyle(.gray).padding(6)
-                }
-                .buttonStyle(.plain)
-            }
         }
-        .background(WindowAccessor { window = $0 })
-        // Pins the button bottom-trailing; the empty frame area has no hit shape, so chat clicks pass through.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        // Empty while collapsed: no hit shape, so chat clicks pass through.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: isExp) { _, on in if on { termState = .connecting; termID = UUID() } }
         .onDisappear { expand.reset() }
     }

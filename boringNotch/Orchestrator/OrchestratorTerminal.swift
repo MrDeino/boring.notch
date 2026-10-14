@@ -5,6 +5,20 @@ import WebKit
 @MainActor
 enum OrchestratorKeyGate {
     nonisolated(unsafe) static var terminalWantsKey = false
+    private static var previousApp: NSRunningApplication?
+
+    /// The notch is a non-activating panel of an app that is never active, so a key panel still
+    /// doesn't get keystrokes. Activate while the message box or terminal has focus; restore() hands it back.
+    static func activate() {
+        if let a = NSWorkspace.shared.frontmostApplication, a != NSRunningApplication.current { previousApp = a }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// refocus false = the user clicked another app, which already took focus.
+    static func restore(refocus: Bool = true) {
+        if refocus, NSApp.isActive { previousApp?.activate() }
+        previousApp = nil
+    }
 }
 
 /// ttyd page at /term/ inside the expanded notch. Created on expand, torn down (about:blank) on collapse.
@@ -71,6 +85,7 @@ struct OrchestratorTerminalView: NSViewRepresentable {
             guard webView.url?.host == "127.0.0.1" else { return }
             state.wrappedValue = .connecting
             OrchestratorKeyGate.terminalWantsKey = true
+            OrchestratorKeyGate.activate()
             webView.window?.makeKey()
             webView.window?.makeFirstResponder(webView)
             poll?.cancel()
