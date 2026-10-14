@@ -51,10 +51,10 @@
 
 ### Structured chat (Phase 5)
 
-- [ ] **CHAT-01**: Transcript rows (user, tool, prose) come from `GET /api/chat/blocks?since=<id>`, fetched incrementally, with a working fallback while serve lacks the endpoint
-- [ ] **CHAT-02**: A live "✻ Working · elapsed · esc to interrupt" status row, read from the screen, shows while Claude works
+- [x] **CHAT-01**: Transcript rows (user, tool, prose) come from `GET /api/chat/blocks?since=<id>`, fetched incrementally, with a working fallback while serve lacks the endpoint
+- [x] **CHAT-02**: A live "✻ Working · elapsed · esc to interrupt" status row, read from the screen, shows while Claude works
 - [ ] **CHAT-03**: The composer matches frame 02 (pill, focus ring, send button, hint row) using the existing key-gate typing logic
-- [ ] **CHAT-04**: The message box mirrors Claude Code's input box: suggestion ghost text with Tab/→ accept (POST Tab), ⌃U clear with POST `{key:"C-u"}` and a "line cleared" tag, terminal draft pulled in on focus
+- [x] **CHAT-04**: The message box mirrors Claude Code's input box: suggestion ghost text with Tab/→ accept (POST Tab), ⌃U clear with POST `{key:"C-u"}` and a "line cleared" tag, terminal draft pulled in on focus
 - [ ] **CHAT-05**: New transcript rows animate in from the bottom; clicking the transcript opens the terminal
 
 ### Prompt cards (Phase 6)
@@ -138,10 +138,10 @@
 | FND-05 | Phase 4 | Complete |
 | FND-06 | Phase 4 | Complete |
 | FND-07 | Phase 4 | Complete |
-| CHAT-01 | Phase 5 | Pending |
-| CHAT-02 | Phase 5 | Pending |
+| CHAT-01 | Phase 5 | Complete |
+| CHAT-02 | Phase 5 | Complete |
 | CHAT-03 | Phase 5 | Pending |
-| CHAT-04 | Phase 5 | Pending |
+| CHAT-04 | Phase 5 | Complete |
 | CHAT-05 | Phase 5 | Pending |
 | PRM-01 | Phase 6 | Pending |
 | PRM-02 | Phase 6 | Pending |

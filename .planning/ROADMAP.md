@@ -136,10 +136,10 @@ Plans:
   4. The message box shows Claude Code's suggestion as ghost text with Tab/→ accept (also POSTs Tab), ⌃U clears locally and POSTs `{key:"C-u"}` with a "line cleared" tag, and a terminal draft is pulled in on focus with "from terminal · "
   5. New rows animate in from the bottom; clicking the transcript still opens the terminal; music unaffected
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 05-01-PLAN.md — Transcript pure core (TDD): blocks decode (both shapes), merge by id, since-chain reset, input-box parse, ghost-vs-draft, clear-to-caret, tool display strings
+- [x] 05-01-PLAN.md — Transcript pure core (TDD): blocks decode (both shapes), merge by id, since-chain reset, input-box parse, ghost-vs-draft, clear-to-caret, tool display strings
 - [ ] 05-02-PLAN.md — Blocks store (GET /api/chat/blocks?since=, chatTail fallback), frame 01 rows, live/idle status rows, insert motion
 - [ ] 05-03-PLAN.md — Frame 02/02b composer: pill, ring, hint row, ghost suggestion + Tab/→ accept, ⌃U (C-u), terminal draft, C-u before send, UAT list
 
@@ -257,7 +257,7 @@ Plans:
 | 2. Sending & Prompt Answers | 2/2 | Awaiting UAT | - |
 | 3. Compact Indicators & Expand-Down | 2/2 | Awaiting UAT | - |
 | 4. 2a Foundation | 3/3 | Awaiting UAT | - |
-| 5. 2a Structured Chat | 0/3 | Planned | - |
+| 5. 2a Structured Chat | 1/3 | In Progress|  |
 | 6. 2a Prompt Cards | 0/3 | Planned | - |
 | 7. 2a Runs Board, Expand Levels & Wings | 0/5 | Planned | - |
 | 8. Phase B Live Data | 0/0 | Not planned | - |
