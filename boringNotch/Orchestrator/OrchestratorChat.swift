@@ -89,21 +89,43 @@ struct OrchestratorChatView: View {
     @State private var keyWindow: NSWindow?
     @State private var anchor = NSView()
     @FocusState private var fieldFocused: Bool
+    @ObservedObject var store = OrchestratorTranscriptStore.shared
     private let showComposer: Bool
+    private let proseLineLimit: Int?
+    private let maxRows: Int
 
-    init(showComposer: Bool = true) { self.showComposer = showComposer }
+    init(showComposer: Bool = true, proseLineLimit: Int? = 4, maxRows: Int = 12) {
+        self.showComposer = showComposer
+        self.proseLineLimit = proseLineLimit
+        self.maxRows = maxRows
+    }
 
     var body: some View {
         VStack(spacing: 4) {
-            VStack(alignment: .leading, spacing: 1) {
-                ForEach(Array(chatTail(screen: manager.screen, maxLines: 7).enumerated()), id: \.offset) { _, line in
-                    Text(verbatim: line)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+            VStack(alignment: .leading, spacing: OT.S.gapS) {
+                if store.fallback {
+                    ForEach(Array(fallbackLines.enumerated()), id: \.offset) { _, line in
+                        Text(verbatim: line)
+                            .font(OT.F.prose)
+                            .foregroundStyle(OT.C.text)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                } else {
+                    ForEach(store.blocks.suffix(maxRows)) { b in
+                        ChatBlockRow(block: b, proseLineLimit: proseLineLimit)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                if let ls = manager.liveStatus {
+                    OrchestratorLiveStatusRow(status: ls)
+                } else if !store.fallback, let idle = store.idleStatus {
+                    Text(verbatim: idle).font(OT.F.meta).foregroundStyle(OT.C.text6).lineLimit(1)
                 }
             }
+            .padding(.horizontal, 6)
+            .padding(.bottom, 8)
+            .clipped()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             .contentShape(Rectangle())
             .onTapGesture { expandChat() }
@@ -121,6 +143,14 @@ struct OrchestratorChatView: View {
         .onChange(of: manager.promptOptions) { _, o in if !o.isEmpty { stopTyping() } }
         // Phase 4
         .onChange(of: manager.statusMenuOpen) { _, open in if open { stopTyping() } }
+    }
+
+    /// chatTail lines minus spinner lines (the status row shows those).
+    private var fallbackLines: [String] {
+        chatTail(screen: manager.screen, maxLines: maxRows).filter {
+            guard let c = $0.trimmingCharacters(in: .whitespaces).first else { return true }
+            return !"✻✢✳✶✽✺✹".contains(c)
+        }
     }
 
     private var composer: some View {
@@ -183,5 +213,90 @@ struct OrchestratorChatView: View {
         guard !t.isEmpty else { stopTyping(); return }
         stopTyping()
         Task { if await manager.sendText(t) { draft = "" } }
+    }
+}
+
+private struct ChatBlockRow: View {
+    let block: ChatBlock
+    let proseLineLimit: Int?
+
+    var body: some View {
+        switch block.kind {
+        case .user:
+            let first = (block.text ?? "").split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+            Text(verbatim: "❯ " + first)
+                .font(OT.F.ui).foregroundStyle(OT.C.text5)
+                .lineLimit(1).truncationMode(.tail)
+        case .tool:
+            toolRow
+        case .prose:
+            // lineSpacing 2 on 13pt text ~ line-height 1.35 (13 * 1.35 = 17.5 vs ~15.5 natural).
+            Text(proseAttributed(block.text ?? ""))
+                .font(OT.F.prose).foregroundStyle(OT.C.text)
+                .lineSpacing(2)
+                .lineLimit(proseLineLimit).truncationMode(.tail)
+        }
+    }
+
+    private var toolRow: some View {
+        let target = toolTargetDisplay(name: block.name, target: block.target)
+        let isPath = target.contains("/")
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(verbatim: block.name ?? "Tool")
+                .font(OT.F.monoChip.weight(.medium)).foregroundStyle(OT.C.text3)
+                .padding(.vertical, 2).padding(.horizontal, 6)
+                .background(OT.C.raised, in: RoundedRectangle(cornerRadius: 5))
+            Text(verbatim: target)
+                .font(OT.F.monoPath).foregroundStyle(OT.C.text2)
+                .lineLimit(1).truncationMode(isPath ? .middle : .tail)
+            if let add = block.added {
+                Text(verbatim: "+\(add)").font(OT.F.monoChip).foregroundStyle(OT.C.green)
+                Text(verbatim: "\u{2212}\(block.removed ?? 0)").font(OT.F.monoChip).foregroundStyle(OT.C.redText)
+                Text(verbatim: "▸ diff").font(OT.F.meta).foregroundStyle(OT.C.text6)
+            } else if let r = toolResultDisplay(name: block.name, result: block.result, added: block.added) {
+                Text(verbatim: r).font(OT.F.meta)
+                    .foregroundStyle(toolResultIsError(block.result) ? OT.C.redText : OT.C.text6)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+/// "✻ Working · m:ss  esc to interrupt". Elapsed ticks each second between polls; the accent text shimmers.
+private struct OrchestratorLiveStatusRow: View {
+    let status: LiveStatus
+    @State private var anchor: (base: TimeInterval, at: Date) = (0, Date())
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            HStack(spacing: 6) {
+                label(ctx.date)
+                Text("esc to interrupt").font(OT.F.meta).foregroundStyle(OT.C.text6)
+            }
+        }
+        .onAppear { reset() }
+        .onChange(of: status.elapsed) { _, _ in reset() }
+    }
+
+    private func reset() { anchor = (status.elapsed ?? 0, Date()) }
+
+    private func label(_ now: Date) -> some View {
+        let t = status.elapsed == nil ? "✻ Working"
+            : "✻ Working · " + formatElapsed(anchor.base + now.timeIntervalSince(anchor.at))
+        let text = Text(verbatim: t).font(OT.F.meta).foregroundStyle(OT.C.claude)
+        return text.overlay {
+            if !reduceMotion {
+                TimelineView(.animation(minimumInterval: 1.0 / 30)) { c in
+                    let p = c.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
+                    GeometryReader { g in
+                        LinearGradient(colors: [.clear, .white.opacity(0.45), .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: g.size.width * 0.5)
+                            .offset(x: (p * 1.5 - 0.5) * g.size.width)
+                    }
+                }
+                .mask(text)
+            }
+        }
     }
 }
