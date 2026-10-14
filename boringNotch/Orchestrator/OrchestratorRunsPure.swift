@@ -134,7 +134,13 @@ func nextLevel(_ l: ExpandLevel, _ e: LevelEvent) -> ExpandLevel {
     }
 }
 
-func expandedHeight(screenHeight: CGFloat) -> CGFloat { max(300, min(440, 0.45 * screenHeight)) }
+/// Expanded notch size for a screen. 850 wide so the conversation column is ~600 with the rail open
+/// (column = width - ~252: notch paddings ~72, rail 178, spacing 12); at least max(520, 60% of the height) tall.
+/// Both clamped to the screen with a margin; never narrower than the open notch.
+func expandedSize(screen: CGSize, openWidth: CGFloat = 640) -> CGSize {
+    CGSize(width: max(openWidth, min(850, screen.width - 80)),
+           height: min(max(520, (0.6 * screen.height).rounded()), screen.height - 40))
+}
 
 enum OrchShortcut: Equatable { case deeper, back, terminal, toggleRail }
 

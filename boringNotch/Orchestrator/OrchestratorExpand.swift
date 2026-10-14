@@ -9,7 +9,7 @@ final class OrchestratorExpand: ObservableObject {
     @Published private(set) var expanded: Set<ObjectIdentifier> = []
     /// Per-vm terminal flag, always a subset of `expanded`.
     @Published private(set) var terminal: Set<ObjectIdentifier> = []
-    private var extra: [ObjectIdentifier: CGFloat] = [:]
+    private var sizes: [ObjectIdentifier: CGSize] = [:]
     private var windows: [ObjectIdentifier: WeakWindow] = [:]
     private var shrinkTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var globalMonitor: Any?
@@ -24,7 +24,7 @@ final class OrchestratorExpand: ObservableObject {
     func isExpanded(_ vm: BoringViewModel) -> Bool { expanded.contains(key(vm)) }
 
     func openSize(for vm: BoringViewModel) -> CGSize {
-        CGSize(width: openNotchSize.width, height: openNotchSize.height + (extra[key(vm)] ?? 0))
+        sizes[key(vm)] ?? openNotchSize
     }
 
     func level(for vm: BoringViewModel) -> ExpandLevel {
@@ -95,11 +95,11 @@ final class OrchestratorExpand: ObservableObject {
     private func grow(_ vm: BoringViewModel, _ window: NSWindow?) {
         let k = key(vm)
         guard !expanded.contains(k), let window else { return }
-        let e = expandedHeight(screenHeight: window.screen?.frame.height ?? 900) - openNotchSize.height
-        extra[k] = e
+        let size = expandedSize(screen: window.screen?.frame.size ?? CGSize(width: 1440, height: 900), openWidth: openNotchSize.width)
+        sizes[k] = size
         windows[k] = WeakWindow(window)
         shrinkTasks[k]?.cancel()
-        window.setFrame(pinnedFrame(current: window.frame, newHeight: windowHeight(base: windowSize.height, notchHeight: openNotchSize.height + e, openHeight: openNotchSize.height)), display: true)
+        window.setFrame(pinnedFrame(current: window.frame, newSize: CGSize(width: max(windowSize.width, size.width), height: windowHeight(base: windowSize.height, notchHeight: size.height, openHeight: openNotchSize.height))), display: true)
         expanded.insert(k)
         vms[k] = WeakVM(vm)
         installMonitors()
@@ -118,7 +118,7 @@ final class OrchestratorExpand: ObservableObject {
         shrinkTasks[k] = Task { [weak win] in
             try? await Task.sleep(for: .milliseconds(650))
             guard !Task.isCancelled, let win else { return }
-            win.setFrame(pinnedFrame(current: win.frame, newHeight: windowSize.height), display: true)
+            win.setFrame(pinnedFrame(current: win.frame, newSize: windowSize), display: true)
         }
     }
 
@@ -131,7 +131,7 @@ final class OrchestratorExpand: ObservableObject {
             let vm = vms[k]?.vm
             finish(k)
             if let vm, vm.notchState == .open { vm.notchSize = openNotchSize }
-            win?.setFrame(pinnedFrame(current: win?.frame ?? .zero, newHeight: windowSize.height), display: true)
+            win?.setFrame(pinnedFrame(current: win?.frame ?? .zero, newSize: windowSize), display: true)
         }
     }
 
@@ -172,7 +172,7 @@ final class OrchestratorExpand: ObservableObject {
         expanded.remove(k)
         terminal.remove(k)
         releaseKey(windows[k]?.w, refocus: refocus)
-        extra[k] = nil
+        sizes[k] = nil
         if expanded.isEmpty { removeMonitors() }
         SharingStateManager.shared.endInteraction()
     }
@@ -191,9 +191,10 @@ extension View {
     /// ContentView's root frame. The expanded window is resized at once (top pinned) while the notch
     /// height springs, so the root must fill the window top-aligned: a root shorter than the window is
     /// centred by NSHostingView, which slides the notch's top edge down mid-animation. When the window
-    /// is windowSize tall (stock open/close) this is the same as the upstream frame.
-    func notchRootFrame(notchHeight: CGFloat) -> some View {
-        frame(maxWidth: windowSize.width, maxHeight: windowSize.height + max(0, notchHeight - openNotchSize.height), alignment: .top)
-            .frame(maxHeight: .infinity, alignment: .top)
+    /// is windowSize tall (stock open/close) this is the same as the upstream frame. The width follows the
+    /// animated notch width too (the expanded window is wider) and stays centred in the window.
+    func notchRootFrame(notchSize: CGSize) -> some View {
+        frame(maxWidth: max(windowSize.width, notchSize.width), maxHeight: windowSize.height + max(0, notchSize.height - openNotchSize.height), alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }

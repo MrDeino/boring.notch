@@ -206,7 +206,7 @@ struct ContentView: View {
             }
         }
         .padding(.bottom, 8)
-        .notchRootFrame(notchHeight: vm.notchSize.height)
+        .notchRootFrame(notchSize: vm.notchSize)
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,

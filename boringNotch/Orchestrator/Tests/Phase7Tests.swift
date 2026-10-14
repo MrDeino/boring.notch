@@ -84,11 +84,15 @@ func runPhase7Tests() {
     precondition(pollInterval(notchOpen: false, chatRunning: true) == 3 && pollInterval(notchOpen: false, chatRunning: false) == 10)
     precondition(pollInterval(notchOpen: false, chatRunning: true, offline: true) == 10 && pollInterval(notchOpen: true, chatRunning: true, offline: true) == 10)
 
-    // nextLevel, expandedHeight, shortcut
+    // nextLevel, expandedSize, shortcut
     precondition(nextLevel(.open, .deeper) == .expanded && nextLevel(.expanded, .deeper) == .expanded && nextLevel(.terminal, .deeper) == .terminal)
     precondition([ExpandLevel.open, .expanded, .terminal].allSatisfy { nextLevel($0, .terminal) == .terminal })
     precondition(nextLevel(.terminal, .back) == .expanded && nextLevel(.expanded, .back) == .open && nextLevel(.open, .back) == .open)
-    precondition(expandedHeight(screenHeight: 982) == 440 && expandedHeight(screenHeight: 900) == 405 && expandedHeight(screenHeight: 1440) == 440 && expandedHeight(screenHeight: 400) == 300)
+    precondition(expandedSize(screen: CGSize(width: 1440, height: 900)) == CGSize(width: 850, height: 540))
+    precondition(expandedSize(screen: CGSize(width: 1512, height: 982)) == CGSize(width: 850, height: 589))
+    precondition(expandedSize(screen: CGSize(width: 1024, height: 600)) == CGSize(width: 850, height: 520))
+    precondition(expandedSize(screen: CGSize(width: 800, height: 500)) == CGSize(width: 720, height: 460))
+    precondition(expandedSize(screen: CGSize(width: 600, height: 500)).width == 640)
     precondition(shortcut(keyCode: 125, chars: nil, commandOnly: true) == .deeper && shortcut(keyCode: 126, chars: nil, commandOnly: true) == .back)
     precondition(shortcut(keyCode: 17, chars: "t", commandOnly: true) == .terminal && shortcut(keyCode: 0, chars: "T", commandOnly: true) == .terminal)
     precondition(shortcut(keyCode: 42, chars: "\\", commandOnly: true) == .toggleRail)

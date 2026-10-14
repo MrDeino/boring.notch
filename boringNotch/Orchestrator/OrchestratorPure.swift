@@ -11,9 +11,9 @@ func windowHeight(base: CGFloat, notchHeight: CGFloat, openHeight: CGFloat) -> C
     base + max(0, notchHeight - openHeight)
 }
 
-/// Same x/width, new height, top edge (maxY) kept.
-func pinnedFrame(current: CGRect, newHeight: CGFloat) -> CGRect {
-    CGRect(x: current.minX, y: current.maxY - newHeight, width: current.width, height: newHeight)
+/// New size with the top edge (maxY) and the horizontal centre (midX) kept.
+func pinnedFrame(current: CGRect, newSize: CGSize) -> CGRect {
+    CGRect(x: current.midX - newSize.width / 2, y: current.maxY - newSize.height, width: newSize.width, height: newSize.height)
 }
 
 enum TerminalState: Equatable { case connecting, connected, inUse, unavailable }

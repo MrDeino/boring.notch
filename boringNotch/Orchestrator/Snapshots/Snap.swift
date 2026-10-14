@@ -16,7 +16,7 @@ struct NotchReplica: View {
 
     var body: some View {
         core
-            .frame(width: openNotchSize.width, height: vm.notchSize.height + shadowPadding, alignment: .top)
+            .frame(width: max(openNotchSize.width, vm.notchSize.width), height: vm.notchSize.height + shadowPadding, alignment: .top)
             .background(Color(white: 0.35))
             .clipped()
             .environmentObject(vm)
@@ -233,7 +233,7 @@ struct Snap {
                                   styleMask: .borderless, backing: .buffered, defer: false)
             if s.expanded { OrchestratorExpand.shared.setLevel(.expanded, vm: vm, window: window) }
             let root = NotchReplica(vm: vm)
-            let size = CGSize(width: openNotchSize.width, height: vm.notchSize.height + shadowPadding)
+            let size = CGSize(width: max(openNotchSize.width, vm.notchSize.width), height: vm.notchSize.height + shadowPadding)
             let url = out.appendingPathComponent(s.name + ".png")
             var png: Data?
             if useImageRenderer {
@@ -271,9 +271,9 @@ struct Snap {
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         await OrchestratorManager.shared.snapshotApply(loaded: true, chat: ChatResponse(running: true, screen: ""), state: StateResponse(runs: [], usage: nil))
         OrchestratorTranscriptStore.shared.snapshotSet(blocks: longBlocks)
-        let full = expandedHeight(screenHeight: 900)
-        let grow: [CGFloat] = [190, 240, 320, 390, 418, 409, full]
-        let shrink: [CGFloat] = [full, 340, 260, 205, 183, 188, 190]
+        let full = expandedSize(screen: CGSize(width: 1440, height: 900)).height
+        let grow: [CGFloat] = [190, 250, 360, 470, 556, 528, full]
+        let shrink: [CGFloat] = [full, 420, 300, 215, 183, 188, 190]
         let stock: [CGFloat] = [34, 90, 150, 185, 196, 190] // music open: closed -> open in the stock window
         let runs: [(String, [CGFloat], CGFloat)] = [
             ("grow", grow, full + shadowPadding), ("collapse", shrink, full + shadowPadding), ("stock-open", stock, windowSize.height),
@@ -287,7 +287,7 @@ struct Snap {
                     vm.notchSize = CGSize(width: openNotchSize.width, height: h)
                     let core = NotchReplica(vm: vm).core.environmentObject(vm)
                     let root = Group {
-                        if pinned { core.notchRootFrame(notchHeight: h) }
+                        if pinned { core.notchRootFrame(notchSize: CGSize(width: openNotchSize.width, height: h)) }
                         else { core.frame(maxWidth: windowSize.width, maxHeight: windowSize.height + max(0, h - openNotchSize.height), alignment: .top) }
                     }
                     let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: openNotchSize.width, height: winH),
@@ -335,7 +335,7 @@ struct Snap {
                 .contentShape(Rectangle()).onHover { _ in }.onTapGesture { }
             let root = ZStack(alignment: .top) { VStack(spacing: 0) { mainLayout } }
                 .padding(.bottom, 8)
-                .notchRootFrame(notchHeight: vm.notchSize.height)
+                .notchRootFrame(notchSize: vm.notchSize)
                 .compositingGroup()
                 .scaleEffect(x: 1, y: 1, anchor: .top)
             let window = KeyablePanel(contentRect: NSRect(x: -20000, y: -20000, width: windowSize.width, height: windowSize.height),
