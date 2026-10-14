@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 
 Phase: 07 (2a-runs-board-expand-levels-and-closed-notch-wings) — EXECUTING
 Plan: 5 of 5
-Status: Phase complete — ready for verification
+Status: Phase 7 executed — verification human_needed (7 on-screen checks in 07-HUMAN-UAT.md)
 Last activity: 2026-10-14
 
 Progress: [███████░░░] 65%
