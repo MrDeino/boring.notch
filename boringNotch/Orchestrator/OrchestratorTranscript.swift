@@ -63,7 +63,8 @@ func decodeChatBlocks(_ data: Data) -> (running: Bool?, blocks: [ChatBlock])? {
 }
 
 func mergeChatBlocks(_ existing: [ChatBlock], _ incoming: [ChatBlock], reset: Bool, cap: Int = 200) -> (blocks: [ChatBlock], appended: Bool) {
-    if reset { return (Array(incoming.suffix(cap)), false) }
+    // Reset de-dups like the append path (repeated JSONL lines, 7 vs "7") so ForEach ids stay unique.
+    if reset { return (mergeChatBlocks([], incoming, reset: false, cap: cap).blocks, false) }
     var out = existing
     var index = Dictionary(out.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { _, b in b })
     var appended = false

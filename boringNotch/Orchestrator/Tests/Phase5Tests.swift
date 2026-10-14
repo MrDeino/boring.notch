@@ -50,6 +50,8 @@ func runPhase5Tests() {
     let many = (1...250).map { p5Block("x\($0)", "prose") }
     let m4 = mergeChatBlocks([u1], many, reset: true)
     precondition(m4.blocks.count == 200 && m4.blocks.last!.id == "x250")
+    let m5 = mergeChatBlocks([u1], [t1, p1, t1r], reset: true)
+    precondition(m5.blocks.map(\.id) == ["t1", "p1"] && m5.blocks[0].result == "ok" && !m5.appended)
 
     // discontinuity
     let new80 = (1...80).map { p5Block("n\($0)", "prose") }
