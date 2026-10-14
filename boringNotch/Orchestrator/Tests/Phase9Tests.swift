@@ -50,4 +50,10 @@ func runPhase9Tests() {
     precondition(p.feed("data: {bad") == nil)
     _ = p.feed("event: approval")
     precondition(p.feed(#"data: {"tool":"Bash"}"#) == nil)
+
+    for (maj, min, want) in [(15, 0, true), (15, 1, true), (15, 2, false), (14, 6, false), (26, 6, false), (16, 0, false)] {
+        precondition(approvalNeedsCtrlFallback(major: maj, minor: min) == want)
+    }
+    precondition(approvalKeyLabels(ctrl: false).allow == "⌥⏎" && approvalKeyLabels(ctrl: false).deny == "⌥⎋")
+    precondition(approvalKeyLabels(ctrl: true).allow == "⌃⌥⏎" && approvalKeyLabels(ctrl: true).deny == "⌃⌥⎋")
 }
