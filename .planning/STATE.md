@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 Phase: 05–07 (2a) — merged
 Plan: all plans complete
 Status: Merged; awaiting human UAT
-Last activity: 2026-10-14 - Completed quick task 261014-qei: optimistic message sending
+Last activity: 2026-10-14 - Completed quick task 261014-r8w: notepad drop-down, question back-navigation
 
 Progress: [██████████] 100%
 
@@ -101,3 +101,4 @@ Resume file: None
 | 261014-gkq | Chat: strip TUI input box, app activation for typing, Start/End in header, tap chat to expand | 2026-10-14 | .planning/quick/261014-gkq-orch-chat-chrome-keyboard-layout |
 | 261014-pug | Multi-select/tabbed questions, optimistic prompt answers with retry note, expanded bubbles + Edit diff card, no swipe-close on Orchestrator tab, heavier marker dot | 2026-10-14 | .planning/quick/261014-pug-question-prompts-optimistic-polish |
 | 261014-qei | Optimistic message sending: instant composer clear, ordered send queue, dimmed pending rows reconciled from blocks, Not sent with Retry/Edit | 2026-10-14 | .planning/quick/261014-qei-optimistic-message-sending |
+| 261014-r8w | Notepad drop-down in header (GET/POST /api/notes, 1s autosave, Saved/Couldn't save), question back-navigation via BTab | 2026-10-14 | .planning/quick/261014-r8w-notepad-dropdown-and-question-back-navig |
