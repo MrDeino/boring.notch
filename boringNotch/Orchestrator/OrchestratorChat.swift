@@ -89,6 +89,10 @@ struct OrchestratorChatView: View {
     @State private var keyWindow: NSWindow?
     @State private var anchor = NSView()
     @FocusState private var fieldFocused: Bool
+    @State private var fromTerminal = false
+    @State private var keyMonitor: Any?
+    @State private var clearedGen = 0
+    @State private var showCleared = false
     @ObservedObject var store = OrchestratorTranscriptStore.shared
     private let showComposer: Bool
     private let proseLineLimit: Int?
@@ -135,9 +139,11 @@ struct OrchestratorChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { n in
             if let w = keyWindow, (n.object as? NSWindow) === w { stopTyping() }
         }
-        .onDisappear { stopTyping() }
+        .onDisappear { stopTyping(); removeKeyMonitor() }
         // Focus loss ends typing; clicking elsewhere resigns key (above). Pointer leaving keeps it (INT-06).
         .onChange(of: fieldFocused) { _, f in if !f { stopTyping() } }
+        .onChange(of: fieldFocused) { _, f in focusChanged(f) }
+        .onChange(of: draft) { _, d in if d.isEmpty { fromTerminal = false } }
         .onChange(of: manager.chatRunning) { _, running in if !running { stopTyping() } }
         .onChange(of: manager.offline) { _, off in if off { stopTyping() } }
         .onChange(of: manager.promptOptions) { _, o in if !o.isEmpty { stopTyping() } }
@@ -153,23 +159,138 @@ struct OrchestratorChatView: View {
         }
     }
 
+    /// Claude's box text offered as ghost text (only while the field is empty and it is not a terminal draft).
+    private var suggestion: String? {
+        guard draft.isEmpty, !store.boxIsDraft, let l = store.inputLine, !l.isEmpty else { return nil }
+        return l
+    }
+
     private var composer: some View {
-        ZStack {
-            TextField("message orchestrator", text: $draft)
-                .textFieldStyle(.plain)
-                .font(.system(size: 11))
-                .focused($fieldFocused)
-                .onSubmit { submit() }
-                .onExitCommand { stopTyping() }
-                .allowsHitTesting(manager.wantsKeyboard)
-            if !manager.wantsKeyboard {
-                Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() }
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                HStack(spacing: 0) {
+                    if fromTerminal && !draft.isEmpty {
+                        Text(verbatim: "from terminal · ").font(OT.F.ui).foregroundStyle(OT.C.text5)
+                    }
+                    ZStack(alignment: .leading) {
+                        ghostLayer
+                        TextField("", text: $draft)
+                            .textFieldStyle(.plain)
+                            .font(OT.F.ui)
+                            .foregroundStyle(OT.C.text)
+                            .focused($fieldFocused)
+                            .onSubmit { submit() }
+                            .onExitCommand { stopTyping() }
+                            .allowsHitTesting(manager.wantsKeyboard)
+                        if !manager.wantsKeyboard {
+                            Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() }
+                        }
+                    }
+                }
+                accessory
+                sendButton
+            }
+            .padding(.leading, 14).padding(.trailing, 5)
+            .frame(maxWidth: .infinity)
+            .frame(height: 30)
+            .background(RoundedRectangle(cornerRadius: OT.R.pill30).fill(OT.C.raised))
+            .overlay {
+                if fieldFocused { RoundedRectangle(cornerRadius: OT.R.pill30).stroke(OT.C.claude, lineWidth: 1.5) }
+            }
+            if manager.wantsKeyboard {
+                Text("⏎ send · ⌃U clear line · esc release")
+                    .font(OT.F.hint).foregroundStyle(OT.C.text6)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.top, 12)
             }
         }
-        .padding(.horizontal, 6)
-        .frame(maxWidth: .infinity)
-        .frame(height: 22)
-        .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 5))
+    }
+
+    @ViewBuilder private var ghostLayer: some View {
+        if let g = suggestion {
+            Text(verbatim: g).font(OT.F.ui).foregroundStyle(OT.C.text6).lineLimit(1).allowsHitTesting(false)
+        } else if draft.isEmpty, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
+            (Text(verbatim: "from terminal · ").foregroundStyle(OT.C.text5) + Text(verbatim: l).foregroundStyle(OT.C.text6))
+                .font(OT.F.ui).lineLimit(1).allowsHitTesting(false)
+        } else if draft.isEmpty {
+            Text("Message orchestrator").font(OT.F.ui).foregroundStyle(OT.C.text6).allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder private var accessory: some View {
+        if showCleared {
+            Text("line cleared").font(OT.F.hint).foregroundStyle(OT.C.text5)
+                .padding(.vertical, 2).padding(.horizontal, 7)
+                .background(OT.C.selected, in: RoundedRectangle(cornerRadius: 8))
+                .transition(.opacity)
+        } else if suggestion != nil {
+            HStack(spacing: 4) {
+                Text("Tab").font(OT.F.monoChip.weight(.medium)).foregroundStyle(OT.C.text4)
+                    .padding(.vertical, 1).padding(.horizontal, 5)
+                    .background(OT.C.selected2, in: RoundedRectangle(cornerRadius: OT.R.keycap))
+                Text("accept").font(OT.F.hint).foregroundStyle(OT.C.text6)
+            }
+        }
+    }
+
+    private var sendButton: some View {
+        let blank = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return Button { submit() } label: {
+            ZStack {
+                Circle().fill(fieldFocused ? OT.C.claude : OT.C.selected2)
+                Image(systemName: "arrow.up").font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(fieldFocused ? Color.black : OT.C.text5)
+            }
+            .frame(width: 20, height: 20)
+        }
+        .buttonStyle(.plain)
+        .disabled(blank || manager.sending)
+    }
+
+    /// Terminal draft -> field on focus; key monitor lifecycle.
+    private func focusChanged(_ f: Bool) {
+        guard f else { removeKeyMonitor(); return }
+        installKeyMonitor()
+        if draft.isEmpty, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
+            draft = l
+            fromTerminal = true
+        }
+    }
+
+    // ponytail: local-monitor key handling; swap to onKeyPress if it proves reliable for Tab in the panel.
+    // ponytail: ⌃U in the real box clears the whole line regardless of the notch caret; harmless because sends are preceded by C-u.
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard fieldFocused, event.window === keyWindow else { return event }
+            let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
+            if (event.keyCode == 48 || event.keyCode == 124), mods.isEmpty, let g = suggestion {
+                draft = g
+                fromTerminal = false
+                Task { await store.postKey("Tab") }
+                return nil
+            }
+            if event.keyCode == 32, mods == .control {
+                let tv = event.window?.firstResponder as? NSTextView
+                draft = clearToCaret(draft, caretUTF16: tv?.selectedRange().location)
+                DispatchQueue.main.async { tv?.setSelectedRange(NSRange(location: 0, length: 0)) }
+                Task { await store.postKey("C-u") }
+                clearedGen += 1
+                let gen = clearedGen
+                withAnimation(.easeOut(duration: 0.15)) { showCleared = true }
+                Task {
+                    try? await Task.sleep(for: .milliseconds(1200))
+                    if clearedGen == gen { withAnimation(.easeOut(duration: 0.15)) { showCleared = false } }
+                }
+                return nil
+            }
+            return event
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let m = keyMonitor { NSEvent.removeMonitor(m) }
+        keyMonitor = nil
     }
 
     /// Clicking the conversation opens the terminal below; it takes the keyboard itself.
@@ -212,7 +333,7 @@ struct OrchestratorChatView: View {
         let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { stopTyping(); return }
         stopTyping()
-        Task { if await manager.sendText(t) { draft = "" } }
+        Task { await store.clearRealLineIfNeeded(); if await manager.sendText(t) { draft = ""; fromTerminal = false } }
     }
 }
 
