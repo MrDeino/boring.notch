@@ -6,23 +6,24 @@ import SwiftUI
 final class OrchestratorExpand: ObservableObject {
     static let shared = OrchestratorExpand()
 
-    @Published private(set) var expanded: Set<String> = []
-    private var extra: [String: CGFloat] = [:]
-    private var windows: [String: WeakWindow] = [:]
-    private var shrinkTasks: [String: Task<Void, Never>] = [:]
+    @Published private(set) var expanded: Set<ObjectIdentifier> = []
+    private var extra: [ObjectIdentifier: CGFloat] = [:]
+    private var windows: [ObjectIdentifier: WeakWindow] = [:]
+    private var shrinkTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var previousApp: NSRunningApplication?
-    private var vms: [String: WeakVM] = [:]
+    private var vms: [ObjectIdentifier: WeakVM] = [:]
     private final class WeakVM { weak var vm: BoringViewModel?; init(_ v: BoringViewModel) { vm = v } }
     private final class WeakWindow { weak var w: NSWindow?; init(_ w: NSWindow?) { self.w = w } }
 
-    private func key(_ vm: BoringViewModel) -> String { vm.screenUUID ?? "" }
+    // Keyed by view model, not screenUUID: single-display mode reassigns the UUID on screen changes.
+    private func key(_ vm: BoringViewModel) -> ObjectIdentifier { ObjectIdentifier(vm) }
 
     func isExpanded(_ vm: BoringViewModel) -> Bool { expanded.contains(key(vm)) }
 
-    func openSize(for uuid: String?) -> CGSize {
-        CGSize(width: openNotchSize.width, height: openNotchSize.height + (extra[uuid ?? ""] ?? 0))
+    func openSize(for vm: BoringViewModel) -> CGSize {
+        CGSize(width: openNotchSize.width, height: openNotchSize.height + (extra[key(vm)] ?? 0))
     }
 
     func expand(vm: BoringViewModel, window: NSWindow?) {
@@ -38,7 +39,7 @@ final class OrchestratorExpand: ObservableObject {
         vms[k] = WeakVM(vm)
         installMonitors()
         SharingStateManager.shared.beginInteraction()
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) { vm.notchSize = openSize(for: k) }
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) { vm.notchSize = openSize(for: vm) }
     }
 
     func collapse(vm: BoringViewModel, refocus: Bool = true) {
@@ -91,17 +92,18 @@ final class OrchestratorExpand: ObservableObject {
     /// Outside click: collapse, then close the notch (keep-open is released by collapse).
     private func collapseIfOutside(refocus: Bool) {
         let p = NSEvent.mouseLocation
-        for k in Array(expanded) {
-            guard let vm = vms[k]?.vm, let w = windows[k]?.w else { continue }
-            if isOutsideNotch(point: p, windowFrame: w.frame, notchWidth: vm.notchSize.width, notchHeight: vm.notchSize.height) {
-                collapse(vm: vm, refocus: refocus)
-                vm.close()
-            }
+        let outside = expanded.compactMap { k -> BoringViewModel? in
+            guard let vm = vms[k]?.vm, let w = windows[k]?.w,
+                  isOutsideNotch(point: p, windowFrame: w.frame, notchWidth: vm.notchSize.width, notchHeight: vm.notchSize.height) else { return nil }
+            return vm
         }
+        // Collapse all first: close() is blocked while any keep-open session is still active.
+        for vm in outside { collapse(vm: vm, refocus: refocus) }
+        for vm in outside { vm.close() }
     }
 
     /// Shared bookkeeping: exactly one endInteraction per expand.
-    private func finish(_ k: String, refocus: Bool = true) {
+    private func finish(_ k: ObjectIdentifier, refocus: Bool = true) {
         expanded.remove(k)
         releaseKey(windows[k]?.w, refocus: refocus)
         extra[k] = nil
