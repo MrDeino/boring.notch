@@ -8,7 +8,7 @@ Three phases along the dependency chain build → manager → input → indicato
 
 - [ ] **Phase 1: Read-only Orchestrator Tab** - Fork builds from CLI; tab shows chat tail, runs, usage, offline state, with polling (built and verified 2026-10-14; awaiting human UAT)
 - [ ] **Phase 2: Sending & Prompt Answers** - Type messages, answer numbered prompts, Esc, start/end the chat from the notch
-- [ ] **Phase 3: Compact Indicators & Expand-Down** - Closed-notch usage + attention dot; notch grows down for larger chat and live terminal
+- [x] **Phase 3: Compact Indicators & Expand-Down** - Closed-notch usage + attention dot; notch grows down for larger chat and live terminal (completed 2026-10-14)
 
 ## Phase Details
 
@@ -69,7 +69,7 @@ Plans:
   4. Clicking anywhere outside the expanded notch collapses it back to normal size
   5. Music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 **Wave 1**
 
@@ -77,7 +77,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — Expand-down: same window grows to larger chat, live /term terminal (gated key), click-outside collapse
+- [x] 03-02-PLAN.md — Expand-down: same window grows to larger chat, live /term terminal (gated key), click-outside collapse
 
 **UI hint**: yes
 
@@ -87,4 +87,4 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Read-only Orchestrator Tab | 2/2 | Complete   | 2026-10-14 |
 | 2. Sending & Prompt Answers | 0/TBD | Not started | - |
-| 3. Compact Indicators & Expand-Down | 1/2 | In Progress|  |
+| 3. Compact Indicators & Expand-Down | 2/2 | Complete   | 2026-10-14 |
