@@ -46,6 +46,14 @@ func runQuickPugTests() {
         precondition(!c.multiSelect && !c.review && c.items.allSatisfy { $0.checked == nil })
     }
 
+    let h = ChatDiffHunk(oldStart: 10, newStart: 10, lines: [" ctx", "-old", "+new"])
+    precondition(diffRows([h]) == [DiffRow(kind: .context, number: 10, text: "ctx"), DiffRow(kind: .removed, number: 11, text: "old"), DiffRow(kind: .added, number: 11, text: "new")])
+    let h2 = ChatDiffHunk(oldStart: nil, newStart: nil, lines: ["-a", "\\ No newline", "+b"])
+    precondition(diffRows([h2, h]).map(\.number) == [nil, nil, nil, 10, 11, 11])
+    precondition(diffRows([h2])[1] == DiffRow(kind: .context, number: nil, text: "\\ No newline"))
+    let h3 = ChatDiffHunk(oldStart: 5, newStart: 7, lines: ["+x", "+y", "-z", " c"])
+    precondition(diffRows([h3]).map(\.number) == [7, 8, 5, 9])
+
     let m = mergeChecked(screen: [1: false, 2: true], pending: [1: true])
     precondition(m.shown == [1: true, 2: true] && m.pending == [1: true])
     let m2 = mergeChecked(screen: [1: true, 2: true], pending: [1: true])

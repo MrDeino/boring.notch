@@ -166,3 +166,28 @@ func proseAttributed(_ s: String) -> AttributedString {
     for run in a.runs { a[run.range].link = nil }
     return a
 }
+
+struct DiffRow: Equatable {
+    enum Kind { case context, removed, added }
+    let kind: Kind
+    let number: Int?
+    let text: String
+}
+
+/// Unified-diff hunk lines as numbered rows: context and added show the new line number, removed the old one.
+/// A line without a ' '/'-'/'+' prefix ("\ No newline") is context with no number and advances nothing.
+func diffRows(_ hunks: [ChatDiffHunk]) -> [DiffRow] {
+    var rows: [DiffRow] = []
+    for h in hunks {
+        var old = h.oldStart, new = h.newStart
+        for l in h.lines ?? [] {
+            switch l.first {
+            case "-": rows.append(DiffRow(kind: .removed, number: old, text: String(l.dropFirst()))); old = old.map { $0 + 1 }
+            case "+": rows.append(DiffRow(kind: .added, number: new, text: String(l.dropFirst()))); new = new.map { $0 + 1 }
+            case " ": rows.append(DiffRow(kind: .context, number: new, text: String(l.dropFirst()))); old = old.map { $0 + 1 }; new = new.map { $0 + 1 }
+            default: rows.append(DiffRow(kind: .context, number: nil, text: l))
+            }
+        }
+    }
+    return rows
+}

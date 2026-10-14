@@ -170,7 +170,7 @@ struct OrchestratorExpandedView: View {
         else if manager.offline { OrchestratorOfflineView() }
         else if !manager.chatRunning { OrchestratorStoppedView() }
         else if manager.prompt != nil { OrchestratorPromptCard() }
-        else { OrchestratorChatView(showComposer: true, proseLineLimit: nil, maxRows: 60) }
+        else { OrchestratorChatView(showComposer: true, proseLineLimit: nil, maxRows: 60, expanded: true) }
     }
 
     private func terminalPill(_ level: ExpandLevel, collapsed: Bool) -> some View {

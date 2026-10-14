@@ -112,6 +112,18 @@ private let markerBlocks = blocks(#"""
 ]}
 """#)
 
+/// Long user message, a Read, an Edit with two hunks (context, removed, added), then prose.
+private let editBlocks = blocks(#"""
+{"running":true,"blocks":[
+ {"id":"e1","kind":"user","text":"Can you make the expanded view show my messages as bubbles and fold the Edit diffs out, the way the design frame shows them? Keep the open notch as it is."},
+ {"id":"e2","kind":"tool","name":"Read","target":"/Users/x/proj/OrchestratorChat.swift","result":"import SwiftUI (+520 lines)"},
+ {"id":"e3","kind":"tool","name":"Edit","target":"/Users/x/proj/OrchestratorChat.swift","result":"updated","added":3,"removed":2,"diff":[
+   {"oldStart":58,"newStart":58,"lines":[" let a = 1","-let b = old","+let b = new","+let c = 3"," let d = 4"]},
+   {"oldStart":120,"newStart":121,"lines":["-    return x","+    return y"]}]},
+ {"id":"e4","kind":"prose","text":"Done: user messages now render as right-aligned bubbles in the expanded column, and Edit rows fold out into a diff card."}
+]}
+"""#)
+
 struct Scene {
     let name: String
     var loaded = true
@@ -160,6 +172,8 @@ struct Snap {
             Scene(name: "14-chat-idle-suggestion", chat: chat(fixture("idle-suggestion.txt")), blocks: shortBlocks),
             Scene(name: "15-chat-markers", chat: chat(""), blocks: markerBlocks),
             Scene(name: "16-expanded-markers", chat: chat(""), blocks: markerBlocks, expanded: true),
+            Scene(name: "23-expanded-bubbles-edit", chat: chat(""), blocks: editBlocks, expanded: true),
+            Scene(name: "24-chat-edit-compact", chat: chat(""), blocks: editBlocks),
             Scene(name: "17-question-multiselect", chat: chat(fixture("multiselect-1.txt")), expanded: true),
             Scene(name: "18-question-multiselect-toggled", chat: chat(fixture("multiselect-1.txt")), expanded: true, pending: [1: true, 2: true]),
             Scene(name: "19-question-multiq-tabs", chat: chat(fixture("multiq-tab2.txt")), expanded: true),

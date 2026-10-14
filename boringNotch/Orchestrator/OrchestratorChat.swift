@@ -132,8 +132,10 @@ struct OrchestratorChatView: View {
     private let showComposer: Bool
     private let proseLineLimit: Int?
     private let maxRows: Int
+    private let expanded: Bool
 
-    init(showComposer: Bool = true, proseLineLimit: Int? = 4, maxRows: Int = 12) {
+    init(showComposer: Bool = true, proseLineLimit: Int? = 4, maxRows: Int = 12, expanded: Bool = false) {
+        self.expanded = expanded
         self.showComposer = showComposer
         self.proseLineLimit = proseLineLimit
         self.maxRows = maxRows
@@ -191,7 +193,7 @@ struct OrchestratorChatView: View {
                 }
             } else {
                 ForEach(store.blocks.suffix(maxRows)) { b in
-                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit)
+                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -411,13 +413,81 @@ struct OrchestratorChatView: View {
 private struct ChatBlockRow: View {
     let block: ChatBlock
     let proseLineLimit: Int?
+    var expanded = false
+    @State private var folded = false
+
+    private var hasDiffCard: Bool {
+        expanded && block.kind == .tool && ["Edit", "Write"].contains(block.name ?? "") && !(block.diff ?? []).isEmpty
+    }
 
     /// Leading marker column like Claude Code's terminal (❯ user, ⏺ prose/tool); wrapped text hangs after it.
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            marker.frame(width: 10, alignment: .center)
-            content.frame(maxWidth: .infinity, alignment: .leading)
+    /// Expanded view only: user messages are right-aligned bubbles and Edit rows fold out into a diff card.
+    @ViewBuilder var body: some View {
+        if expanded && block.kind == .user {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                Text(verbatim: block.text ?? "")
+                    .font(.system(size: 12)).foregroundStyle(OT.C.text2)
+                    .padding(.vertical, 6).padding(.horizontal, 10)
+                    .background(OT.C.raised, in: UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 12, bottomTrailingRadius: 4, topTrailingRadius: 12))
+                    .containerRelativeFrame(.horizontal, alignment: .trailing) { w, _ in w * 0.8 }
+            }
+        } else if hasDiffCard {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                marker.frame(width: 10, alignment: .center)
+                diffCard.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                marker.frame(width: 10, alignment: .center)
+                content.frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+    }
+
+    private func diffLine(_ r: DiffRow) -> some View {
+        let sign: String = r.kind == .removed ? "-" : r.kind == .added ? "+" : " "
+        let num: String = r.number.map { " \($0)" } ?? ""
+        let fg: Color = r.kind == .removed ? Color(red: 1, green: 157 / 255, blue: 151 / 255) : r.kind == .added ? Color(red: 126 / 255, green: 230 / 255, blue: 154 / 255) : OT.C.text6
+        let bg: Color = r.kind == .removed ? Color(red: 1, green: 105 / 255, blue: 97 / 255).opacity(0.12)
+            : r.kind == .added ? Color(red: 48 / 255, green: 209 / 255, blue: 88 / 255).opacity(0.12) : Color.clear
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(verbatim: sign + num).frame(minWidth: 34, alignment: .leading)
+            Text(verbatim: r.text).lineLimit(1).truncationMode(.tail)
+            Spacer(minLength: 0)
+        }
+        .font(OT.F.monoChip)
+        .foregroundStyle(fg)
+        .padding(.horizontal, 10)
+        .background(bg)
+    }
+
+    private var diffCard: some View {
+        let rows = diffRows(block.diff ?? [])
+        return VStack(alignment: .leading, spacing: 0) {
+            Button { withAnimation(.easeOut(duration: 0.15)) { folded.toggle() } } label: {
+                HStack(spacing: 6) {
+                    Text(verbatim: folded ? "▸" : "▾").font(OT.F.meta).foregroundStyle(OT.C.text6)
+                    Text(verbatim: block.name ?? "Edit").font(OT.F.monoChip.weight(.medium)).foregroundStyle(OT.C.text3)
+                    Text(verbatim: toolTargetDisplay(name: block.name, target: block.target))
+                        .font(OT.F.monoPath).foregroundStyle(OT.C.text2).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 6)
+                    if let a = block.added { Text(verbatim: "+\(a)").font(OT.F.monoChip).foregroundStyle(OT.C.green) }
+                    if let r = block.removed { Text(verbatim: "\u{2212}\(r)").font(OT.F.monoChip).foregroundStyle(OT.C.redText) }
+                }
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if !folded {
+                VStack(alignment: .leading, spacing: 1.5) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, r in diffLine(r) }
+                }
+                .padding(.bottom, 6)
+            }
+        }
+        .background(OT.C.diffCard, in: RoundedRectangle(cornerRadius: 9))
+        .clipShape(RoundedRectangle(cornerRadius: 9))
     }
 
     @ViewBuilder private var marker: some View {
@@ -435,7 +505,8 @@ private struct ChatBlockRow: View {
 
     /// U+FE0E keeps ⏺ a text glyph (not the emoji button).
     private func dot(_ c: Color) -> some View {
-        Text(verbatim: "\u{23FA}\u{FE0E}").font(.system(size: 10)).foregroundStyle(c)
+        Circle().fill(c).frame(width: 7, height: 7)
+            .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 0.5 }
     }
 
     @ViewBuilder private var content: some View {
