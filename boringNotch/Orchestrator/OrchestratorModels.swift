@@ -68,7 +68,7 @@ struct PromptOption: Equatable {
 
 /// Numbered options of a Claude Code prompt on the screen, [] when none.
 // ponytail: bottom-window heuristic: the last option must be within the last 4 non-blank lines
-// (live prompts end with a footer or two); retune if Claude Code adds more footer lines.
+// and be followed by the "Esc to cancel" footer; retune if Claude Code adds more footer lines.
 func detectPrompt(screen: String) -> [PromptOption] {
     let line = #/^[ \u{a0}]*(❯[ \u{a0}]*)?(\d+)\.[ \u{a0}]+(.+)$/#
     let trim = CharacterSet(charactersIn: " \u{a0}\t\r│")
@@ -89,7 +89,9 @@ func detectPrompt(screen: String) -> [PromptOption] {
         if m.1 != nil { marked = true }
         if run.count >= 2 && marked { best = run; bestEnd = i }
     }
-    return bestEnd >= lines.count - 4 ? best : []
+    // Live prompts end with an "Esc to cancel" footer; a numbered draft in the input box has none.
+    let footer = lines.dropFirst(bestEnd + 1).contains { $0.localizedCaseInsensitiveContains("esc to cancel") }
+    return bestEnd >= 0 && bestEnd >= lines.count - 4 && footer ? best : []
 }
 
 enum OrchestratorPost: Equatable {

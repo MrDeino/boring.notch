@@ -31,7 +31,7 @@ func mk(_ id: String, _ s: String) -> OrchestratorRun {
 let sr = stripRuns([mk("a","done"), mk("b","running"), mk("c","failed"), mk("d","waiting"), mk("e","stuck")], limit: 4)
 precondition(sr.map { $0.id! } == ["b", "d", "e", "a"])
 
-let opts = "Do you want to proceed?\n❯ 1. Yes\n  2. Yes, and don't ask again for …\n  3. No, and tell Claude what to do differently (esc)\n"
+let opts = "Do you want to proceed?\n❯ 1. Yes\n  2. Yes, and don't ask again for …\n  3. No, and tell Claude what to do differently (esc)\n Esc to cancel · Tab to amend\n"
 let want = [PromptOption(number: 1, label: "Yes"), PromptOption(number: 2, label: "Yes, and don't ask again for …"), PromptOption(number: 3, label: "No, and tell Claude what to do differently (esc)")]
 precondition(detectPrompt(screen: box).isEmpty)
 precondition(detectPrompt(screen: opts) == want)
@@ -48,6 +48,9 @@ func po(_ l: [(Int, String)]) -> [PromptOption] { l.map { PromptOption(number: $
 precondition(detectPrompt(screen: fixture("question")) == po([(1, "apple"), (2, "banana"), (3, "cherry"), (4, "Type something."), (5, "Chat about this")])) // question.txt
 precondition(detectPrompt(screen: fixture("permission")) == po([(1, "Yes"), (2, "Yes, and always allow access to /tmp/notch-fixture.WJuB from this project"), (3, "Yes, and switch to auto mode · auto mode handles these prompts for you"), (4, "No")])) // permission.txt
 precondition(detectPrompt(screen: opts + "a\nb\nc\nd\ne\n").isEmpty)
+precondition(detectPrompt(screen: "1. a\n" + "────\n❯ 2. foo\n────\n  ? for shortcuts\n").isEmpty)
+precondition(detectPrompt(screen: "────\n❯\u{a0}1. do X\n  2. do Y\n────\n").isEmpty)
+precondition(detectPrompt(screen: "❯ 1. Yes\n  2. No\n").isEmpty) // no footer
 
 let b = URL(string: "http://127.0.0.1:4799")!
 for bad in [OrchestratorPost.text("   "), .text(""), .key("x"), .key("0"), .key("10")] { precondition(bad.request(base: b) == nil) }
