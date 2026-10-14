@@ -22,6 +22,7 @@ final class PromptCardController: ObservableObject {
     private var resignObserver: NSObjectProtocol?
     private var dwell: Task<Void, Never>?
     private var hovering = false
+    private var keyTakenAt = Date.distantPast
     private var mounted = 0
     /// Editing ending with the pointer outside re-runs the exit dwell, else the key-take outlives the hover.
     @Published var fieldEditing = false { didSet { if oldValue, !fieldEditing, !hovering { hover(false, window: nil) } } }
@@ -125,6 +126,7 @@ final class PromptCardController: ObservableObject {
         guard keyWindow == nil, m.prompt != nil, !m.wantsKeyboard, !OrchestratorKeyGate.terminalWantsKey else { return }
         m.beginTyping(in: w)
         keyWindow = w
+        keyTakenAt = Date()
         OrchestratorKeyGate.activate()
         w.makeKey()
         DispatchQueue.main.async { if self.keyWindow === w { w.makeKey() } }
@@ -164,6 +166,9 @@ final class PromptCardController: ObservableObject {
                           editingText: fieldEditing || NSApp.keyWindow?.firstResponder is NSText,
                           kind: card.kind, numbers: Set(card.items.map(\.number)))
         let nums = card.items.filter { $0.role == .normal }.map(\.number) // only rows that draw a highlight
+        // Keys still being typed for the app the hover just took focus from are swallowed, not answers.
+        // ponytail: 300 ms grace only; a click-to-arm for permission cards is Phase 9's call.
+        if k != .pass, Date().timeIntervalSince(keyTakenAt) < 0.3 { return nil }
         switch k {
         case .pass: return e
         case .answer(let n): choose(n, displayed: card)
