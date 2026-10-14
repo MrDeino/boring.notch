@@ -124,6 +124,17 @@ private let editBlocks = blocks(#"""
 ]}
 """#)
 
+/// Ends on a user message followed by several paragraphs of prose: the context above a question card.
+private let questionBlocks = blocks(#"""
+{"running":true,"blocks":[
+ {"id":"q1","kind":"user","text":"How should the expanded view behave on long chats?"},
+ {"id":"q2","kind":"prose","text":"I looked at the transcript and the scroll anchor. The newest row is pinned today, which is right for a live conversation but hides older replies while you read them."},
+ {"id":"q3","kind":"tool","name":"Read","target":"/Users/x/proj/OrchestratorChat.swift","result":"import SwiftUI (+520 lines)"},
+ {"id":"q4","kind":"prose","text":"There are three reasonable behaviours here and they trade off differently, so I would rather ask than pick one for you."},
+ {"id":"q5","kind":"prose","text":"Pinning always keeps the last line visible but fights the user. Pinning only at the bottom respects scrolling but can miss a reply. A jump-to-latest pill needs a small new control in the column."}
+]}
+"""#)
+
 private let shortNote = "Remember to ask about the Railway migration.\n\n- notch: back-nav for question chips\n- notes drop-down autosaves after 1s\n- check usage ring colour at 90%"
 private let wordyDraft = "Please look at how the composer grows while I type a long message that wraps over several lines in the notch, and make sure the send button stays on the last line even when the text keeps going well past two full lines of the pill"
 private let tenLineDraft = (1...10).map { "Line \($0) of a very long draft that keeps going and going" }.joined(separator: "\n")
@@ -226,6 +237,8 @@ struct Snap {
             Scene(name: "37-composer-multiline", chat: chat(""), blocks: markerBlocks, draft: wordyDraft),
             Scene(name: "38-composer-five-lines", chat: chat(""), blocks: markerBlocks, draft: tenLineDraft),
             Scene(name: "39-expanded-composer-multiline", chat: chat(""), blocks: editBlocks, expanded: true, draft: wordyDraft),
+            Scene(name: "41-permission-context-open", chat: chat(fixture("phase6-edit.txt")), blocks: editBlocks),
+            Scene(name: "42-question-context-open", chat: chat(longQuestion), blocks: questionBlocks),
             Scene(name: "36-permission-dismissed-open", chat: chat(fixture("phase6-edit.txt")), blocks: markerBlocks, dismissed: true),
         ]
 

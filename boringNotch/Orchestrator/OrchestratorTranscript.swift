@@ -158,6 +158,15 @@ func toolMarker(result: String?) -> ToolMarker {
     return toolResultIsError(result) ? .error : .done
 }
 
+/// The assistant's prose since the last user message (all of it when there is none), trimmed, blanks dropped,
+/// joined by blank lines: the context a question/permission card refers to. nil when there is none.
+func latestAssistantProse(_ blocks: [ChatBlock]) -> String? {
+    let since = blocks.lastIndex { $0.kind == .user }.map { blocks.index(after: $0) } ?? blocks.startIndex
+    let parts = blocks[since...].filter { $0.kind == .prose }
+        .compactMap { $0.text?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+}
+
 /// Transcript text is untrusted: truncated, inline markdown only, links stripped (T-05-01/02).
 func proseAttributed(_ s: String) -> AttributedString {
     let plain = String(s.prefix(2000))

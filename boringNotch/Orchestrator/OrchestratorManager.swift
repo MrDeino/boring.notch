@@ -173,13 +173,14 @@ final class OrchestratorManager: ObservableObject {
         let rs = st.runs ?? []
         if runs != rs { runs = rs }
         if usage != st.usage { usage = st.usage }
+        // Blocks first: a new card must appear with its context (Phase 8: ingest blocks before publishing a prompt).
+        await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, screen: s, chatRunning: running)
         let po = running ? detectPrompt(screen: s) : []
         if promptOptions != po { promptOptions = po }
         let pc = running ? detectPromptCard(screen: s) : nil
         if prompt != pc { prompt = pc }
         let ls = running ? parseLiveStatus(screen: s) : nil
         if liveStatus != ls { liveStatus = ls }
-        await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, screen: s, chatRunning: running)
     }
 
     private func applyOffline() {

@@ -140,6 +140,7 @@ struct OrchestratorExpandedView: View {
     @ObservedObject var expand = OrchestratorExpand.shared
     @ObservedObject var rail = OrchestratorRailState.shared
     @ObservedObject var cards = PromptCardController.shared
+    @ObservedObject var store = OrchestratorTranscriptStore.shared
     @Default(.orchRunsRailCollapsed) var persisted
     @EnvironmentObject var vm: BoringViewModel
 
@@ -190,6 +191,8 @@ struct OrchestratorExpandedView: View {
                     OrchestratorChatView(showComposer: !promptVisible, proseLineLimit: open ? 4 : nil, maxRows: 60, expanded: !open)
                         .frame(minHeight: promptVisible ? 72 : 0)
                 }
+                // Open: what Claude said before asking, a few lines, so the card is not out of context.
+                if open && promptVisible, let ctx = latestAssistantProse(store.blocks) { PromptContextView(text: ctx) }
                 if promptVisible { OrchestratorPromptCard() }
             }
         }
@@ -213,4 +216,32 @@ struct OrchestratorExpandedView: View {
             }
         }.buttonStyle(.plain)
     }
+}
+
+/// The latest assistant prose above a question/permission card at the open level: up to 3 lines, scrollable
+/// (newest lines at the bottom); the notch grows by its height so the card keeps its room.
+private struct PromptContextView: View {
+    let text: String
+    @EnvironmentObject var vm: BoringViewModel
+    @State private var anchor = NSView()
+    @State private var natural: CGFloat = 0
+
+    private var height: CGFloat { min(natural, 54) }
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            Text(proseAttributed(text)).font(OT.F.prose).foregroundStyle(OT.C.text3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(GeometryReader { g in Color.clear.onAppear { natural = g.size.height }.onChange(of: g.size.height) { _, h in natural = h } })
+        }
+        .defaultScrollAnchor(.bottom)
+        .frame(height: height)
+        .padding(.horizontal, 6)
+        .background(WindowAnchor(view: anchor))
+        .onChange(of: height) { _, _ in fit() }
+        .onAppear { fit() }
+        .onDisappear { OrchestratorExpand.shared.setFit("prompt", extra: 0, vm: vm, window: anchor.window) }
+    }
+
+    private func fit() { OrchestratorExpand.shared.setFit("prompt", extra: height + 6, vm: vm, window: anchor.window) }
 }
