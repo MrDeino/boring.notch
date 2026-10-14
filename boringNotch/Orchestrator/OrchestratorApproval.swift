@@ -17,6 +17,8 @@ final class OrchestratorApprovalCenter: ObservableObject {
     @Published private(set) var approval: OrchestratorApproval? = nil
     /// Bumped when an Allow resolves to "open the prompt card instead" (option 1 is not a plain Yes).
     @Published private(set) var cardRequest = 0
+    /// Pushed by ContentView: the closed drop-down or the Orchestrator tab is on screen (see approvalVisibleToUser).
+    @Published var surfaceShown = false
     private var cancellables = Set<AnyCancellable>()
 
     let ctrlFallback: Bool = {
@@ -40,12 +42,17 @@ final class OrchestratorApprovalCenter: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] a in
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { self?.approval = a }
-                #if !ORCH_SNAPSHOT
-                if a != nil { KeyboardShortcuts.enable(.orchApprovalAllow, .orchApprovalDeny) }
-                else { KeyboardShortcuts.disable(.orchApprovalAllow, .orchApprovalDeny) }
-                #endif
             }
             .store(in: &cancellables)
+        #if !ORCH_SNAPSHOT
+        $approval.combineLatest($surfaceShown)
+            .map { $0 != nil && $1 }.removeDuplicates()
+            .sink { on in
+                if on { KeyboardShortcuts.enable(.orchApprovalAllow, .orchApprovalDeny) }
+                else { KeyboardShortcuts.disable(.orchApprovalAllow, .orchApprovalDeny) }
+            }
+            .store(in: &cancellables)
+        #endif
     }
 
     func answer(allow: Bool) {

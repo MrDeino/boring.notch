@@ -42,6 +42,11 @@ func runPhase9Tests() {
     precondition(visibleApproval(ap, ignoredId: "b", until: until, now: t0) == ap)
     precondition(visibleApproval(nil, ignoredId: "a", until: until, now: t0) == nil)
 
+    precondition(approvalVisibleToUser(pending: true, notchClosed: true, hideOnClosed: false, orchestratorTab: false))
+    precondition(!approvalVisibleToUser(pending: true, notchClosed: true, hideOnClosed: true, orchestratorTab: true))
+    precondition(approvalVisibleToUser(pending: true, notchClosed: false, hideOnClosed: true, orchestratorTab: true))
+    precondition(!approvalVisibleToUser(pending: true, notchClosed: false, hideOnClosed: false, orchestratorTab: false))
+    precondition(!approvalVisibleToUser(pending: false, notchClosed: true, hideOnClosed: false, orchestratorTab: true))
     precondition(approvalCommandLine(OrchestratorApproval(id: "a", tool: nil, command: "  a\n\tb  \n c ", description: "d", at: nil)) == "a b c")
     precondition(approvalCommandLine(OrchestratorApproval(id: "a", tool: nil, command: String(repeating: "x", count: 400), description: nil, at: nil)).count == 300)
     precondition(approvalCommandLine(OrchestratorApproval(id: "a", tool: nil, command: nil, description: "desc", at: nil)) == "desc")

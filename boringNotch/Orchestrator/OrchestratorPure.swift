@@ -137,6 +137,12 @@ func approvalAnswer(allow: Bool, pendingId: String?, answeringId: String, option
     return plain ? .send("1") : .openCard
 }
 
+/// Hotkeys exist only while the user can actually see the approval: the closed-notch drop-down,
+/// or the open notch on the Orchestrator tab (where the prompt card is).
+func approvalVisibleToUser(pending: Bool, notchClosed: Bool, hideOnClosed: Bool, orchestratorTab: Bool) -> Bool {
+    pending && (notchClosed ? !hideOnClosed : orchestratorTab)
+}
+
 /// KeyboardShortcuts rejects Option-only combos for sandboxed apps on macOS 15.0/15.1 only.
 func approvalNeedsCtrlFallback(major: Int, minor: Int) -> Bool { major == 15 && minor <= 1 }
 
