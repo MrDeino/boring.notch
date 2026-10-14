@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0A1C00000000000000000004 /* OrchestratorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000001 /* OrchestratorModels.swift */; };
+		0A1C00000000000000000005 /* OrchestratorManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000002 /* OrchestratorManager.swift */; };
+		0A1C00000000000000000006 /* OrchestratorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000003 /* OrchestratorView.swift */; };
 		1100290C2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */; };
 		110029272E84FD4C00035A57 /* TemporaryFileStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */; };
 		1100292A2E8691B400035A57 /* FileShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029292E8691B400035A57 /* FileShareView.swift */; };
@@ -181,6 +184,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0A1C00000000000000000001 /* OrchestratorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorModels.swift; sourceTree = "<group>"; };
+		0A1C00000000000000000002 /* OrchestratorManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorManager.swift; sourceTree = "<group>"; };
+		0A1C00000000000000000003 /* OrchestratorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorView.swift; sourceTree = "<group>"; };
 		1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NSItemProvider+LoadHelpers.swift"; sourceTree = "<group>"; };
 		110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryFileStorageService.swift; sourceTree = "<group>"; };
 		110029292E8691B400035A57 /* FileShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileShareView.swift; sourceTree = "<group>"; };
@@ -357,6 +363,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0A1C00000000000000000007 /* Orchestrator */ = {
+			isa = PBXGroup;
+			children = (
+				0A1C00000000000000000001 /* OrchestratorModels.swift */,
+				0A1C00000000000000000002 /* OrchestratorManager.swift */,
+				0A1C00000000000000000003 /* OrchestratorView.swift */,
+			);
+			path = Orchestrator;
+			sourceTree = "<group>";
+		};
 		1113ABB82E80E27000EC13B2 /* Models */ = {
 			isa = PBXGroup;
 			children = (
@@ -574,6 +590,7 @@
 				1153BD8E2D986B1F00979FB0 /* MediaControllers */,
 				B15063502C63D3F600EBB0E3 /* extensions */,
 				1471639B2C5D362F0068B555 /* components */,
+				0A1C00000000000000000007 /* Orchestrator */,
 				14CEF4152C5CAED300855D72 /* boringNotchApp.swift */,
 				14CEF4172C5CAED300855D72 /* ContentView.swift */,
 				B17266E02C6532560031BA0D /* Localizable.xcstrings */,
@@ -905,6 +922,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0A1C00000000000000000004 /* OrchestratorModels.swift in Sources */,
+				0A1C00000000000000000005 /* OrchestratorManager.swift in Sources */,
+				0A1C00000000000000000006 /* OrchestratorView.swift in Sources */,
 				115C12EC2ED3D003009754CA /* OpenNotchHUD.swift in Sources */,
 				14C08BB92C8DE4B1000F8AA0 /* BoringCalendar.swift in Sources */,
 				5955950D2E900ED800C66711 /* ApplicationRelauncher.swift in Sources */,
