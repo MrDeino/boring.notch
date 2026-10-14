@@ -302,7 +302,7 @@ struct OrchestratorChatView: View {
     }
 
     // ponytail: local-monitor key handling; swap to onKeyPress if it proves reliable for Tab in the panel.
-    // ponytail: ⌃U in the real box clears the whole line regardless of the notch caret; harmless because sends are preceded by C-u.
+    // Tab/→ accept and ⌃U are local only (user, 2026-10-14): every send clears Claude's box first.
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
@@ -311,14 +311,12 @@ struct OrchestratorChatView: View {
             if (event.keyCode == 48 || event.keyCode == 124), mods.isEmpty, let g = suggestion {
                 draft = g
                 fromTerminal = false
-                Task { await store.postKey("Tab") }
                 return nil
             }
             if event.keyCode == 32, mods == .control {
                 let tv = event.window?.firstResponder as? NSTextView
                 draft = clearToCaret(draft, caretUTF16: tv?.selectedRange().location)
                 DispatchQueue.main.async { tv?.setSelectedRange(NSRange(location: 0, length: 0)) }
-                Task { await store.postKey("C-u") }
                 clearedGen += 1
                 let gen = clearedGen
                 withAnimation(.easeOut(duration: 0.15)) { showCleared = true }
