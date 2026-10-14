@@ -2,6 +2,10 @@ import SwiftUI
 
 struct OrchestratorView: View {
     @ObservedObject var manager = OrchestratorManager.shared
+    @State private var draft = ""
+    @State private var confirmEnd = false
+    @State private var keyWindow: NSWindow?
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         Group {
@@ -28,24 +32,113 @@ struct OrchestratorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 8)
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { n in
+            if let w = keyWindow, (n.object as? NSWindow) === w { stopTyping() }
+        }
+        .onDisappear { stopTyping() }
+        .onChange(of: manager.chatRunning) { _, running in if !running { stopTyping() } }
+        .onChange(of: manager.offline) { _, off in if off { stopTyping() } }
+        .onChange(of: manager.promptOptions) { _, o in if !o.isEmpty { stopTyping() } }
     }
 
     @ViewBuilder private var chat: some View {
         if !manager.chatRunning {
-            Text("chat not running").font(.system(size: 11)).foregroundStyle(.gray)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 6) {
+                Text("chat not running").font(.system(size: 11)).foregroundStyle(.gray)
+                Button("Start") { Task { await manager.startChat() } }
+                    .font(.system(size: 11))
+                    .disabled(manager.sending)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            VStack(alignment: .leading, spacing: 1) {
-                ForEach(Array(chatTail(screen: manager.screen, maxLines: 10).enumerated()), id: \.offset) { _, line in
-                    Text(verbatim: line)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+            VStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(chatTail(screen: manager.screen, maxLines: 7).enumerated()), id: \.offset) { _, line in
+                        Text(verbatim: line)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                bottomBar
+            }
+        }
+    }
+
+    private var bottomBar: some View {
+        HStack(spacing: 6) {
+            if manager.promptOptions.isEmpty {
+                ZStack {
+                    TextField("message orchestrator", text: $draft)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11))
+                        .focused($fieldFocused)
+                        .onSubmit { submit() }
+                        .onExitCommand { stopTyping() }
+                        .allowsHitTesting(manager.wantsKeyboard)
+                    if !manager.wantsKeyboard {
+                        Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() }
+                    }
+                }
+                .padding(.horizontal, 6)
+                .frame(height: 22)
+                .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 5))
+            } else {
+                ForEach(manager.promptOptions, id: \.number) { o in
+                    Button { manager.pressOption(o.number) } label: {
+                        Text(verbatim: "\(o.number) \(o.label)").lineLimit(1).truncationMode(.tail)
+                            .frame(maxWidth: 120)
+                    }
+                    .disabled(manager.optionsLocked || manager.sending)
+                }
+                Spacer(minLength: 0)
+            }
+            Button("esc") { Task { await manager.pressEscape() } }
+                .disabled(manager.sending)
+            if confirmEnd {
+                Text("End chat?").foregroundStyle(.orange)
+                Button("Yes") { confirmEnd = false; Task { await manager.stopChat() } }
+                Button("No") { confirmEnd = false }
+            } else {
+                Button("End") {
+                    confirmEnd = true
+                    Task { try? await Task.sleep(for: .seconds(4)); confirmEnd = false }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
         }
+        .font(.system(size: 10))
+        .controlSize(.small)
+    }
+
+    private func startTyping() {
+        manager.beginTyping()
+        let w = NSApp.windows.first {
+            $0 is BoringNotchSkyLightWindow && $0.isVisible && $0.frame.contains(NSEvent.mouseLocation)
+        }
+        keyWindow = w
+        w?.makeKey()
+        DispatchQueue.main.async { fieldFocused = true }
+    }
+
+    private func stopTyping() {
+        fieldFocused = false
+        keyWindow?.makeFirstResponder(nil)
+        manager.endTyping()
+        // Panel never activates the app, so the frontmost app is the one the user was typing in.
+        if keyWindow?.isKeyWindow == true,
+           let front = NSWorkspace.shared.frontmostApplication, front != NSRunningApplication.current {
+            front.activate()
+        }
+        keyWindow = nil
+    }
+
+    private func submit() {
+        let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { stopTyping(); return }
+        stopTyping()
+        Task { if await manager.sendText(t) { draft = "" } }
     }
 
     private var runsStrip: some View {
