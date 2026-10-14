@@ -28,6 +28,7 @@ struct OrchestratorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 8)
+        .overlay { OrchestratorExpandOverlay() }
     }
 
     @ViewBuilder private var chat: some View {

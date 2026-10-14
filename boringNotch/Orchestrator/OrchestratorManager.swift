@@ -20,7 +20,10 @@ final class OrchestratorManager: ObservableObject {
 
     /// Fed by notch open/close hooks; opening triggers an immediate refresh.
     var notchOpen = false {
-        didSet { if notchOpen && !oldValue { Task { await refresh() } } }
+        didSet {
+            if notchOpen && !oldValue { Task { await refresh() } }
+            if !notchOpen { OrchestratorExpand.shared.reset() }
+        }
     }
 
     private let session: URLSession = {
