@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 @MainActor
 final class OrchestratorManager: ObservableObject {
@@ -32,8 +32,12 @@ final class OrchestratorManager: ObservableObject {
     private var typing = false
     private var lockGen = 0
 
+    /// The one notch panel allowed to become key (one panel per display).
+    private(set) weak var keyboardWindow: NSWindow?
+
     /// Idempotent so begin/end can never unbalance the shared interaction count.
-    func beginTyping() {
+    func beginTyping(in window: NSWindow) {
+        keyboardWindow = window
         guard !typing else { return }
         typing = true
         SharingStateManager.shared.beginInteraction()
@@ -43,6 +47,7 @@ final class OrchestratorManager: ObservableObject {
     func endTyping() {
         guard typing else { return }
         typing = false
+        keyboardWindow = nil
         wantsKeyboard = false
         SharingStateManager.shared.endInteraction()
     }

@@ -117,7 +117,7 @@ struct OrchestratorView: View {
     /// Typing is only committed once this view's own panel is actually key, so it can't latch on.
     private func startTyping() {
         guard let w = anchor.window else { return }
-        manager.beginTyping() // canBecomeKey reads it
+        manager.beginTyping(in: w) // canBecomeKey reads it
         w.makeKey()
         guard w.isKeyWindow else { manager.endTyping(); return }
         keyWindow = w
@@ -126,6 +126,7 @@ struct OrchestratorView: View {
 
     private func stopTyping() {
         fieldFocused = false
+        guard keyWindow != nil else { return } // another display's view owns the session
         keyWindow?.makeFirstResponder(nil)
         manager.endTyping()
         // Panel never activates the app, so the frontmost app is the one the user was typing in.

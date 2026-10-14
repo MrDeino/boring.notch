@@ -109,6 +109,6 @@ class BoringNotchSkyLightWindow: NSPanel {
     
     private var observers: Set<AnyCancellable> = []
     
-    override var canBecomeKey: Bool { OrchestratorManager.shared.wantsKeyboard }
+    override var canBecomeKey: Bool { OrchestratorManager.shared.keyboardWindow === self }
     override var canBecomeMain: Bool { false }
 }
