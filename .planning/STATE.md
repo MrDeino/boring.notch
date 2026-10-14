@@ -60,6 +60,11 @@ Recent decisions affecting current work:
 - [Roadmap]: Phase 2 opens with the gated `canBecomeKey` spike
 - [User 2026-10-14]: Closed-notch attention dot shows even while music plays (dot at notch edge alongside music); built in Phase 3, Phase 1 must expose `needsAttention` state independent of music
 
+### Roadmap Evolution
+
+- 2026-10-14: Phases 4–9 added for the 2a redesign (design handoff in `.planning/design/orchestrator-2a/`): 4 Foundation, 5 Structured chat, 6 Prompt cards, 7 Runs board/expand levels/wings, 8 Phase B live data, 9 Phase B approvals. Phases 5, 6, 7 will execute in parallel after Phase 4 (merge map: `.planning/design/orchestrator-2a/MERGE-MAP.md`).
+- [User 2026-10-14]: Chat rows come from serve's transcript endpoint `GET /api/chat/blocks?since=<id>`, not screen parsing. Waiting run cards show the run's question and a button that sends that context into the orchestrator chat — no Allow/Deny/resume of runs from the notch.
+
 ### Pending Todos
 
 None yet.
