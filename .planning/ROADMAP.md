@@ -244,14 +244,14 @@ Plans:
   3. ⌥⏎ and ⌥⎋ answer the pending approval globally, without the notch being focused, using a sandbox-safe hotkey API
   4. The panel frame follows content size instead of the fixed `windowSize` plus a separate expand step; music unaffected
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 **Wave 1**
 - [x] 09-01-PLAN.md — Approval from serve (`approval` on GET /api/chat + stream) -> frame 00 closed-notch drop-down, Allow/Deny/More… via POST /api/chat {key} behind the freshness gate (APR-01, APR-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 09-02-PLAN.md — Global ⌥⏎/⌥⎋ via KeyboardShortcuts, registered only while pending; 15.0/15.1 ⌃⌥ fallback (APR-03)
+- [x] 09-02-PLAN.md — Global ⌥⏎/⌥⎋ via KeyboardShortcuts, registered only while pending; 15.0/15.1 ⌃⌥ fallback (APR-03)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 09-03-PLAN.md — One sizer: panel window height from vm.notchSize.height (`panelHeight` + `OrchestratorExpand.fit`), top edge pinned, music unchanged (APR-04)
@@ -270,4 +270,4 @@ Plans:
 | 6. 2a Prompt Cards | 3/3 | Complete   | 2026-10-14 |
 | 7. 2a Runs Board, Expand Levels & Wings | 5/5 | Complete   | 2026-10-14 |
 | 8. Phase B Live Data | 3/3 | Complete    | 2026-10-14 |
-| 9. Phase B Approvals | 1/3 | In Progress|  |
+| 9. Phase B Approvals | 2/3 | In Progress|  |
