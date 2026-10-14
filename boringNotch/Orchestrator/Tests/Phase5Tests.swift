@@ -36,6 +36,8 @@ func runPhase5Tests() {
     let empty = decodeChatBlocks(Data(#"{"running":false,"blocks":[]}"#.utf8))!
     precondition(empty.running == false && empty.blocks.isEmpty)
     precondition(decodeChatBlocks(Data("not json".utf8)) == nil)
+    precondition(decodeChatBlocks(Data("{}".utf8)) == nil)
+    precondition(decodeChatBlocks(Data(#"{"error":"boom"}"#.utf8)) == nil)
 
     // merge
     let u1 = p5Block("u1", "user"), t1 = p5Block("t1", "tool"), t1r = p5Block("t1", "tool", result: "ok"), p1 = p5Block("p1", "prose")

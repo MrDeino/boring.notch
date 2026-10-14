@@ -54,8 +54,9 @@ private struct ChatBlocksEnvelope: Decodable {
 /// Accepts `{running, blocks}` or a bare array; drops unknown kinds and malformed blocks.
 func decodeChatBlocks(_ data: Data) -> (running: Bool?, blocks: [ChatBlock])? {
     let d = JSONDecoder()
-    if let e = try? d.decode(ChatBlocksEnvelope.self, from: data) {
-        return (e.running, (e.blocks ?? []).compactMap(\.value))
+    // `blocks` is required: `{}` or `{"error":…}` is a failure (chatTail fallback), not an empty transcript.
+    if let e = try? d.decode(ChatBlocksEnvelope.self, from: data), let b = e.blocks {
+        return (e.running, b.compactMap(\.value))
     }
     if let a = try? d.decode([LossyChatBlock].self, from: data) { return (nil, a.compactMap(\.value)) }
     return nil
