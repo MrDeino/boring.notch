@@ -183,42 +183,16 @@ final class OrchestratorExpand: ObservableObject {
 struct OrchestratorExpandOverlay: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var expand = OrchestratorExpand.shared
-    @ObservedObject var manager = OrchestratorManager.shared
-    @State private var termState: TerminalState = .connecting
-    @State private var termID = UUID()
 
     var body: some View {
-        let isExp = expand.level(for: vm) == .terminal
         ZStack {
-            if isExp {
+            if expand.level(for: vm) == .terminal {
                 Color.black
-                VStack(alignment: .leading, spacing: 1) {
-                    ForEach(Array(chatTail(screen: manager.screen, maxLines: 28).enumerated()), id: \.offset) { _, line in
-                        Text(verbatim: line)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .lineLimit(1).truncationMode(.tail)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(8)
-                if termState == .connecting || termState == .connected {
-                    OrchestratorTerminalView(state: $termState).id(termID).background(Color.black)
-                } else {
-                    HStack(spacing: 8) {
-                        Text(termState == .inUse ? "terminal in use" : "terminal unavailable")
-                            .font(.system(size: 11)).foregroundStyle(.white)
-                        Button("Retry") { termState = .connecting; termID = UUID() }
-                    }
-                    .padding(6).background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 6))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(8)
-                }
+                OrchestratorTerminalPanel().padding(.bottom, 4)
             }
         }
         // Empty while collapsed: no hit shape, so chat clicks pass through.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: isExp) { _, on in if on { termState = .connecting; termID = UUID() } }
         .onDisappear { expand.reset() }
     }
 }

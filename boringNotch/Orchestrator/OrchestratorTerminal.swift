@@ -105,3 +105,42 @@ struct OrchestratorTerminalView: NSViewRepresentable {
         }
     }
 }
+
+/// Frame 10: framed terminal with toolbar. Mounted only at level .terminal, so the WebView exists only then.
+struct OrchestratorTerminalPanel: View {
+    @EnvironmentObject var vm: BoringViewModel
+    @State private var termState: TerminalState = .connecting
+    @State private var termID = UUID()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Circle().fill(OT.C.green).frame(width: 6, height: 6)
+                Text("Terminal · keyboard captured")
+                Spacer()
+                Button { OrchestratorExpand.shared.setLevel(.expanded, vm: vm, window: nil) } label: {
+                    Text("Collapse ⌃").foregroundStyle(OT.C.text).padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(OT.C.raised, in: RoundedRectangle(cornerRadius: OT.R.cardS))
+                }.buttonStyle(.plain)
+            }
+            .font(.system(size: 11)).foregroundStyle(OT.C.text5)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            Rectangle().fill(OT.C.divider).frame(height: 1)
+            if termState == .connecting || termState == .connected {
+                OrchestratorTerminalView(state: $termState).id(termID)
+            } else {
+                VStack(spacing: 8) {
+                    Text(termState == .inUse ? "Terminal in use" : "Terminal unavailable")
+                        .font(.system(size: 12)).foregroundStyle(OT.C.text)
+                    Button { termState = .connecting; termID = UUID() } label: {
+                        Text("Retry").font(.system(size: 11)).foregroundStyle(OT.C.text)
+                            .padding(.horizontal, 12).padding(.vertical, 4).background(OT.C.raised, in: Capsule())
+                    }.buttonStyle(.plain)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .background(OT.C.terminal)
+        .clipShape(RoundedRectangle(cornerRadius: OT.R.cardL))
+        .overlay(RoundedRectangle(cornerRadius: OT.R.cardL).strokeBorder(OT.C.divider, lineWidth: 1))
+    }
+}
