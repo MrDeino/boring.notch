@@ -66,6 +66,16 @@ struct PromptCard: Equatable {
     var highlighted: Int? = nil
 }
 
+/// What makes two cards "the same prompt" (excludes `highlighted`, which follows the TUI's cursor).
+struct PromptIdentity: Equatable {
+    let kind: PromptCard.Kind
+    let text: [String?]
+    let labels: [String]
+}
+func promptIdentity(_ c: PromptCard) -> PromptIdentity {
+    PromptIdentity(kind: c.kind, text: [c.title, c.question, c.body], labels: c.items.map(\.label) + c.options.map(\.label))
+}
+
 private func isRule(_ s: String, _ ch: Character) -> Bool { s.count >= 10 && s.allSatisfy { $0 == ch } }
 
 /// nil when no prompt is on screen.

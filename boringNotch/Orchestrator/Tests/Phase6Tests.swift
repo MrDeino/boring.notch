@@ -109,4 +109,13 @@ func runPhase6Tests() {
     precondition(k(126, kind: .permission) == .pass)
     precondition(k(36, kind: .permission) == .pass)
     precondition(k(0, "a") == .pass)
+
+    // promptIdentity ignores highlighted
+    do {
+        var a = PromptCard(options: [], kind: .question); a.question = "Q"; a.items = [PromptCardOption(number: 1, label: "A")]
+        var b = a; a.highlighted = 1; b.highlighted = 2
+        precondition(promptIdentity(a) == promptIdentity(b))
+        b.question = "Other"
+        precondition(promptIdentity(a) != promptIdentity(b))
+    }
 }
