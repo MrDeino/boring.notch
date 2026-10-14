@@ -80,7 +80,9 @@ final class OrchestratorExpand: ObservableObject {
         case .deeper: setLevel(nextLevel(cur, .deeper), vm: vm, window: window)
         case .back: back(vm)
         case .terminal: setLevel(.terminal, vm: vm, window: window)
-        case .toggleRail: return false
+        case .toggleRail:
+            guard cur != .open else { return false }
+            OrchestratorRailState.shared.toggle()
         }
         return true
     }
@@ -177,22 +179,5 @@ final class OrchestratorExpand: ObservableObject {
         guard let w, w.isKeyWindow else { return }
         w.makeFirstResponder(nil)
         OrchestratorKeyGate.restore(refocus: refocus)
-    }
-}
-
-struct OrchestratorExpandOverlay: View {
-    @EnvironmentObject var vm: BoringViewModel
-    @ObservedObject var expand = OrchestratorExpand.shared
-
-    var body: some View {
-        ZStack {
-            if expand.level(for: vm) == .terminal {
-                Color.black
-                OrchestratorTerminalPanel().padding(.bottom, 4)
-            }
-        }
-        // Empty while collapsed: no hit shape, so chat clicks pass through.
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onDisappear { expand.reset() }
     }
 }
