@@ -207,6 +207,8 @@ struct OrchestratorChatView: View {
     @State private var keyMonitor: Any?
     @State private var dropTargeted = false
     @State private var tagGen = 0
+    @State private var copiedToast = false
+    @State private var copyGen = 0
     @State private var tag: (text: String, error: Bool)?
     @ObservedObject var store = OrchestratorTranscriptStore.shared
     private let showComposer: Bool
@@ -229,7 +231,11 @@ struct OrchestratorChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: 0) {
-                            rows
+                            // AppKit text views win hit tests over SwiftUI overlays: while the pill shows, rows are inert so
+                            // the pill gets its click (selecting resumes once it is gone).
+                            // AppKit text views win hit tests over SwiftUI overlays: while the pill shows, rows are inert so
+                            // the pill gets its click (selecting resumes once it is gone).
+                            rows.allowsHitTesting(!(unseen && !stick))
                             Color.clear.frame(height: 0).id(Self.bottomID)
                         }
                         .padding(.horizontal, 6)
@@ -278,6 +284,16 @@ struct OrchestratorChatView: View {
             .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             .contentShape(Rectangle())
             .onTapGesture { expandChat() }
+            .overlay(alignment: .top) {
+                if copiedToast {
+                    Text("Copied").font(OT.F.hint).foregroundStyle(OT.C.text5)
+                        .padding(.vertical, 2).padding(.horizontal, 7)
+                        .background(OT.C.selected, in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.top, 2)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
+            }
             if showComposer { composer }
         }
         .background(WindowAnchor(view: anchor))
@@ -308,7 +324,7 @@ struct OrchestratorChatView: View {
                 }
             } else {
                 ForEach(store.blocks.suffix(maxRows)) { b in
-                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded)
+                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, onClick: expandChat, onCopied: showCopied)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -328,7 +344,7 @@ struct OrchestratorChatView: View {
     private func pendingRow(_ p: PendingMessage) -> some View {
         VStack(alignment: expanded ? .trailing : .leading, spacing: 2) {
             if !p.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                ChatBlockRow(block: ChatBlock(pendingID: "pending-\(p.id)", text: p.text), proseLineLimit: proseLineLimit, expanded: expanded)
+                ChatBlockRow(block: ChatBlock(pendingID: "pending-\(p.id)", text: p.text), proseLineLimit: proseLineLimit, expanded: expanded, onClick: expandChat, onCopied: showCopied)
                     .opacity(0.5)
             }
             if !p.images.isEmpty {
@@ -613,6 +629,17 @@ struct OrchestratorChatView: View {
         }
     }
 
+    /// Brief "Copied" toast over the transcript after a drag-select.
+    private func showCopied() {
+        copyGen += 1
+        let gen = copyGen
+        withAnimation(.easeOut(duration: 0.15)) { copiedToast = true }
+        Task {
+            try? await Task.sleep(for: .milliseconds(1200))
+            if copyGen == gen { withAnimation(.easeOut(duration: 0.15)) { copiedToast = false } }
+        }
+    }
+
     private func removeKeyMonitor() {
         if let m = keyMonitor { NSEvent.removeMonitor(m) }
         keyMonitor = nil
@@ -674,6 +701,8 @@ private struct ChatBlockRow: View {
     let block: ChatBlock
     let proseLineLimit: Int?
     var expanded = false
+    var onClick: () -> Void = {}
+    var onCopied: () -> Void = {}
     @State private var folded = false
 
     private var hasDiffCard: Bool {
@@ -686,8 +715,8 @@ private struct ChatBlockRow: View {
         if expanded && block.kind == .user {
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
-                Text(verbatim: block.text ?? "")
-                    .font(.system(size: 12)).foregroundStyle(OT.C.text2)
+                OrchestratorSelectableText(block.text ?? "", font: NSFont.systemFont(ofSize: 12), color: NSColor(OT.C.text2),
+                                           onClick: onClick, onCopied: onCopied)
                     .padding(.vertical, 6).padding(.horizontal, 10)
                     .background(OT.C.raised, in: UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 12, bottomTrailingRadius: 4, topTrailingRadius: 12))
                     .containerRelativeFrame(.horizontal, alignment: .trailing) { w, _ in w * 0.8 }
@@ -776,17 +805,16 @@ private struct ChatBlockRow: View {
         switch block.kind {
         case .user:
             let first = (block.text ?? "").split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-            Text(verbatim: first)
-                .font(OT.F.ui).foregroundStyle(OT.C.text5)
-                .lineLimit(1).truncationMode(.tail)
+            OrchestratorSelectableText(first, font: NSFont.systemFont(ofSize: 12), color: NSColor(OT.C.text5), maxLines: 1,
+                                       lineBreak: .byTruncatingTail, onClick: onClick, onCopied: onCopied)
+                .baselineAligned()
         case .tool:
             toolRow
         case .prose:
             // lineSpacing 2 on 13pt text ~ line-height 1.35 (13 * 1.35 = 17.5 vs ~15.5 natural).
-            Text(proseAttributed(block.text ?? ""))
-                .font(OT.F.prose).foregroundStyle(OT.C.text)
-                .lineSpacing(2)
-                .lineLimit(proseLineLimit).truncationMode(.tail)
+            OrchestratorSelectableText(orchestratorProseNS(proseAttributed(block.text ?? ""), size: 13, color: NSColor(OT.C.text), lineSpacing: 2),
+                                       maxLines: proseLineLimit ?? 0, lineBreak: proseLineLimit == nil ? .byWordWrapping : .byTruncatingTail, onClick: onClick, onCopied: onCopied)
+                .baselineAligned()
         }
     }
 
@@ -854,4 +882,161 @@ private struct OrchestratorLiveStatusRow: View {
             }
         }
     }
+}
+
+// MARK: - Selectable transcript text
+
+/// Non-editable, transparent NSTextView used as a SwiftUI text replacement that can be drag-selected.
+/// `mouseDown` runs AppKit's tracking loop until mouse-up, so when `super` returns the selection is final:
+/// non-empty -> copy + toast; empty (a plain click) -> `onClick`, because this view swallows the click the
+/// transcript's tap-to-expand would have received.
+final class OrchestratorSelectableTextView: NSTextView {
+    private static weak var active: OrchestratorSelectableTextView?
+    var onClick: () -> Void = {}
+    var onCopied: () -> Void = {}
+    var current: NSAttributedString?
+
+    convenience init() {
+        let storage = NSTextStorage()
+        let layout = NSLayoutManager() // TextKit 1: line limits and truncation
+        let container = NSTextContainer(size: NSSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        container.widthTracksTextView = false
+        storage.addLayoutManager(layout)
+        layout.addTextContainer(container)
+        self.init(frame: .zero, textContainer: container)
+        isEditable = false
+        isSelectable = true
+        isRichText = false
+        drawsBackground = false
+        textContainerInset = .zero
+        isVerticallyResizable = false
+        isHorizontallyResizable = false
+        isAutomaticLinkDetectionEnabled = false
+        isAutomaticDataDetectionEnabled = false
+        isAutomaticQuoteSubstitutionEnabled = false
+        selectedTextAttributes = [.backgroundColor: NSColor(OT.C.selected2)]
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    /// First responder only while a drag is tracked: an always-willing selectable text view in the panel makes
+    /// AppKit swallow the click that follows on the composer and the header.
+    private var tracking = false
+    override var acceptsFirstResponder: Bool { tracking }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        textContainer?.size = NSSize(width: newSize.width, height: .greatestFiniteMagnitude)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if let a = Self.active, a !== self { a.setSelectedRange(NSRange(location: 0, length: 0)) }
+        Self.active = self
+        tracking = true
+        super.mouseDown(with: event)
+        tracking = false
+        let r = selectedRange()
+        if r.length > 0, r.location + r.length <= string.utf16.count {
+            let pb = OrchestratorSelectableText.pasteboard
+            pb.clearContents()
+            pb.setString((string as NSString).substring(with: r), forType: .string)
+            onCopied()
+        } else {
+            onClick()
+        }
+    }
+
+    /// Used size at `width` (nil = unbounded) with the container's line limit and break mode. Measured in a fresh
+    /// text stack: resizing the live container leaves usedRect stale.
+    func fit(width: CGFloat?) -> CGSize {
+        guard let live = textContainer, let text = current else { return .zero }
+        let storage = NSTextStorage(attributedString: text)
+        let layout = NSLayoutManager()
+        let tc = NSTextContainer(size: NSSize(width: width ?? 100_000, height: .greatestFiniteMagnitude))
+        tc.lineFragmentPadding = 0
+        tc.maximumNumberOfLines = live.maximumNumberOfLines
+        tc.lineBreakMode = live.lineBreakMode
+        storage.addLayoutManager(layout)
+        layout.addTextContainer(tc)
+        layout.ensureLayout(for: tc)
+        let u = layout.usedRect(for: tc)
+        return CGSize(width: ceil(u.width), height: u.height)
+    }
+}
+
+struct OrchestratorSelectableText: NSViewRepresentable {
+    /// The system pasteboard; the snapshot harness swaps in a private one.
+    static var pasteboard: NSPasteboard = .general
+
+    let text: NSAttributedString
+    var maxLines = 0 // 0 = unlimited
+    var lineBreak: NSLineBreakMode = .byWordWrapping
+    var onClick: () -> Void = {}
+    var onCopied: () -> Void = {}
+
+    init(_ text: NSAttributedString, maxLines: Int = 0, lineBreak: NSLineBreakMode = .byWordWrapping,
+         onClick: @escaping () -> Void = {}, onCopied: @escaping () -> Void = {}) {
+        self.text = text; self.maxLines = maxLines; self.lineBreak = lineBreak
+        self.onClick = onClick; self.onCopied = onCopied
+    }
+
+    init(_ string: String, font: NSFont, color: NSColor, maxLines: Int = 0, lineBreak: NSLineBreakMode = .byWordWrapping,
+         onClick: @escaping () -> Void = {}, onCopied: @escaping () -> Void = {}) {
+        self.init(NSAttributedString(string: string, attributes: [.font: font, .foregroundColor: color]),
+                  maxLines: maxLines, lineBreak: lineBreak, onClick: onClick, onCopied: onCopied)
+    }
+
+    /// First baseline from the top, like Text's.
+    private var ascent: CGFloat {
+        ((text.length > 0 ? text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil) ?? NSFont.systemFont(ofSize: 12)).ascender
+    }
+
+    func makeNSView(context: Context) -> OrchestratorSelectableTextView {
+        let v = OrchestratorSelectableTextView()
+        apply(to: v)
+        return v
+    }
+
+    func updateNSView(_ v: OrchestratorSelectableTextView, context: Context) { apply(to: v) }
+
+    private func apply(to v: OrchestratorSelectableTextView) {
+        v.onClick = onClick
+        v.onCopied = onCopied
+        v.textContainer?.maximumNumberOfLines = maxLines
+        v.textContainer?.lineBreakMode = lineBreak
+        if v.current?.isEqual(to: text) != true { // keep the selection across polls
+            v.current = text
+            v.textStorage?.setAttributedString(text)
+        }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView v: OrchestratorSelectableTextView, context: Context) -> CGSize? {
+        let w = proposal.width.flatMap { $0.isFinite ? $0 : nil }
+        let s = v.fit(width: w)
+        return CGSize(width: min(s.width, w ?? s.width), height: s.height)
+    }
+}
+
+extension OrchestratorSelectableText {
+    /// Baseline-aligned like Text inside an HStack(.firstTextBaseline).
+    func baselineAligned() -> some View {
+        let a = ascent
+        return alignmentGuide(.firstTextBaseline) { _ in a }
+    }
+}
+
+/// proseAttributed's emphasis (bold, italic, code) as an NSAttributedString at the prose size.
+func orchestratorProseNS(_ a: AttributedString, size: CGFloat, color: NSColor, lineSpacing: CGFloat) -> NSAttributedString {
+    let out = NSMutableAttributedString()
+    let para = NSMutableParagraphStyle()
+    para.lineSpacing = lineSpacing
+    for run in a.runs {
+        let intent = run.inlinePresentationIntent ?? []
+        var font = intent.contains(.code) ? NSFont.monospacedSystemFont(ofSize: size - 1, weight: .regular) : NSFont.systemFont(ofSize: size)
+        if intent.contains(.stronglyEmphasized) { font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
+        if intent.contains(.emphasized) { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
+        out.append(NSAttributedString(string: String(a[run.range].characters),
+                                      attributes: [.font: font, .foregroundColor: color, .paragraphStyle: para]))
+    }
+    return out
 }

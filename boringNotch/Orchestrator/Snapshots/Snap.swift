@@ -174,7 +174,14 @@ private let pngA = testPNG(.systemTeal, .systemOrange), pngB = testPNG(.systemPu
 struct Snap {
     static func main() async {
         if CommandLine.arguments.contains("--transition") { await transition(); return }
-        if CommandLine.arguments.contains("--hittest") { await hitTest(); return }
+        if CommandLine.arguments.contains("--hittest") {
+            // A text view's mouseDown tracking loop stops the main run loop when it ends, which would end an async
+            // main (exit 0). Drive the loop here instead; a stopped spin just returns early.
+            var finished = false
+            Task { await hitTest(); finished = true }
+            while !finished { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+            return
+        }
         if CommandLine.arguments.contains("--closed") { await closed(); return }
         let useImageRenderer = CommandLine.arguments.contains("--image-renderer")
         let out = URL(fileURLWithPath: "/tmp/notch-snapshots")
@@ -423,6 +430,7 @@ struct Snap {
     /// expanded. Only actions that never POST: composer (starts typing, focuses the field), Chat|Runs
     /// segment, status capsule. Also reports what a click below the visible notch hits.
     static func hitTest() async {
+        setvbuf(stdout, nil, _IONBF, 0)
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory) // like the notch app (LSUIElement); windows stay offscreen
         let m = OrchestratorManager.shared
@@ -509,6 +517,63 @@ struct Snap {
                 OrchestratorTranscriptStore.shared.snapshotSet(blocks: longBlocks)
                 try? await Task.sleep(for: .milliseconds(300))
             }
+            if !expanded {
+                // Text selection: drag copies (private pasteboard) and never expands; a plain click expands.
+                // An NSTextView's mouseDown tracks until mouse-up, so the drag/up events are queued first.
+                OrchestratorSelectableText.pasteboard = NSPasteboard(name: .init("orch-snap-hittest"))
+                OrchestratorTranscriptStore.shared.snapshotSet(blocks: markerBlocks)
+                try? await Task.sleep(for: .milliseconds(1200))
+                host.layoutSubtreeIfNeeded()
+                func textViews(_ v: NSView) -> [NSTextView] { (v as? NSTextView).map { [$0] } ?? [] + v.subviews.flatMap(textViews) }
+                func pbString() -> String { OrchestratorSelectableText.pasteboard.string(forType: .string) ?? "" }
+                func ev(_ t: NSEvent.EventType, _ p: NSPoint) -> NSEvent? {
+                    NSEvent.mouseEvent(with: t, location: p, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                       windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+                }
+                func shot(_ name: String) {
+                    try? window.contentView?.bitmapImageRepForCachingDisplay(in: host.bounds).flatMap { rep -> Data? in
+                        host.cacheDisplay(in: host.bounds, to: rep); return rep.representation(using: .png, properties: [:])
+                    }?.write(to: URL(fileURLWithPath: "/tmp/notch-snapshots/\(name).png"))
+                }
+                /// Drag from +4 to +dx along the first line of `tv`; nil dx = plain click.
+                func gesture(_ tv: NSTextView, dx: CGFloat?) async {
+                    let r = tv.convert(tv.bounds, to: nil)
+                    let y = r.maxY - 6, x0 = r.minX + 4
+                    if let dx {
+                        if let e = ev(.leftMouseDragged, NSPoint(x: x0 + 60, y: y)) { NSApp.postEvent(e, atStart: false) }
+                        if let e = ev(.leftMouseUp, NSPoint(x: x0 + dx, y: y)) { NSApp.postEvent(e, atStart: false) }
+                    } else if let e = ev(.leftMouseUp, NSPoint(x: x0, y: y)) { NSApp.postEvent(e, atStart: false) }
+                    if let e = ev(.leftMouseDown, NSPoint(x: x0, y: y)) { window.sendEvent(e) }
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
+                if let tv = textViews(host).first(where: { $0.string.hasPrefix("The root frame") }) {
+                    OrchestratorSelectableText.pasteboard.clearContents()
+                    OrchestratorExpand.shared.reset()
+                    await gesture(tv, dx: 140)
+                    let got = pbString()
+                    let copies = !got.isEmpty && tv.string.hasPrefix(got)
+                    let noExpand = OrchestratorExpand.shared.level(for: vm) == .open
+                    print("drag copies: \(copies) [\(got)]")
+                    print("drag does not expand: \(noExpand)")
+                    shot("hittest-selection")
+                    await gesture(tv, dx: nil)
+                    let plain = OrchestratorExpand.shared.level(for: vm) == .expanded
+                    print("plain click expands: \(plain)")
+                    ok = ok && copies && noExpand && plain
+                    OrchestratorExpand.shared.releaseKey(window)
+                    window.makeFirstResponder(nil)
+                    OrchestratorExpand.shared.setLevel(.open, vm: vm, window: window)
+                    try? await Task.sleep(for: .milliseconds(600))
+                    OrchestratorExpand.shared.reset()
+                    window.contentView = NSHostingView(rootView: root) // fresh tree, like the remount check below
+                    try? await Task.sleep(for: .milliseconds(600))
+                } else {
+                    print("prose text view: not found")
+                    ok = false
+                }
+                OrchestratorTranscriptStore.shared.snapshotSet(blocks: longBlocks)
+                try? await Task.sleep(for: .milliseconds(300))
+            }
             var line: [String] = []
 
             // The regression: an AppKit platform view (the TextField) under the composer took the click.
@@ -539,7 +604,7 @@ struct Snap {
                 OrchestratorExpand.shared.setLevel(.open, vm: vm, window: window)
                 OrchestratorExpand.shared.reset()
                 window.contentView = NSHostingView(rootView: root)
-                try? await Task.sleep(for: .milliseconds(500))
+                try? await Task.sleep(for: .milliseconds(1500))
                 let survives = typedIn && OrchestratorTranscriptStore.shared.draft == "keep this draft"
                 line.append("draft survives level change and remount: \(survives)")
                 ok = ok && survives
@@ -572,7 +637,7 @@ struct Snap {
                 // click before the key gate opened). Never insert text: edits autosave via POST.
                 OrchestratorNotesStore.shared.snapshotSet(text: "line one\nline two", status: .idle)
                 m.notesOpen = true
-                try? await Task.sleep(for: .milliseconds(400))
+                try? await Task.sleep(for: .milliseconds(1200))
                 let ex = host.bounds.width / 2 + vm.notchSize.width / 2 - 31 - 150, ey = (max(24, vm.closedNotchSize.height) + vm.notchSize.height - 12) / 2
                 let eHit = window.contentView?.superview?.hitTest(NSPoint(x: ex, y: H - ey)).map { String(describing: type(of: $0)) } ?? "nil"
                 var typedN: [Bool] = []
