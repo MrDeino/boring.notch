@@ -73,7 +73,7 @@ func detectPrompt(screen: String) -> [PromptOption] {
     let trim = CharacterSet(charactersIn: " \u{a0}\t\r│")
     var run: [PromptOption] = []
     var marked = false
-    var best: ([PromptOption], Bool) = ([], false)
+    var best: [PromptOption] = []
     for raw in screen.split(separator: "\n", omittingEmptySubsequences: false).suffix(25) {
         let s = raw.trimmingCharacters(in: trim)
         guard let m = try? line.wholeMatch(in: s), let n = Int(m.2) else { run = []; marked = false; continue }
@@ -81,7 +81,7 @@ func detectPrompt(screen: String) -> [PromptOption] {
         guard n == run.count + 1 else { run = []; marked = false; continue }
         run.append(PromptOption(number: n, label: String(m.3).trimmingCharacters(in: trim)))
         if m.1 != nil { marked = true }
-        best = (run, marked)
+        if run.count >= 2 && marked { best = run }
     }
-    return best.0.count >= 2 && best.1 ? best.0 : []
+    return best
 }

@@ -39,4 +39,5 @@ precondition(detectPrompt(screen: opts.replacingOccurrences(of: "❯ 1", with: "
 precondition(detectPrompt(screen: opts.split(separator: "\n").map { "│ \($0) │" }.joined(separator: "\n")) == want)
 precondition(detectPrompt(screen: "1. foo\n2. bar\n").isEmpty)
 precondition(detectPrompt(screen: "❯ 1. x\n").isEmpty)
+precondition(detectPrompt(screen: opts + "1. foo\n") == want)
 print("OK")
