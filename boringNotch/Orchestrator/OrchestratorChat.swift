@@ -20,6 +20,10 @@ final class OrchestratorTranscriptStore: ObservableObject {
     @Published private(set) var pending: [PendingMessage] = []
     /// PNG attachments for the next message; in the store so the compact and expanded composers share them.
     @Published private(set) var attachments: [Data] = []
+    /// Composer text and its "pulled in from the terminal" flag live here (like the chips) so they survive
+    /// level changes, notch close/reopen and tab switches, which remount the chat view.
+    @Published var draft = "" { didSet { if draft.isEmpty && draftFromTerminal { draftFromTerminal = false } } }
+    @Published var draftFromTerminal = false
     private var knownUserIDs: Set<String> = []
     private var nextPendingID = 0
     private var draining = false
@@ -183,7 +187,9 @@ final class OrchestratorTranscriptStore: ObservableObject {
 #if ORCH_SNAPSHOT
 extension OrchestratorTranscriptStore {
     /// Snapshot harness only: fixture blocks instead of /api/chat/blocks.
-    func snapshotSet(blocks: [ChatBlock], pending: [PendingMessage] = [], attachments: [Data] = []) {
+    func snapshotSet(blocks: [ChatBlock], pending: [PendingMessage] = [], attachments: [Data] = [], draft: String = "") {
+        self.draft = draft
+        draftFromTerminal = false
         self.attachments = attachments
         self.blocks = blocks
         self.pending = pending
@@ -194,12 +200,10 @@ extension OrchestratorTranscriptStore {
 
 struct OrchestratorChatView: View {
     @ObservedObject var manager = OrchestratorManager.shared
-    @State private var draft = ""
     @EnvironmentObject var vm: BoringViewModel
     @State private var keyWindow: NSWindow?
     @State private var anchor = NSView()
     @FocusState private var fieldFocused: Bool
-    @State private var fromTerminal = false
     @State private var keyMonitor: Any?
     @State private var dropTargeted = false
     @State private var tagGen = 0
@@ -249,7 +253,6 @@ struct OrchestratorChatView: View {
         // Focus loss ends typing; clicking elsewhere resigns key (above). Pointer leaving keeps it (INT-06).
         .onChange(of: fieldFocused) { _, f in if !f { stopTyping() } }
         .onChange(of: fieldFocused) { _, f in focusChanged(f) }
-        .onChange(of: draft) { _, d in if d.isEmpty { fromTerminal = false } }
         .onChange(of: manager.chatRunning) { _, running in if !running { stopTyping() } }
         .onChange(of: manager.offline) { _, off in if off { stopTyping() } }
         .onChange(of: manager.promptOptions) { _, o in if !o.isEmpty { stopTyping() } }
@@ -316,8 +319,8 @@ struct OrchestratorChatView: View {
                     Button("Edit") {
                         if let r = store.restore(p.id) {
                             let t = r.text
-                            draft = draft.isEmpty ? t : t + " " + draft
-                            fromTerminal = false
+                            store.draft = store.draft.isEmpty ? t : t + " " + store.draft
+                            store.draftFromTerminal = false
                             if showComposer { startTyping() }
                         }
                     }.buttonStyle(.plain)
@@ -346,7 +349,7 @@ struct OrchestratorChatView: View {
 
     /// Claude's box text offered as ghost text (only while the field is empty and it is not a terminal draft).
     private var suggestion: String? {
-        guard draft.isEmpty, !store.boxIsDraft, let l = store.inputLine, !l.isEmpty else { return nil }
+        guard store.draft.isEmpty, !store.boxIsDraft, let l = store.inputLine, !l.isEmpty else { return nil }
         return l
     }
 
@@ -355,7 +358,7 @@ struct OrchestratorChatView: View {
             if !store.attachments.isEmpty { chipRow }
             HStack(spacing: 6) {
                 HStack(spacing: 0) {
-                    if fromTerminal && !draft.isEmpty {
+                    if store.draftFromTerminal && !store.draft.isEmpty {
                         Text(verbatim: "from terminal · ").font(OT.F.ui).foregroundStyle(OT.C.text5)
                     }
                     ZStack(alignment: .leading) {
@@ -363,7 +366,7 @@ struct OrchestratorChatView: View {
                         // The AppKit-backed TextField swallows clicks even under allowsHitTesting(false) and a
                         // tap overlay, so it only exists while typing; otherwise a Text shows the draft.
                         if manager.wantsKeyboard {
-                            TextField("", text: $draft)
+                            TextField("", text: $store.draft)
                                 .textFieldStyle(.plain)
                                 .font(OT.F.ui)
                                 .foregroundStyle(OT.C.text)
@@ -372,7 +375,7 @@ struct OrchestratorChatView: View {
                                 .onExitCommand { stopTyping() }
                                 .onAppear { DispatchQueue.main.async { if manager.wantsKeyboard { fieldFocused = true } } }
                         } else {
-                            Text(verbatim: draft).font(OT.F.ui).foregroundStyle(OT.C.text)
+                            Text(verbatim: store.draft).font(OT.F.ui).foregroundStyle(OT.C.text)
                                 .lineLimit(1).truncationMode(.head)
                             Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() }
                         }
@@ -450,10 +453,10 @@ struct OrchestratorChatView: View {
     @ViewBuilder private var ghostLayer: some View {
         if let g = suggestion {
             Text(verbatim: g).font(OT.F.ui).foregroundStyle(OT.C.text6).lineLimit(1).allowsHitTesting(false)
-        } else if draft.isEmpty, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
+        } else if store.draft.isEmpty, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
             (Text(verbatim: "from terminal · ").foregroundStyle(OT.C.text5) + Text(verbatim: l).foregroundStyle(OT.C.text6))
                 .font(OT.F.ui).lineLimit(1).allowsHitTesting(false)
-        } else if draft.isEmpty {
+        } else if store.draft.isEmpty {
             Text("Message orchestrator").font(OT.F.ui).foregroundStyle(OT.C.text6).allowsHitTesting(false)
         }
     }
@@ -475,7 +478,7 @@ struct OrchestratorChatView: View {
     }
 
     private var sendButton: some View {
-        let blank = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.attachments.isEmpty
+        let blank = store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.attachments.isEmpty
         return Button { submit() } label: {
             ZStack {
                 Circle().fill(fieldFocused ? OT.C.claude : OT.C.selected2)
@@ -488,13 +491,13 @@ struct OrchestratorChatView: View {
         .disabled(blank)
     }
 
-    /// Terminal draft -> field on focus; key monitor lifecycle.
+    /// Terminal store.draft -> field on focus; key monitor lifecycle.
     private func focusChanged(_ f: Bool) {
         guard f else { removeKeyMonitor(); return }
         installKeyMonitor()
-        if draft.isEmpty, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
-            draft = l
-            fromTerminal = true
+        if store.draft.isEmpty, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
+            store.draft = l
+            store.draftFromTerminal = true
         }
     }
 
@@ -506,13 +509,13 @@ struct OrchestratorChatView: View {
             guard fieldFocused, event.window === keyWindow else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
             if (event.keyCode == 48 || event.keyCode == 124), mods.isEmpty, let g = suggestion {
-                draft = g
-                fromTerminal = false
+                store.draft = g
+                store.draftFromTerminal = false
                 return nil
             }
             if event.keyCode == 32, mods == .control {
                 let tv = event.window?.firstResponder as? NSTextView
-                draft = clearToCaret(draft, caretUTF16: tv?.selectedRange().location)
+                store.draft = clearToCaret(store.draft, caretUTF16: tv?.selectedRange().location)
                 DispatchQueue.main.async { tv?.setSelectedRange(NSRange(location: 0, length: 0)) }
                 flashTag("line cleared", error: false, ms: 1200)
                 return nil
@@ -580,17 +583,17 @@ struct OrchestratorChatView: View {
     }
 
     private func submit() {
-        let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = store.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty || !store.attachments.isEmpty else { stopTyping(); return }
         // A terminal draft not pulled in on focus would be C-u'd unseen: pull it in front and wait for a second Enter.
-        if !fromTerminal, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
-            draft = l + " " + draft
-            fromTerminal = true
+        if !store.draftFromTerminal, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
+            store.draft = l + " " + store.draft
+            store.draftFromTerminal = true
             return
         }
         store.enqueue(t, images: store.takeAttachments())
-        draft = ""
-        fromTerminal = false
+        store.draft = ""
+        store.draftFromTerminal = false
     }
 }
 

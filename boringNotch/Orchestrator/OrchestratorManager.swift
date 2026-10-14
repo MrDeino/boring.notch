@@ -71,8 +71,8 @@ final class OrchestratorManager: ObservableObject {
 
     private func postNow(_ p: OrchestratorPost) async -> Bool {
         let code = (try? await sendOrchestratorPost(p, base: Self.baseURL, session: session)) ?? nil
-        if code == 200 { await refresh(); return true }
-        if code == 409 { await refresh() }
+        if code == 200 { await refresh(fresh: true); return true }
+        if code == 409 { await refresh(fresh: true) }
         return false
     }
 
@@ -101,9 +101,9 @@ final class OrchestratorManager: ObservableObject {
         sending = true
         defer { sending = false }
         for k in keys {
-            guard (try? await sendOrchestratorPost(.key(k), base: Self.baseURL, session: session)) == 200 else { await refresh(); return false }
+            guard (try? await sendOrchestratorPost(.key(k), base: Self.baseURL, session: session)) == 200 else { await refresh(fresh: true); return false }
         }
-        await refresh()
+        await refresh(fresh: true)
         return true
     }
 

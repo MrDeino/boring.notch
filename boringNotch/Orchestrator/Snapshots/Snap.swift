@@ -377,6 +377,23 @@ struct Snap {
                 let focused = window.firstResponder is NSTextView
                 line.append("composer click starts typing: \(typed.contains(true)), field focused: \(focused)")
                 ok = ok && typed.contains(true) && focused
+                // The draft lives in the store: it must outlive a level change and a fresh view tree.
+                (window.firstResponder as? NSTextView)?.insertText("keep this draft", replacementRange: NSRange(location: NSNotFound, length: 0))
+                try? await Task.sleep(for: .milliseconds(100))
+                let typedIn = OrchestratorTranscriptStore.shared.draft == "keep this draft"
+                OrchestratorExpand.shared.releaseKey(window)
+                m.endTyping()
+                window.makeFirstResponder(nil)
+                OrchestratorExpand.shared.setLevel(.expanded, vm: vm, window: window)
+                try? await Task.sleep(for: .milliseconds(500))
+                OrchestratorExpand.shared.setLevel(.open, vm: vm, window: window)
+                OrchestratorExpand.shared.reset()
+                window.contentView = NSHostingView(rootView: root)
+                try? await Task.sleep(for: .milliseconds(500))
+                let survives = typedIn && OrchestratorTranscriptStore.shared.draft == "keep this draft"
+                line.append("draft survives level change and remount: \(survives)")
+                ok = ok && survives
+                OrchestratorTranscriptStore.shared.draft = ""
             }
             sub.cancel()
             OrchestratorExpand.shared.releaseKey(window)
