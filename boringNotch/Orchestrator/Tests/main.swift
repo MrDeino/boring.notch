@@ -40,4 +40,5 @@ precondition(detectPrompt(screen: opts.split(separator: "\n").map { "│ \($0) �
 precondition(detectPrompt(screen: "1. foo\n2. bar\n").isEmpty)
 precondition(detectPrompt(screen: "❯ 1. x\n").isEmpty)
 precondition(detectPrompt(screen: opts + "1. foo\n") == want)
+runPhase3Tests()
 print("OK")
