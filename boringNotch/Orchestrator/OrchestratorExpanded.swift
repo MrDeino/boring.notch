@@ -187,7 +187,7 @@ struct OrchestratorExpandedView: View {
             VStack(spacing: 6) {
                 // Open: the card takes the whole column. Expanded: the transcript stays above it.
                 if !(open && promptVisible) {
-                    OrchestratorChatView(showComposer: !promptVisible, proseLineLimit: open ? 4 : nil, maxRows: open ? 12 : 60, expanded: !open)
+                    OrchestratorChatView(showComposer: !promptVisible, proseLineLimit: open ? 4 : nil, maxRows: 60, expanded: !open)
                         .frame(minHeight: promptVisible ? 72 : 0)
                 }
                 if promptVisible { OrchestratorPromptCard() }

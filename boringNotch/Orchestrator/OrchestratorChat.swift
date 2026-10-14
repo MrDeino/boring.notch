@@ -238,6 +238,18 @@ struct OrchestratorChatView: View {
                     }
                     .defaultScrollAnchor(.bottom)
                     .onChange(of: pinKey) { _, _ in proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                    // A level change reflows the rows (width and height); the ScrollView keeps its offset, which
+                    // would scroll the newest row out of view when the content shrinks. Stay on the newest row.
+                    .onChange(of: g.size) { _, _ in
+                        // Next turn: the content has not been laid out at the new size yet when this fires.
+                        Task { @MainActor in
+                            for ms in [0, 80] {
+                                try? await Task.sleep(for: .milliseconds(ms))
+                                var t = Transaction(); t.disablesAnimations = true
+                                withTransaction(t) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                            }
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
@@ -619,16 +631,19 @@ private struct ChatBlockRow: View {
                     .background(OT.C.raised, in: UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 12, bottomTrailingRadius: 4, topTrailingRadius: 12))
                     .containerRelativeFrame(.horizontal, alignment: .trailing) { w, _ in w * 0.8 }
             }
+            .transition(.identity) // a level change swaps this branch in place; no cross-fade
         } else if hasDiffCard {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 marker.frame(width: 10, alignment: .center)
                 diffCard.frame(maxWidth: .infinity, alignment: .leading)
             }
+            .transition(.identity)
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 marker.frame(width: 10, alignment: .center)
                 content.frame(maxWidth: .infinity, alignment: .leading)
             }
+            .transition(.identity)
         }
     }
 

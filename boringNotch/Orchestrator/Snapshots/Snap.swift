@@ -356,19 +356,27 @@ struct Snap {
             let y0 = Int(44 * k), y1 = min(rep.pixelsHigh, Int((vm.notchSize.height - 12) * k))
             var n = 0
             if y1 > y0 { for y in y0..<y1 { for x in x0..<x1 where (rep.colorAt(x: x, y: y)?.brightnessComponent ?? 0) > 0.6 { n += 1 } } }
+            // Newest row: the band just above the composer must hold lit pixels (bubble or compact row).
+            var b = 0
+            let by0 = Int(max(0, vm.notchSize.height - 100) * k), by1 = min(rep.pixelsHigh, Int((vm.notchSize.height - 45) * k))
+            if by1 > by0 { for y in by0..<by1 { for x in Int(40 * k)..<min(rep.pixelsWide, Int(620 * k)) where (rep.colorAt(x: x, y: y)?.brightnessComponent ?? 0) > 0.3 { b += 1 } } }
+            newest = b
             return (n, rep)
         }
+        var newest = 0
         let baseline = measure().0
-        print("live baseline open text=\(baseline)")
+        let newestBase = newest
+        print("live baseline open text=\(baseline) newest=\(newestBase)")
         var bad: [String] = []
         for (phase, level) in [("grow", ExpandLevel.expanded), ("collapse", .open)] {
             OrchestratorExpand.shared.setLevel(level, vm: vm, window: window)
             var prev = 0
-            for t in [0, 30, 60, 100, 150, 250, 400, 700] {
+            for t in [0, 30, 60, 120, 250, 400, 700, 1200] {
                 try? await Task.sleep(for: .milliseconds(t - prev)); prev = t
                 let (n, rep) = measure()
-                print("live \(phase) t=\(t)ms text=\(n)")
-                if n * 2 < baseline { bad.append("\(phase) \(t)ms") }
+                print("live \(phase) t=\(t)ms text=\(n) newest=\(newest) h=\(Int(vm.notchSize.height)) lvl=\(OrchestratorExpand.shared.level(for: vm))")
+                if n * 2 < baseline || (phase == "collapse" && newest * 4 < newestBase) { bad.append("\(phase) \(t)ms") }
+                if [0, 30, 60, 120, 250, 700, 1200].contains(t) { try? rep?.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("transition-live-\(phase)-\(t).png")) }
                 if t == 60 { try? rep?.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("transition-live-\(phase)-60.png")) }
             }
         }
