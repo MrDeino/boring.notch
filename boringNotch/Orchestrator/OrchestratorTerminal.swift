@@ -27,8 +27,7 @@ struct OrchestratorTerminalView: NSViewRepresentable {
         coordinator.poll?.cancel()
         nsView.stopLoading()
         nsView.load(URLRequest(url: URL(string: "about:blank")!)) // releases ttyd's single client slot
-        OrchestratorKeyGate.terminalWantsKey = false
-        nsView.window?.resignKey()
+        OrchestratorExpand.shared.releaseKey(nsView.window)
     }
 
     @MainActor

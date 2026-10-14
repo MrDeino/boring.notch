@@ -12,6 +12,7 @@ final class OrchestratorExpand: ObservableObject {
     private var shrinkTask: Task<Void, Never>?
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private var previousApp: NSRunningApplication?
     private var vms: [String: WeakVM] = [:]
     private final class WeakVM { weak var vm: BoringViewModel?; init(_ v: BoringViewModel) { vm = v } }
     private final class WeakWindow { weak var w: NSWindow?; init(_ w: NSWindow?) { self.w = w } }
@@ -30,6 +31,7 @@ final class OrchestratorExpand: ObservableObject {
         let e = expandedExtra(screenHeight: window.screen?.frame.height ?? 900, openHeight: openNotchSize.height)
         extra[k] = e
         windows[k] = WeakWindow(window)
+        if let a = NSWorkspace.shared.frontmostApplication, a != NSRunningApplication.current { previousApp = a }
         shrinkTask?.cancel()
         window.setFrame(pinnedFrame(current: window.frame, newHeight: windowHeight(base: windowSize.height, notchHeight: openNotchSize.height + e, openHeight: openNotchSize.height)), display: true)
         expanded.insert(k)
@@ -39,11 +41,11 @@ final class OrchestratorExpand: ObservableObject {
         withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) { vm.notchSize = openSize(for: k) }
     }
 
-    func collapse(vm: BoringViewModel) {
+    func collapse(vm: BoringViewModel, refocus: Bool = true) {
         let k = key(vm)
         guard expanded.contains(k) else { return }
         let win = windows[k]?.w
-        finish(k)
+        finish(k, refocus: refocus)
         if vm.notchState == .open { withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) { vm.notchSize = openNotchSize } }
         shrinkTask?.cancel()
         // Let the spring finish before the window stops covering the expanded area.
@@ -70,11 +72,12 @@ final class OrchestratorExpand: ObservableObject {
     private func installMonitors() {
         guard globalMonitor == nil else { return }
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        // Global = click in another app, which takes focus itself; don't hand it back to previousApp.
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] _ in
-            Task { @MainActor in self?.collapseIfOutside() }
+            Task { @MainActor in self?.collapseIfOutside(refocus: false) }
         }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] e in
-            Task { @MainActor in self?.collapseIfOutside() }
+            Task { @MainActor in self?.collapseIfOutside(refocus: true) }
             return e
         }
     }
@@ -86,25 +89,33 @@ final class OrchestratorExpand: ObservableObject {
     }
 
     /// Outside click: collapse, then close the notch (keep-open is released by collapse).
-    private func collapseIfOutside() {
+    private func collapseIfOutside(refocus: Bool) {
         let p = NSEvent.mouseLocation
         for k in Array(expanded) {
             guard let vm = vms[k]?.vm, let w = windows[k]?.w else { continue }
             if isOutsideNotch(point: p, windowFrame: w.frame, notchWidth: vm.notchSize.width, notchHeight: vm.notchSize.height) {
-                collapse(vm: vm)
+                collapse(vm: vm, refocus: refocus)
                 vm.close()
             }
         }
     }
 
     /// Shared bookkeeping: exactly one endInteraction per expand.
-    private func finish(_ k: String) {
+    private func finish(_ k: String, refocus: Bool = true) {
         expanded.remove(k)
-        OrchestratorKeyGate.terminalWantsKey = false
-        windows[k]?.w?.resignKey()
+        releaseKey(windows[k]?.w, refocus: refocus)
         extra[k] = nil
         if expanded.isEmpty { removeMonitors() }
         SharingStateManager.shared.endInteraction()
+    }
+
+    /// Give keyboard focus back: resignKey() is only a notification hook, so drop the
+    /// first responder and reactivate the app that was frontmost when we expanded.
+    func releaseKey(_ w: NSWindow?, refocus: Bool = true) {
+        OrchestratorKeyGate.terminalWantsKey = false
+        guard let w, w.isKeyWindow else { return }
+        w.makeFirstResponder(nil)
+        if refocus { previousApp?.activate() }
     }
 }
 
