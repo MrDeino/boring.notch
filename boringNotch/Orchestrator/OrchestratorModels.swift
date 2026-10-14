@@ -6,15 +6,24 @@ struct ChatResponse: Decodable {
     let screen: String?
 }
 
-/// Last `maxLines` non-blank lines of a terminal screen, trailing spaces/NBSP trimmed.
+/// Last `maxLines` non-blank conversation lines of a terminal screen, trailing spaces/NBSP trimmed.
+/// Claude Code's input box (a rule, the `❯` line, a closing rule, status lines below) and every
+/// `───` rule line are dropped; an unsent draft in the box goes with it.
 func chatTail(screen: String, maxLines: Int) -> [String] {
     let junk = CharacterSet(charactersIn: " \u{a0}\t\r")
-    let lines = screen.split(separator: "\n", omittingEmptySubsequences: false).compactMap { line -> String? in
+    var lines = screen.split(separator: "\n", omittingEmptySubsequences: false).compactMap { line -> String? in
         var s = Substring(line)
         while let l = s.unicodeScalars.last, junk.contains(l) { s = s.dropLast() }
         return s.isEmpty ? nil : String(s)
     }
-    return Array(lines.suffix(maxLines))
+    let edge = CharacterSet(charactersIn: " \u{a0}")
+    func isRule(_ s: String) -> Bool { s.trimmingCharacters(in: edge).hasPrefix("───") }
+    // Requiring a closing rule keeps a live prompt's "❯ 1. Yes" (footer, no rule below) on screen.
+    if let top = lines.indices.last(where: { i in
+        isRule(lines[i]) && i + 1 < lines.count && lines[i + 1].trimmingCharacters(in: edge).hasPrefix("❯")
+            && lines[(i + 2)...].contains(where: isRule)
+    }) { lines.removeSubrange(top...) }
+    return Array(lines.filter { !isRule($0) }.suffix(maxLines))
 }
 
 /// GET /api/state. Only runs and usage are decoded; everything else is ignored.

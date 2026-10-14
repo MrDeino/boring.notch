@@ -12,9 +12,10 @@ precondition(chatTail(screen: "1\n2\n3\n4", maxLines: 2) == ["3", "4"])
 precondition(chatTail(screen: "x\u{a0}\u{a0} \ny \u{a0}", maxLines: 5) == ["x", "y"])
 
 let box = "─────────────────  \n❯\u{a0}merge 199" + String(repeating: " ", count: 150) + "\n─────────────────  \n  ? for shortcuts   \n"
-let t = chatTail(screen: box, maxLines: 8)
-precondition(t.count == 4)
-precondition(t[1] == "❯\u{a0}merge 199")
+precondition(chatTail(screen: box, maxLines: 8).isEmpty)
+precondition(chatTail(screen: "⏺ hi\n  ─────────────\nok\n" + box, maxLines: 8) == ["⏺ hi", "ok"])
+// A live prompt (no closing rule under the ❯ line) stays visible.
+precondition(chatTail(screen: "─────\n❯ 1. Yes\n  2. No\n Esc to cancel\n", maxLines: 8) == ["❯ 1. Yes", "  2. No", " Esc to cancel"])
 
 let st = try! d.decode(StateResponse.self, from: Data(#"{"now":1,"sessions":[{"a":1}],"runs":[{"id":"x","project":"notch","prompt":"/gsd go\nmore","state":"running","pid":3,"denials":[]},{"id":"y","state":"done"}],"usage":{"five_hour":{"used_percentage":9,"resets_at":1791954000},"seven_day":{"used_percentage":14,"resets_at":1792116000}}}"#.utf8))
 precondition(st.runs!.count == 2 && st.runs![0].state == "running")
@@ -47,6 +48,9 @@ func fixture(_ n: String) -> String {
 func po(_ l: [(Int, String)]) -> [PromptOption] { l.map { PromptOption(number: $0.0, label: $0.1) } }
 precondition(detectPrompt(screen: fixture("question")) == po([(1, "apple"), (2, "banana"), (3, "cherry"), (4, "Type something."), (5, "Chat about this")])) // question.txt
 precondition(detectPrompt(screen: fixture("permission")) == po([(1, "Yes"), (2, "Yes, and always allow access to /tmp/notch-fixture.WJuB from this project"), (3, "Yes, and switch to auto mode · auto mode handles these prompts for you"), (4, "No")])) // permission.txt
+precondition(chatTail(screen: fixture("inputbox"), maxLines: 8).isEmpty) // inputbox.txt: real screen tail from the notch
+precondition(chatTail(screen: "⏺ Done, merged.\n\n" + fixture("inputbox"), maxLines: 8) == ["⏺ Done, merged."])
+precondition(detectPrompt(screen: fixture("inputbox")).isEmpty)
 precondition(detectPrompt(screen: opts + "a\nb\nc\nd\ne\n").isEmpty)
 precondition(detectPrompt(screen: "1. a\n" + "────\n❯ 2. foo\n────\n  ? for shortcuts\n").isEmpty)
 precondition(detectPrompt(screen: "────\n❯\u{a0}1. do X\n  2. do Y\n────\n").isEmpty)
