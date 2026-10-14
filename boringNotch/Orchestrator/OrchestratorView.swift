@@ -5,6 +5,7 @@ struct OrchestratorView: View {
     @State private var draft = ""
     @State private var confirmEnd = false
     @State private var keyWindow: NSWindow?
+    @State private var anchor = NSView()
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -32,6 +33,7 @@ struct OrchestratorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 8)
+        .background(WindowAnchor(view: anchor))
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { n in
             if let w = keyWindow, (n.object as? NSWindow) === w { stopTyping() }
         }
@@ -112,14 +114,14 @@ struct OrchestratorView: View {
         .controlSize(.small)
     }
 
+    /// Typing is only committed once this view's own panel is actually key, so it can't latch on.
     private func startTyping() {
-        manager.beginTyping()
-        let w = NSApp.windows.first {
-            $0 is BoringNotchSkyLightWindow && $0.isVisible && $0.frame.contains(NSEvent.mouseLocation)
-        }
+        guard let w = anchor.window else { return }
+        manager.beginTyping() // canBecomeKey reads it
+        w.makeKey()
+        guard w.isKeyWindow else { manager.endTyping(); return }
         keyWindow = w
-        w?.makeKey()
-        DispatchQueue.main.async { fieldFocused = true }
+        DispatchQueue.main.async { if manager.wantsKeyboard { fieldFocused = true } }
     }
 
     private func stopTyping() {
@@ -168,6 +170,13 @@ struct OrchestratorView: View {
         default: return .gray
         }
     }
+}
+
+/// Exposes the hosting NSWindow (read via `view.window` when needed).
+private struct WindowAnchor: NSViewRepresentable {
+    let view: NSView
+    func makeNSView(context: Context) -> NSView { view }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// Header button that shows/hides the runs panel; from another tab it jumps to Orchestrator first.
