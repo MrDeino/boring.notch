@@ -42,6 +42,9 @@ func runPhase9Tests() {
     precondition(visibleApproval(ap, ignoredId: "b", until: until, now: t0) == ap)
     precondition(visibleApproval(nil, ignoredId: "a", until: until, now: t0) == nil)
 
+    precondition(approvalApplyIsFresh(startedAt: nil, current: 5))
+    precondition(approvalApplyIsFresh(startedAt: 5, current: 5))
+    precondition(!approvalApplyIsFresh(startedAt: 4, current: 5))
     precondition(approvalVisibleToUser(pending: true, notchClosed: true, hideOnClosed: false, orchestratorTab: false))
     precondition(!approvalVisibleToUser(pending: true, notchClosed: true, hideOnClosed: true, orchestratorTab: true))
     precondition(approvalVisibleToUser(pending: true, notchClosed: false, hideOnClosed: true, orchestratorTab: true))

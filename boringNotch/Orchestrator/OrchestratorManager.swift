@@ -226,7 +226,7 @@ final class OrchestratorManager: ObservableObject {
                             // First blocks event of a connection replaces; pending rows survive (store keeps them).
                             OrchestratorTranscriptStore.shared.ingestBlocks(running: running, blocks: blocks, reset: first || reset)
                             first = false
-                        case .approval(let a): self.applyApproval(a)
+                        case .approval(let a): self.applySeq += 1; self.applyApproval(a) // joins the sequence so an older poll cannot overwrite it
                         }
                         if !self.hasLoaded { self.hasLoaded = true }
                     }
@@ -266,12 +266,13 @@ final class OrchestratorManager: ObservableObject {
     }
 
     private func load() async {
+        let started = applySeq
         do {
             async let chat: ChatResponse = get("api/chat")
             async let state: StateResponse = get("api/state")
             let (r, st) = try await (chat, state)
             applyState(st)
-            await applyChat(r)
+            await applyChat(r, polledAt: started)
         } catch {
             applyOffline()
         }
@@ -287,13 +288,14 @@ final class OrchestratorManager: ObservableObject {
 
     /// Reused by the SSE stream (08-02): screen/input first, then blocks, then the prompt that needs them.
     private var applySeq = 0
-    private func applyChat(_ r: ChatResponse) async {
+    private func applyChat(_ r: ChatResponse, polledAt: Int? = nil) async {
+        let approvalFresh = approvalApplyIsFresh(startedAt: polledAt, current: applySeq)
         applySeq += 1
         let mine = applySeq
         if offline { offline = false }
         let running = r.running ?? false
         if chatRunning != running { chatRunning = running }
-        if r.hasApproval { applyApproval(r.approval) } else if !running { applyApproval(nil) } else { recomputeApproval() }
+        if !approvalFresh { recomputeApproval() } else if r.hasApproval { applyApproval(r.approval) } else if !running { applyApproval(nil) } else { recomputeApproval() }
         let s = r.screen ?? ""
         if screen != s { screen = s }
         let cp = running ? r.context?.percent.flatMap { $0 >= 0 ? $0 : nil } : nil

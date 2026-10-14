@@ -156,6 +156,10 @@ func visibleApproval(_ incoming: OrchestratorApproval?, ignoredId: String?, unti
     return a.id == ignoredId && now < until ? nil : a
 }
 
+/// A poll that began at `startedAt` may set the approval only if nothing (chat or SSE approval event) applied since.
+/// Stream events pass nil: always fresh.
+func approvalApplyIsFresh(startedAt: Int?, current: Int) -> Bool { startedAt == nil || startedAt == current }
+
 /// One display line: whitespace runs collapsed, 300 chars max; falls back to the description.
 func approvalCommandLine(_ a: OrchestratorApproval) -> String {
     func clean(_ s: String?) -> String {
