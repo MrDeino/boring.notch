@@ -247,7 +247,10 @@ final class OrchestratorManager: ObservableObject {
     }
 
     /// Reused by the SSE stream (08-02): screen/input first, then blocks, then the prompt that needs them.
+    private var applySeq = 0
     private func applyChat(_ r: ChatResponse) async {
+        applySeq += 1
+        let mine = applySeq
         if offline { offline = false }
         let running = r.running ?? false
         if chatRunning != running { chatRunning = running }
@@ -263,6 +266,7 @@ final class OrchestratorManager: ObservableObject {
         let newPrompt = pc != nil && pc != prompt || !po.isEmpty && po != promptOptions
         if shouldFetchBlocks(streaming: streaming, running: running, newPrompt: newPrompt) {
             await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, chatRunning: running)
+            guard mine == applySeq else { return } // a newer chat payload applied while we were suspended
         }
         if promptOptions != po { promptOptions = po }
         if prompt != pc { prompt = pc }
