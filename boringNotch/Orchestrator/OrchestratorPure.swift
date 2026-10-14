@@ -131,6 +131,13 @@ func approvalAnswer(allow: Bool, pendingId: String?, answeringId: String, option
     return plain ? .send("1") : .openCard
 }
 
+/// KeyboardShortcuts rejects Option-only combos for sandboxed apps on macOS 15.0/15.1 only.
+func approvalNeedsCtrlFallback(major: Int, minor: Int) -> Bool { major == 15 && minor <= 1 }
+
+func approvalKeyLabels(ctrl: Bool) -> (allow: String, deny: String) {
+    ctrl ? (allow: "⌃⌥⏎", deny: "⌃⌥⎋") : (allow: "⌥⏎", deny: "⌥⎋")
+}
+
 /// Hides the approval we just answered for the ignore window.
 func visibleApproval(_ incoming: OrchestratorApproval?, ignoredId: String?, until: Date, now: Date) -> OrchestratorApproval? {
     guard let a = incoming else { return nil }
