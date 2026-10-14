@@ -16,6 +16,7 @@ final class BoringViewModel: NSObject, ObservableObject {
     @Published var hideOnClosed = false
     @Published var notchSize = openNotchSize
     @Published var closedNotchSize = CGSize(width: 185, height: 34)
+    @Published var screenUUID: String? = nil
     var effectiveClosedNotchHeight: CGFloat { closedNotchSize.height }
     func close() {}
 }
@@ -37,4 +38,8 @@ final class SharingStateManager {
     static let shared = SharingStateManager()
     func beginInteraction() {}
     func endInteraction() {}
+}
+
+extension NSScreen {
+    @MainActor static func screen(withUUID uuid: String) -> NSScreen? { nil }
 }

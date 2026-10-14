@@ -7,6 +7,7 @@ import SwiftUI
 struct ClosedReplica: View {
     @ObservedObject var vm: BoringViewModel
     var music = false
+    var hardware: CGFloat? = nil // simulated hardware notch height, drawn behind the shape
 
     var body: some View {
         Group {
@@ -21,17 +22,45 @@ struct ClosedReplica: View {
                 }
                 .frame(height: vm.effectiveClosedNotchHeight)
             } else {
-                OrchestratorWingsView()
+                ZStack { // the bare notch when no wing shows
+                    Color.clear.frame(width: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight)
+                    OrchestratorWingsView()
+                }
             }
         }
         .padding(.horizontal, cornerRadiusInsets.closed.bottom)
         .background(.black)
         .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12))
-        .overlay { OrchestratorClosedIndicators() }
+        .overlay { OrchestratorClosedIndicators(hardwareHeightOverride: hardware) }
         .frame(width: 440, height: 56, alignment: .top)
+        .background(alignment: .top) {
+            if let hw = hardware {
+                UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8).fill(.black)
+                    .frame(width: vm.closedNotchSize.width, height: hw)
+            }
+        }
         .background(Color(white: 0.35))
         .environmentObject(vm)
     }
+}
+
+/// Rows between the hairline's bottom and the lowest non-background pixel in its centre column (0 = on the visible bottom).
+/// Hairline = the lowest row (bottom half) with 20+ grey pixels at 0.5 white over black; background is grey 0.35.
+func hairlineGap(_ rep: NSBitmapImageRep) -> Int {
+    func lum(_ x: Int, _ y: Int) -> (v: Double, grey: Bool) {
+        let c = rep.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
+        return (Double(c.redComponent), abs(c.redComponent - c.greenComponent) < 0.03 && abs(c.redComponent - c.blueComponent) < 0.03)
+    }
+    for y in stride(from: rep.pixelsHigh - 1, through: rep.pixelsHigh / 2, by: -1) {
+        let xs = (0..<rep.pixelsWide).filter { let l = lum($0, y); return l.grey && l.v > 0.43 && l.v < 0.6 }
+        guard xs.count >= 20 else { continue }
+        let x = xs[xs.count / 2]
+        var bottom = y
+        let bg = lum(1, rep.pixelsHigh - 1).v
+        while bottom + 1 < rep.pixelsHigh, abs(lum(x, bottom + 1).v - bg) > 0.03 { bottom += 1 }
+        return bottom - y
+    }
+    return -1
 }
 
 extension Snap {
@@ -55,11 +84,11 @@ extension Snap {
             await m.snapshotApply(loaded: true, chat: c, state: state(runs))
             try? await Task.sleep(for: .milliseconds(50)) // wings recompute on the next main-queue turn
         }
-        func shot(_ name: String, music: Bool = false) async {
+        func shot(_ name: String, music: Bool = false, height: CGFloat = 32, hardware: CGFloat? = nil, hairline: Bool = false) async {
             let vm = BoringViewModel()
             vm.notchState = .closed
-            vm.closedNotchSize = CGSize(width: 185, height: 32)
-            let host = NSHostingView(rootView: ClosedReplica(vm: vm, music: music))
+            vm.closedNotchSize = CGSize(width: 185, height: height)
+            let host = NSHostingView(rootView: ClosedReplica(vm: vm, music: music, hardware: hardware))
             let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 440, height: 56),
                                   styleMask: .borderless, backing: .buffered, defer: false)
             host.frame = NSRect(x: 0, y: 0, width: 440, height: 56)
@@ -69,6 +98,7 @@ extension Snap {
             if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
                 host.cacheDisplay(in: host.bounds, to: rep)
                 try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("closed-\(name).png"))
+                if hairline { print("hairline \(name): gap=\(hairlineGap(rep))") }
             }
             window.contentView = nil
             print("closed-\(name): \(String(describing: OrchestratorWingsModel.shared.kind))")
@@ -92,5 +122,10 @@ extension Snap {
         await apply(idle, [run("w", "notch", "waiting", ago: 60)])
         await shot("10-needs-you")
         await shot("11-music-needs-you", music: true)
+        await apply(idle, []); await shot("12-hairline-32", hairline: true)
+        await shot("13-hairline-38", height: 38, hairline: true)
+        await shot("14-hairline-hw33", height: 32, hardware: 33, hairline: true)
+        await apply(working, []); await shot("15-wings-38", height: 38, hairline: true)
+        await apply(idle, [run("w", "notch", "waiting", ago: 60)]); await shot("16-needs-you-38", height: 38, hairline: true)
     }
 }
