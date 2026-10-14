@@ -162,11 +162,11 @@ Plans:
   4. 1–9 and esc answer while the pointer is over the notch; "Something else…" sends its option number then the typed text, and "Chat about this" sends its number
   5. Music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 06-01-PLAN.md — Parser: detectPromptCard title/purpose/body/kind/header/progress/descriptions/default, shortLabel, promptIdentity, key mapping; real + synthetic fixtures
-- [ ] 06-02-PLAN.md — Frame 03 permission card and frame 04 question list, stale-prompt guard, 3s lock dim, setLevel(.expanded) for questions, Chat about this, esc
+- [x] 06-02-PLAN.md — Frame 03 permission card and frame 04 question list, stale-prompt guard, 3s lock dim, setLevel(.expanded) for questions, Chat about this, esc
 - [ ] 06-03-PLAN.md — 1–9/esc/↑↓/⏎ while hovered (gated key-take + local monitor), 'Something else…' free text, phase checks, UAT list
 
 **Merge points:** no shared-file edits
@@ -258,7 +258,7 @@ Plans:
 | 3. Compact Indicators & Expand-Down | 2/2 | Awaiting UAT | - |
 | 4. 2a Foundation | 3/3 | Awaiting UAT | - |
 | 5. 2a Structured Chat | 0/3 | Planned | - |
-| 6. 2a Prompt Cards | 1/3 | In Progress|  |
+| 6. 2a Prompt Cards | 2/3 | In Progress|  |
 | 7. 2a Runs Board, Expand Levels & Wings | 0/5 | Planned | - |
 | 8. Phase B Live Data | 0/0 | Not planned | - |
 | 9. Phase B Approvals | 0/0 | Not planned | - |
