@@ -140,7 +140,19 @@ struct Scene {
     var pending: [Int: Bool] = [:]
     var sends: [PendingMessage] = []
     var notes: (String, NotesStatus)?
+    var attachments: [Data] = []
 }
+
+/// Two-colour test PNG through the real orchestratorPNG path.
+private func testPNG(_ a: NSColor, _ b: NSColor) -> Data {
+    let img = NSImage(size: NSSize(width: 400, height: 300), flipped: false) { r in
+        a.setFill(); r.fill()
+        b.setFill(); NSRect(x: 150, y: 80, width: 200, height: 140).fill()
+        return true
+    }
+    return orchestratorPNG(from: img)!
+}
+private let pngA = testPNG(.systemTeal, .systemOrange), pngB = testPNG(.systemPurple, .systemYellow)
 
 @MainActor
 @main
@@ -188,6 +200,13 @@ struct Snap {
             Scene(name: "27-expanded-pending", chat: chat(""), blocks: editBlocks, expanded: true, sends: [
                 PendingMessage(id: 1, text: "ok", state: .sending, sentAt: nil),
                 PendingMessage(id: 2, text: "Please also go through every remaining file in the Orchestrator folder and tidy the comments so they match the new naming, then summarise", state: .failed, sentAt: nil)]),
+            Scene(name: "31-composer-chips", chat: chat(""), blocks: markerBlocks, attachments: [pngA, pngB]),
+            Scene(name: "32-chat-pending-images", chat: chat(""), blocks: markerBlocks, sends: [
+                PendingMessage(id: 1, text: "what do you make of these", state: .queued, sentAt: nil, images: [pngA, pngB]),
+                PendingMessage(id: 2, text: "", state: .failed, sentAt: nil, images: [pngB])]),
+            Scene(name: "33-expanded-pending-images", chat: chat(""), blocks: editBlocks, expanded: true, sends: [
+                PendingMessage(id: 1, text: "see this screenshot", state: .sending, sentAt: nil, images: [pngA]),
+                PendingMessage(id: 2, text: "and compare with these two", state: .failed, sentAt: nil, images: [pngA, pngB])]),
             Scene(name: "28-notes-open", chat: chat(""), blocks: markerBlocks, notes: (shortNote, .saved)),
             Scene(name: "29-notes-couldnt-save", chat: chat(""), blocks: markerBlocks, notes: (shortNote, .failed)),
             Scene(name: "30-notes-expanded", chat: chat(""), blocks: markerBlocks, expanded: true, notes: (longNote, .idle)),
@@ -205,7 +224,7 @@ struct Snap {
             let vm = BoringViewModel()
             let m = OrchestratorManager.shared
             await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: state, runsBoard: s.runsBoard)
-            OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends)
+            OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends, attachments: s.attachments)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
             PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending)
             if let n = s.notes { OrchestratorNotesStore.shared.snapshotSet(text: n.0, status: n.1); m.notesOpen = true }

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // Phase 5 owns this file.
 // The store property `boxIsDraft` shadows the global function inside the class.
@@ -17,6 +18,8 @@ final class OrchestratorTranscriptStore: ObservableObject {
     @Published private(set) var boxIsDraft = false
     @Published private(set) var idleStatus: String? = nil
     @Published private(set) var pending: [PendingMessage] = []
+    /// PNG attachments for the next message; in the store so the compact and expanded composers share them.
+    @Published private(set) var attachments: [Data] = []
     private var knownUserIDs: Set<String> = []
     private var nextPendingID = 0
     private var draining = false
@@ -92,12 +95,19 @@ final class OrchestratorTranscriptStore: ObservableObject {
         }
     }
 
-    func enqueue(_ text: String) {
+    func attach(_ png: Data) { withAnimation(.easeOut(duration: 0.15)) { attachments.append(png) } }
+    func removeAttachment(at i: Int) {
+        guard attachments.indices.contains(i) else { return }
+        _ = withAnimation(.easeOut(duration: 0.15)) { attachments.remove(at: i) }
+    }
+    func takeAttachments() -> [Data] { defer { attachments = [] }; return attachments }
+
+    func enqueue(_ text: String, images: [Data] = []) {
         // Older identical messages must not claim the new row.
         for b in blocks where b.kind == .user { knownUserIDs.insert(b.id) }
         nextPendingID += 1
         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-            pending.append(PendingMessage(id: nextPendingID, text: text, state: .queued, sentAt: nil))
+            pending.append(PendingMessage(id: nextPendingID, text: text, state: .queued, sentAt: nil, images: images))
         }
         drain()
     }
@@ -115,11 +125,19 @@ final class OrchestratorTranscriptStore: ObservableObject {
         Task { @MainActor in
             let manager = OrchestratorManager.shared
             while let p = pending.first(where: { $0.state == .queued }) {
+                setPending(p.id, .sending)
+                // Upload first (paths kept on the row so Retry reuses them); a failed upload fails only this row.
+                var uploaded = true
+                for img in p.images.dropFirst(p.paths.count) {
+                    guard let path = await uploadOrchestratorImage(img, base: OrchestratorManager.baseURL, session: manager.session) else { uploaded = false; break }
+                    guard let i = pending.firstIndex(where: { $0.id == p.id }) else { uploaded = false; break }
+                    pending[i].paths.append(path)
+                }
+                guard uploaded else { setPending(p.id, .failed); continue }
                 // Never type queued text into a permission/question prompt.
                 while manager.sending || !manager.promptOptions.isEmpty { try? await Task.sleep(for: .milliseconds(50)) }
-                guard pending.contains(where: { $0.id == p.id && $0.state == .queued }) else { continue }
-                setPending(p.id, .sending)
-                let ok = await manager.sendText(p.text) { await self.clearRealLine() }
+                guard let row = pending.first(where: { $0.id == p.id && $0.state == .sending }) else { continue }
+                let ok = await manager.sendText(row.wireText) { await self.clearRealLine() }
                 setPending(p.id, ok ? .sent : .failed, sentAt: ok ? Date() : nil)
             }
             draining = false
@@ -131,9 +149,11 @@ final class OrchestratorTranscriptStore: ObservableObject {
         drain()
     }
 
-    func restore(_ id: Int) -> String? {
+    func restore(_ id: Int) -> (text: String, images: [Data])? {
         guard let i = pending.firstIndex(where: { $0.id == id }) else { return nil }
-        return withAnimation { pending.remove(at: i) }.text
+        let m = withAnimation { pending.remove(at: i) }
+        attachments.insert(contentsOf: m.images, at: 0)
+        return (m.text, m.images)
     }
 
     /// D-03 fallback, but one transient failure keeps the rows we hold (no flicker to chatTail and back).
@@ -163,7 +183,8 @@ final class OrchestratorTranscriptStore: ObservableObject {
 #if ORCH_SNAPSHOT
 extension OrchestratorTranscriptStore {
     /// Snapshot harness only: fixture blocks instead of /api/chat/blocks.
-    func snapshotSet(blocks: [ChatBlock], pending: [PendingMessage] = []) {
+    func snapshotSet(blocks: [ChatBlock], pending: [PendingMessage] = [], attachments: [Data] = []) {
+        self.attachments = attachments
         self.blocks = blocks
         self.pending = pending
         fallback = blocks.isEmpty
@@ -180,6 +201,7 @@ struct OrchestratorChatView: View {
     @FocusState private var fieldFocused: Bool
     @State private var fromTerminal = false
     @State private var keyMonitor: Any?
+    @State private var dropTargeted = false
     @State private var tagGen = 0
     @State private var tag: (text: String, error: Bool)?
     @ObservedObject var store = OrchestratorTranscriptStore.shared
@@ -267,14 +289,29 @@ struct OrchestratorChatView: View {
 
     private func pendingRow(_ p: PendingMessage) -> some View {
         VStack(alignment: expanded ? .trailing : .leading, spacing: 2) {
-            ChatBlockRow(block: ChatBlock(pendingID: "pending-\(p.id)", text: p.text), proseLineLimit: proseLineLimit, expanded: expanded)
+            if !p.images.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(Array(p.images.enumerated()), id: \.offset) { _, d in
+                        if let img = NSImage(data: d) {
+                            Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
+                                .frame(width: 24, height: 24).clipShape(RoundedRectangle(cornerRadius: 5))
+                        }
+                    }
+                }
+                .padding(.leading, expanded ? 0 : 16) // the ❯ marker column (10 + 6 spacing)
                 .opacity(0.5)
+            }
+            if !p.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ChatBlockRow(block: ChatBlock(pendingID: "pending-\(p.id)", text: p.text), proseLineLimit: proseLineLimit, expanded: expanded)
+                    .opacity(0.5)
+            }
             if p.state == .failed {
                 HStack(spacing: 8) {
                     Text("Not sent").foregroundStyle(OT.C.redText)
                     Button("Retry") { store.retry(p.id) }.buttonStyle(.plain)
                     Button("Edit") {
-                        if let t = store.restore(p.id) {
+                        if let r = store.restore(p.id) {
+                            let t = r.text
                             draft = draft.isEmpty ? t : t + " " + draft
                             fromTerminal = false
                             if showComposer { startTyping() }
@@ -310,7 +347,8 @@ struct OrchestratorChatView: View {
     }
 
     private var composer: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
+            if !store.attachments.isEmpty { chipRow }
             HStack(spacing: 6) {
                 HStack(spacing: 0) {
                     if fromTerminal && !draft.isEmpty {
@@ -344,9 +382,65 @@ struct OrchestratorChatView: View {
             .frame(height: 30)
             .background(RoundedRectangle(cornerRadius: OT.R.pill30).fill(OT.C.raised))
             .overlay {
-                if fieldFocused { RoundedRectangle(cornerRadius: OT.R.pill30).stroke(OT.C.claude, lineWidth: 1.5) }
+                if fieldFocused || dropTargeted { RoundedRectangle(cornerRadius: OT.R.pill30).stroke(OT.C.claude, lineWidth: 1.5) }
             }
         }
+        .onDrop(of: [.image, .fileURL], isTargeted: $dropTargeted) { providers in handleDrop(providers) }
+    }
+
+    // ponytail: thumbnails decode from PNG per render; cache if chips ever get many.
+    private var chipRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(Array(store.attachments.enumerated()), id: \.offset) { i, d in
+                    Group {
+                        if let img = NSImage(data: d) { Image(nsImage: img).resizable().aspectRatio(contentMode: .fill) } else { OT.C.raised }
+                    }
+                    .frame(width: 34, height: 34)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(alignment: .topTrailing) {
+                        Button { store.removeAttachment(at: i) } label: {
+                            ZStack {
+                                Circle().fill(OT.C.selected2)
+                                Image(systemName: "xmark").font(.system(size: 7, weight: .bold)).foregroundStyle(OT.C.text)
+                            }
+                            .frame(width: 14, height: 14)
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 4, y: -4)
+                    }
+                }
+            }
+            .padding(.leading, 14).padding(.trailing, 6).padding(.top, 4)
+        }
+        .frame(height: 38)
+    }
+
+    private func attachImage(_ image: NSImage) {
+        guard let png = orchestratorPNG(from: image) else { flashTag("Couldn't paste image", error: true, ms: 1800); return }
+        guard png.count <= 10 * 1024 * 1024 else { flashTag("Image too big", error: true, ms: 1800); return }
+        store.attach(png)
+    }
+
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        var took = false
+        for p in providers {
+            if p.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                took = true
+                _ = p.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url, UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true,
+                          let img = NSImage(contentsOf: url) else { return }
+                    DispatchQueue.main.async { attachImage(img) }
+                }
+            } else if p.canLoadObject(ofClass: NSImage.self) {
+                took = true
+                _ = p.loadObject(ofClass: NSImage.self) { obj, _ in
+                    guard let img = obj as? NSImage else { return }
+                    DispatchQueue.main.async { attachImage(img) }
+                }
+            }
+        }
+        return took
     }
 
     @ViewBuilder private var ghostLayer: some View {
@@ -377,7 +471,7 @@ struct OrchestratorChatView: View {
     }
 
     private var sendButton: some View {
-        let blank = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let blank = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.attachments.isEmpty
         return Button { submit() } label: {
             ZStack {
                 Circle().fill(fieldFocused ? OT.C.claude : OT.C.selected2)
@@ -417,6 +511,12 @@ struct OrchestratorChatView: View {
                 draft = clearToCaret(draft, caretUTF16: tv?.selectedRange().location)
                 DispatchQueue.main.async { tv?.setSelectedRange(NSRange(location: 0, length: 0)) }
                 flashTag("line cleared", error: false, ms: 1200)
+                return nil
+            }
+            // Cmd-V with an image on the pasteboard attaches it; text-only pastes fall through untouched.
+            if event.keyCode == 9, mods == .command, NSPasteboard.general.canReadObject(forClasses: [NSImage.self], options: nil),
+               let img = NSImage(pasteboard: .general) {
+                attachImage(img)
                 return nil
             }
             return event
@@ -477,14 +577,14 @@ struct OrchestratorChatView: View {
 
     private func submit() {
         let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else { stopTyping(); return }
+        guard !t.isEmpty || !store.attachments.isEmpty else { stopTyping(); return }
         // A terminal draft not pulled in on focus would be C-u'd unseen: pull it in front and wait for a second Enter.
         if !fromTerminal, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
             draft = l + " " + draft
             fromTerminal = true
             return
         }
-        store.enqueue(t)
+        store.enqueue(t, images: store.takeAttachments())
         draft = ""
         fromTerminal = false
     }
