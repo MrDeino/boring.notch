@@ -125,8 +125,9 @@ func detectPromptCard(screen: String) -> PromptCard? {
             }
         }
     } else {
-        if let d = card.items.lastIndex(where: { $0.role == .normal && $0.label.lowercased().hasPrefix("no") })
-            ?? card.items.lastIndex(where: { $0.role == .normal }) { card.items[d].role = .deny }
+        // Only a label that means "cancel" is drawn as the red deny pill; anything else stays normal.
+        let cancels: (String) -> Bool = { l in ["no", "cancel", "reject"].contains { l.lowercased().hasPrefix($0) } }
+        if let d = card.items.lastIndex(where: { $0.role == .normal && cancels($0.label) }) { card.items[d].role = .deny }
         if first > 0 {
             card.question = lines[first - 1]
             if let r = (0..<(first - 1)).reversed().first(where: { full(lines[$0]) }) {
