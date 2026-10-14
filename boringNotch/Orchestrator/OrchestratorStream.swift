@@ -14,3 +14,45 @@ func resolveInput(hasKey: Bool, input: ChatInput?, screen: String, chatRunning: 
     guard let t = input?.text, !t.isEmpty else { return (nil, false) }
     return (t, !(input?.suggested ?? true))
 }
+
+// MARK: - SSE (GET /api/events)
+
+enum OrchestratorStreamEvent {
+    case state(StateResponse)
+    case chat(ChatResponse)
+    case blocks(running: Bool?, blocks: [ChatBlock], reset: Bool)
+}
+
+/// `URLSession.bytes.lines` drops blank lines, so events are dispatched on each `data:` line using the last `event:` name.
+struct SSELineParser {
+    private var event: String?
+    private struct ResetFlag: Decodable { let reset: Bool? }
+
+    mutating func feed(_ line: String) -> OrchestratorStreamEvent? {
+        if line.hasPrefix(":") { return nil }
+        if line.hasPrefix("event:") {
+            event = line.dropFirst(6).trimmingCharacters(in: .whitespaces)
+            return nil
+        }
+        guard line.hasPrefix("data:") else { return nil }
+        var v = line.dropFirst(5)
+        if v.first == " " { v = v.dropFirst() }
+        let name = event
+        event = nil
+        guard let name, v.utf8.count <= 2_000_000 else { return nil }
+        let data = Data(v.utf8)
+        let dec = JSONDecoder()
+        switch name {
+        case "state": return (try? dec.decode(StateResponse.self, from: data)).map { .state($0) }
+        case "chat": return (try? dec.decode(ChatResponse.self, from: data)).map { .chat($0) }
+        case "blocks":
+            guard let b = decodeChatBlocks(data) else { return nil }
+            return .blocks(running: b.running, blocks: b.blocks, reset: (try? dec.decode(ResetFlag.self, from: data))?.reset ?? false)
+        default: return nil
+        }
+    }
+}
+
+func streamHealthy(lastLineAt: Date, now: Date, limit: TimeInterval = 20) -> Bool {
+    now.timeIntervalSince(lastLineAt) <= limit
+}

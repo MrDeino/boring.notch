@@ -24,4 +24,30 @@ func runPhase8Tests() {
     precondition(r(nil) == (nil, false))
     precondition(r(ChatInput(text: "x", suggested: true), running: false) == (nil, false))
     precondition(resolveInput(hasKey: false, input: nil, screen: screen, chatRunning: false, previous: nil, wasDraft: false, editing: false) == (nil, false))
+
+    var p = SSELineParser()
+    precondition(p.feed("event: state") == nil)
+    if case .state(let s)? = p.feed(#"data: {"runs":[],"usage":null}"#) { precondition(s.runs?.isEmpty == true) } else { preconditionFailure() }
+    precondition(p.feed(#"data: {"runs":[]}"#) == nil)
+    _ = p.feed("event: chat")
+    if case .chat(let c)? = p.feed(#"data:{"running":true,"screen":"x","live":true,"input":null,"context":{"percent":12}}"#) {
+        precondition(c.live == true && c.hasInputKey && c.context?.percent == 12)
+    } else { preconditionFailure() }
+    _ = p.feed("event: blocks")
+    if case .blocks(let r, let b, let rs)? = p.feed(#"data: {"running":true,"reset":true,"blocks":[{"id":"1","kind":"prose","text":"hi"}]}"#) {
+        precondition(r == true && b.count == 1 && rs)
+    } else { preconditionFailure() }
+    _ = p.feed("event: blocks")
+    if case .blocks(_, _, let rs)? = p.feed(#"data: {"running":true,"blocks":[]}"#) { precondition(!rs) } else { preconditionFailure() }
+    precondition(p.feed(": ping") == nil && p.feed("retry: 3000") == nil && p.feed("id: 7") == nil)
+    _ = p.feed("event: foo")
+    precondition(p.feed(#"data: {}"#) == nil)
+    _ = p.feed("event: chat")
+    precondition(p.feed("data: {nope") == nil)
+    _ = p.feed("event: state")
+    precondition(p.feed(#"data: {"runs":[]}"#) != nil)
+    _ = p.feed("event: state")
+    precondition(p.feed("data: " + String(repeating: "a", count: 2_000_001)) == nil)
+    let t = Date()
+    precondition(streamHealthy(lastLineAt: t, now: t + 19) && !streamHealthy(lastLineAt: t, now: t + 21))
 }
