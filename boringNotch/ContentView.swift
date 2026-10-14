@@ -208,6 +208,7 @@ struct ContentView: View {
         }
         .padding(.bottom, 8)
         .notchRootFrame(notchSize: vm.notchSize)
+        .onChange(of: vm.notchSize) { _, _ in OrchestratorExpand.shared.syncWindow(vm: vm) }
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,

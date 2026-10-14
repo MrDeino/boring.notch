@@ -1,6 +1,12 @@
 import Foundation
 
 func runPhase9Tests() {
+    // APR-04: panelSize never goes below the stock window; equals windowHeight/width rule for every notch size.
+    let base = CGSize(width: 640, height: 210)
+    for (nw, nh, eh) in [(640, 32, 210), (640, 190, 210), (640, 150, 210), (640, 440, 460), (850, 540, 560)] as [(CGFloat, CGFloat, CGFloat)] {
+        let p = panelSize(notch: CGSize(width: nw, height: nh), base: base, openHeight: 190)
+        precondition(p.height == eh && p.height == windowHeight(base: 210, notchHeight: nh, openHeight: 190) && p.width == max(640, nw))
+    }
     func dec(_ j: String) -> ChatResponse { try! d.decode(ChatResponse.self, from: Data(j.utf8)) }
     let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("fixtures/phase9-chat.json")
     let f = try! d.decode(ChatResponse.self, from: Data(contentsOf: url))

@@ -51,19 +51,34 @@ final class OrchestratorExpand: ObservableObject {
         guard level(for: vm) == .open, vm.notchState == .open else { return }
         let target = openSize(for: vm)
         guard target.height != vm.notchSize.height else { return }
-        let win = windows[k]?.w
-        if target.height > vm.notchSize.height {
-            shrinkTasks[k]?.cancel()
-            if let win { win.setFrame(pinnedFrame(current: win.frame, newSize: CGSize(width: windowSize.width, height: windowHeight(base: windowSize.height, notchHeight: target.height, openHeight: openNotchSize.height))), display: true) }
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = target }
-        } else {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = target }
-            shrinkTasks[k]?.cancel()
-            shrinkTasks[k] = Task { [weak win] in
-                try? await Task.sleep(for: .milliseconds(650))
-                guard !Task.isCancelled, let win else { return }
-                win.setFrame(pinnedFrame(current: win.frame, newSize: CGSize(width: windowSize.width, height: windowHeight(base: windowSize.height, notchHeight: target.height, openHeight: openNotchSize.height))), display: true)
-            }
+        animate(vm, to: target)
+    }
+
+    /// The one notch-size change: model first, then the window (grow now so the spring has room; shrink is deferred in syncWindow).
+    private func animate(_ vm: BoringViewModel, to target: CGSize) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = target }
+        syncWindow(vm: vm)
+    }
+
+    /// The only place the panel is resized: it follows vm.notchSize (never below windowSize), top edge and centre pinned.
+    /// Growing is immediate; shrinking waits for the spring, then re-reads the current target.
+    func syncWindow(vm: BoringViewModel, window: NSWindow? = nil, now: Bool = false) {
+        let k = key(vm)
+        if let window { windows[k] = WeakWindow(window) }
+        guard let w = window ?? windows[k]?.w ?? anchors[k]?.view.v?.window else { return }
+        if windows[k]?.w == nil { windows[k] = WeakWindow(w) }
+        func target() -> CGSize { panelSize(notch: vm.notchSize, base: windowSize, openHeight: openNotchSize.height) }
+        let t = target(), f = w.frame.size
+        shrinkTasks[k]?.cancel()
+        if now { if t != f { w.setFrame(pinnedFrame(current: w.frame, newSize: t), display: true) }; return }
+        if t.width > f.width || t.height > f.height {
+            w.setFrame(pinnedFrame(current: w.frame, newSize: CGSize(width: max(t.width, f.width), height: max(t.height, f.height))), display: true)
+        }
+        guard t.width < f.width || t.height < f.height else { return }
+        shrinkTasks[k] = Task { [weak w] in
+            try? await Task.sleep(for: .milliseconds(650))
+            guard !Task.isCancelled, let w else { return }
+            w.setFrame(pinnedFrame(current: w.frame, newSize: target()), display: true)
         }
     }
 
@@ -138,29 +153,18 @@ final class OrchestratorExpand: ObservableObject {
         let size = expandedSize(screen: window.screen?.frame.size ?? CGSize(width: 1440, height: 900), openWidth: openNotchSize.width)
         sizes[k] = size
         windows[k] = WeakWindow(window)
-        shrinkTasks[k]?.cancel()
-        window.setFrame(pinnedFrame(current: window.frame, newSize: CGSize(width: max(windowSize.width, size.width), height: windowHeight(base: windowSize.height, notchHeight: size.height, openHeight: openNotchSize.height))), display: true)
         expanded.insert(k)
         vms[k] = WeakVM(vm)
         installMonitors()
         SharingStateManager.shared.beginInteraction()
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = openSize(for: vm) }
+        animate(vm, to: openSize(for: vm))
     }
 
     func collapse(vm: BoringViewModel, refocus: Bool = true) {
         let k = key(vm)
         guard expanded.contains(k) else { return }
-        let win = windows[k]?.w
         finish(k, refocus: refocus)
-        let target = openSize(for: vm)
-        if vm.notchState == .open { withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = target } }
-        shrinkTasks[k]?.cancel()
-        // Let the spring finish before the window stops covering the expanded area.
-        shrinkTasks[k] = Task { [weak win] in
-            try? await Task.sleep(for: .milliseconds(650))
-            guard !Task.isCancelled, let win else { return }
-            win.setFrame(pinnedFrame(current: win.frame, newSize: CGSize(width: windowSize.width, height: windowHeight(base: windowSize.height, notchHeight: target.height, openHeight: openNotchSize.height))), display: true)
-        }
+        if vm.notchState == .open { animate(vm, to: openSize(for: vm)) }
     }
 
     /// Notch closed or tab left: collapse everything now, no animation.
@@ -169,18 +173,19 @@ final class OrchestratorExpand: ObservableObject {
         let fitted = fits.filter { $0.value.values.contains { $0 > 0 } }.keys
         fits = [:]
         for k in fitted where !expanded.contains(k) {
-            shrinkTasks[k]?.cancel()
-            if let vm = vms[k]?.vm, vm.notchState == .open { vm.notchSize = openNotchSize }
-            if let w = windows[k]?.w { w.setFrame(pinnedFrame(current: w.frame, newSize: windowSize), display: true) }
+            if let vm = vms[k]?.vm {
+                if vm.notchState == .open { vm.notchSize = openNotchSize }
+                syncWindow(vm: vm, now: true)
+            }
         }
         guard !expanded.isEmpty else { return }
         for k in Array(expanded) {
-            shrinkTasks[k]?.cancel()
-            let win = windows[k]?.w
             let vm = vms[k]?.vm
             finish(k)
-            if let vm, vm.notchState == .open { vm.notchSize = openNotchSize }
-            win?.setFrame(pinnedFrame(current: win?.frame ?? .zero, newSize: windowSize), display: true)
+            if let vm {
+                if vm.notchState == .open { vm.notchSize = openNotchSize }
+                syncWindow(vm: vm, now: true)
+            }
         }
     }
 

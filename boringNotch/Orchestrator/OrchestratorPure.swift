@@ -11,6 +11,12 @@ func windowHeight(base: CGFloat, notchHeight: CGFloat, openHeight: CGFloat) -> C
     base + max(0, notchHeight - openHeight)
 }
 
+/// Window size that holds a notch of `notch` size: never below `base`, grows by the notch's excess over `openHeight`
+/// (height) and its width (the expanded notch is wider than the stock window).
+func panelSize(notch: CGSize, base: CGSize, openHeight: CGFloat) -> CGSize {
+    CGSize(width: max(base.width, notch.width), height: windowHeight(base: base.height, notchHeight: notch.height, openHeight: openHeight))
+}
+
 /// New size with the top edge (maxY) and the horizontal centre (midX) kept.
 func pinnedFrame(current: CGRect, newSize: CGSize) -> CGRect {
     CGRect(x: current.midX - newSize.width / 2, y: current.maxY - newSize.height, width: newSize.width, height: newSize.height)
