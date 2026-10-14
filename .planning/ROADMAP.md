@@ -13,7 +13,7 @@ Phases 4–9 rebuild the tab to the high-fidelity design handoff (option 2a, `.p
 - [ ] **Phase 3: Compact Indicators & Expand-Down** - Closed-notch usage + attention dot; notch grows down for larger chat and live terminal (built and verified at code level 2026-10-14; awaiting human UAT)
 - [x] **Phase 4: 2a Foundation** - Design tokens, OrchestratorView split, Chat | Runs segment + status capsule header, status menu, stopped/offline/connecting screens, shared seams for 5–7 (completed 2026-10-14)
 - [x] **Phase 5: 2a Structured Chat** - Transcript rows from serve's GET /api/chat/blocks, live status, composer and message box (suggestion, Tab, ⌃U, terminal draft), row-insert motion (parallel with 6, 7) (completed 2026-10-14)
-- [ ] **Phase 6: 2a Prompt Cards** - Permission decision card, vertical question list, richer detectPrompt, 1–9/esc while hovered, 'Something else…' and 'Chat about this' (parallel with 5, 7)
+- [x] **Phase 6: 2a Prompt Cards** - Permission decision card, vertical question list, richer detectPrompt, 1–9/esc while hovered, 'Something else…' and 'Chat about this' (parallel with 5, 7) (completed 2026-10-14)
 - [ ] **Phase 7: 2a Runs Board, Expand Levels & Wings** - Runs board, open→expanded→terminal levels with runs rail, closed-notch live-activity wings (parallel with 5, 6)
 - [ ] **Phase 8: Phase B Live Data** - SSE push from serve, streaming caret, ▸ diff expansion, suggested flag, context %
 - [ ] **Phase 9: Phase B Approvals** - Closed-notch approval drop-down, global ⌥⏎/⌥⎋, Claude Code hook posting to serve, panel frame sized to content
@@ -162,12 +162,12 @@ Plans:
   4. 1–9 and esc answer while the pointer is over the notch; "Something else…" sends its option number then the typed text, and "Chat about this" sends its number
   5. Music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 06-01-PLAN.md — Parser: detectPromptCard title/purpose/body/kind/header/progress/descriptions/default, shortLabel, promptIdentity, key mapping; real + synthetic fixtures
-- [ ] 06-02-PLAN.md — Frame 03 permission card and frame 04 question list, stale-prompt guard, 3s lock dim, setLevel(.expanded) for questions, Chat about this, esc
-- [ ] 06-03-PLAN.md — 1–9/esc/↑↓/⏎ while hovered (gated key-take + local monitor), 'Something else…' free text, phase checks, UAT list
+- [x] 06-01-PLAN.md — Parser: detectPromptCard title/purpose/body/kind/header/progress/descriptions/default, shortLabel, promptIdentity, key mapping; real + synthetic fixtures
+- [x] 06-02-PLAN.md — Frame 03 permission card and frame 04 question list, stale-prompt guard, 3s lock dim, setLevel(.expanded) for questions, Chat about this, esc
+- [x] 06-03-PLAN.md — 1–9/esc/↑↓/⏎ while hovered (gated key-take + local monitor), 'Something else…' free text, phase checks, UAT list
 
 **Merge points:** no shared-file edits
 
@@ -258,7 +258,7 @@ Plans:
 | 3. Compact Indicators & Expand-Down | 2/2 | Awaiting UAT | - |
 | 4. 2a Foundation | 3/3 | Awaiting UAT | - |
 | 5. 2a Structured Chat | 3/3 | Complete   | 2026-10-14 |
-| 6. 2a Prompt Cards | 0/3 | Planned | - |
+| 6. 2a Prompt Cards | 3/3 | Complete   | 2026-10-14 |
 | 7. 2a Runs Board, Expand Levels & Wings | 0/5 | Planned | - |
 | 8. Phase B Live Data | 0/0 | Not planned | - |
 | 9. Phase B Approvals | 0/0 | Not planned | - |

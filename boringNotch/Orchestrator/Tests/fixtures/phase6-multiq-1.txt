@@ -1,0 +1,17 @@
+SYNTHETIC fixture (ASSUMED layout, not captured from Claude Code) - replace with a real capture at UAT
+⏺ Asking two questions
+────────────────────────────────────────────────────────────
+ ←  ☐ Window  ☐ Color  ✔ Submit  →
+
+How should the notch grow when the conversation is open and the expanded
+view needs more height than the panel allows?
+
+❯ 1. Resize the existing panel downward
+     Keep one window; grow its frame and pin the top edge.
+  2. Add a second child window
+     The expanded area lives in its own borderless panel.
+  3. Type something.
+────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
