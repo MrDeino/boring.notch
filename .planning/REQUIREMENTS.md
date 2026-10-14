@@ -60,7 +60,29 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (filled by roadmap) | | |
+| BLD-01 | Phase 1 | Pending |
+| BLD-02 | Phase 1 | Pending |
+| BLD-03 | Phase 1 | Pending |
+| TAB-01 | Phase 1 | Pending |
+| TAB-02 | Phase 1 | Pending |
+| TAB-03 | Phase 1 | Pending |
+| TAB-04 | Phase 1 | Pending |
+| TAB-05 | Phase 1 | Pending |
+| TAB-06 | Phase 1 | Pending |
+| INT-01 | Phase 2 | Pending |
+| INT-02 | Phase 2 | Pending |
+| INT-03 | Phase 2 | Pending |
+| INT-04 | Phase 2 | Pending |
+| INT-05 | Phase 2 | Pending |
+| INT-06 | Phase 2 | Pending |
+| CMP-01 | Phase 3 | Pending |
+| CMP-02 | Phase 3 | Pending |
+| EXP-01 | Phase 3 | Pending |
+| EXP-02 | Phase 3 | Pending |
+| EXP-03 | Phase 3 | Pending |
+
+**Coverage:** 20/20 v1 requirements mapped, no orphans. BLD-02 and BLD-03 are cross-cutting: mapped to Phase 1, re-checked by a music criterion in every phase.
 
 ---
 *Requirements defined: 2026-10-14*
+*Traceability updated: 2026-10-14 after roadmap creation*
