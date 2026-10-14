@@ -349,17 +349,20 @@ struct Snap {
     }
 
 
-    /// Distance in pt from the notch's black bottom edge up to the first non-black pixel at column `xPt`
-    /// (the composer pill / rail Terminal pill bottom). nil when no black bottom is found.
-    static func bottomGap(_ rep: NSBitmapImageRep, xPt: CGFloat) -> CGFloat? {
+    /// Rows (pt from the top) of the notch's black bottom edge and of the first non-black pixel above it
+    /// (the composer / rail pill bottom) at column `xPt`. nil when no black bottom is found.
+    static func edges(_ rep: NSBitmapImageRep, xPt: CGFloat) -> (bottom: CGFloat, pill: CGFloat)? {
         let k = CGFloat(rep.pixelsWide) / rep.size.width
         let x = Int(xPt * k)
         guard x >= 0, x < rep.pixelsWide else { return nil }
         func dark(_ y: Int) -> Bool { let c = rep.colorAt(x: x, y: y); return (c?.alphaComponent ?? 0) > 0.5 && (c?.brightnessComponent ?? 1) < 0.05 }
         guard let bottom = (0..<rep.pixelsHigh).reversed().first(where: dark),
               let pill = (0...bottom).reversed().first(where: { !dark($0) }) else { return nil }
-        return CGFloat(bottom - pill) / k
+        return (CGFloat(bottom) / k, CGFloat(pill) / k)
     }
+
+    /// Distance in pt from the notch's bottom edge up to the pill bottom at column `xPt`.
+    static func bottomGap(_ rep: NSBitmapImageRep, xPt: CGFloat) -> CGFloat? { edges(rep, xPt: xPt).map { $0.bottom - $0.pill } }
 
     /// Height changes in a fixed window, like the app: the window is resized at once (top pinned) and
     /// vm.notchSize springs. Steps sample a 0.4/0.82 spring incl. overshoot. Prints the notch's top y
@@ -424,56 +427,92 @@ struct Snap {
         var body: some View { NotchReplica(vm: vm).core.environmentObject(vm).notchRootFrame(notchSize: vm.notchSize) }
     }
 
-    /// One hosted window, real setLevel animation: the transcript must be on screen in every frame of
-    /// expand and collapse (it used to be hidden for ~120ms and faded back in).
+    /// One hosted window, real setLevel animation. Content fades out, lays out once at the final size while hidden and
+    /// fades in near the end of the spring: every frame must be blank, the old layout (first 60ms only) or the final
+    /// layout, never an intermediate one, and the blank window must be short.
     static func livePass(_ out: URL) async {
         let vm = BoringViewModel()
         let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: windowSize.width, height: windowSize.height),
                               styleMask: .borderless, backing: .buffered, defer: false)
         window.backgroundColor = NSColor(white: 0.35, alpha: 1)
+        // Offscreen windows get no display link, so springs stall; a (nearly) transparent on-screen window keeps them ticking.
+        window.alphaValue = 0.01; window.ignoresMouseEvents = true
+        window.setFrameOrigin(NSPoint(x: 0, y: (NSScreen.main?.frame.maxY ?? 900) - windowSize.height))
         let host = NSHostingView(rootView: LiveRoot(vm: vm))
         window.contentView = host
         window.orderFrontRegardless()
         try? await Task.sleep(for: .milliseconds(700))
-        func measure() -> (Int, NSBitmapImageRep?) {
+        struct Frame { var lit = 0; var newest = 0; var minX: CGFloat = -1; var pillY: CGFloat = -1; var width: CGFloat = 0; var rep: NSBitmapImageRep? }
+        func measure() -> Frame {
             host.layoutSubtreeIfNeeded()
-            guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return (0, nil) }
+            guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return Frame() }
             host.cacheDisplay(in: host.bounds, to: rep)
             let k = CGFloat(rep.pixelsWide) / host.bounds.width
-            let x0 = Int(40 * k), x1 = min(rep.pixelsWide, Int(440 * k))
             let y0 = Int(44 * k), y1 = min(rep.pixelsHigh, Int((vm.notchSize.height - 12) * k))
-            var n = 0
-            if y1 > y0 { for y in y0..<y1 { for x in x0..<x1 where (rep.colorAt(x: x, y: y)?.brightnessComponent ?? 0) > 0.6 { n += 1 } } }
+            var f = Frame(rep: rep)
+            var minX = Int.max
+            // Every 4th pixel each way: a full scan blocks the main thread long enough to stall the animation under test.
+            if y1 > y0 { for y in stride(from: y0, to: y1, by: 4) { for x in stride(from: 0, to: rep.pixelsWide, by: 4) where (rep.colorAt(x: x, y: y)?.brightnessComponent ?? 0) > 0.15 { f.lit += 1; minX = min(minX, x) } } }
+            // Left edge of the black shape on the header row; content x is taken relative to it (the window widens at once).
+            let left = (0..<rep.pixelsWide).first { x in let c = rep.colorAt(x: x, y: Int(20 * k)); return (c?.brightnessComponent ?? 1) < 0.05 && (c?.alphaComponent ?? 0) > 0.5 }.map { CGFloat($0) / k } ?? 0
+            let right = (0..<rep.pixelsWide).reversed().first { x in let c = rep.colorAt(x: x, y: Int(20 * k)); return (c?.brightnessComponent ?? 1) < 0.05 && (c?.alphaComponent ?? 0) > 0.5 }.map { CGFloat($0) / k } ?? 0
+            f.width = right - left
+            f.minX = minX == .max ? -1 : CGFloat(minX) / k - left
             // Newest row: the band just above the composer must hold lit pixels (bubble or compact row).
-            var b = 0
             let by0 = Int(max(0, vm.notchSize.height - 100) * k), by1 = min(rep.pixelsHigh, Int((vm.notchSize.height - 45) * k))
-            if by1 > by0 { for y in by0..<by1 { for x in Int(40 * k)..<min(rep.pixelsWide, Int(620 * k)) where (rep.colorAt(x: x, y: y)?.brightnessComponent ?? 0) > 0.3 { b += 1 } } }
-            newest = b
-            return (n, rep)
+            if by1 > by0 { for y in stride(from: by0, to: by1, by: 4) { for x in stride(from: Int(40 * k), to: min(rep.pixelsWide, Int(620 * k)), by: 4) where (rep.colorAt(x: x, y: y)?.brightnessComponent ?? 0) > 0.3 { f.newest += 1 } } }
+            f.pillY = edges(rep, xPt: host.bounds.width / 2 - 140)?.pill ?? -1
+            return f
         }
-        var newest = 0
-        let baseline = measure().0
-        let newestBase = newest
-        print("live baseline open text=\(baseline) newest=\(newestBase)")
+        // Height is excluded on purpose: the shape (and the content frame) springs in height while content may be fading in.
+        func same(_ a: Frame, _ b: Frame) -> Bool { abs(a.minX - b.minX) <= 2 }
+        var settled = measure()
+        let newestBase = settled.newest
+        print("live baseline open lit=\(settled.lit) minX=\(settled.minX) pillY=\(settled.pillY) newest=\(newestBase)")
         var bad: [String] = []
+        var blankSpan: [Int] = [], spans: [String] = []
+        let times = [0, 30, 60, 120, 200, 280, 350, 450, 700, 1200]
         for (phase, level) in [("grow", ExpandLevel.expanded), ("collapse", .open)] {
+            let start = settled
             OrchestratorExpand.shared.setLevel(level, vm: vm, window: window)
-            var prev = 0
-            for t in [0, 30, 60, 120, 250, 400, 700, 1200] {
-                try? await Task.sleep(for: .milliseconds(t - prev)); prev = t
-                let (n, rep) = measure()
-                print("live \(phase) t=\(t)ms text=\(n) newest=\(newest) h=\(Int(vm.notchSize.height)) lvl=\(OrchestratorExpand.shared.level(for: vm))")
-                if n * 2 < baseline || (phase == "collapse" && newest * 4 < newestBase) { bad.append("\(phase) \(t)ms") }
-                if [0, 30, 60, 120, 250, 700, 1200].contains(t) { try? rep?.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("transition-live-\(phase)-\(t).png")) }
-                if t == 60 { try? rep?.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("transition-live-\(phase)-60.png")) }
+            var frames: [(Int, Frame)] = []
+            let t0 = ContinuousClock.now
+            var actual: [Int] = []
+            for t in times {
+                // Wall clock: a capture takes tens of ms, so sleep only what is left of the nominal time.
+                let el = Int((ContinuousClock.now - t0) / .milliseconds(1))
+                // Always suspend: a capture runs on the main actor and would otherwise starve the view's own fade Task.
+                try? await Task.sleep(for: .milliseconds(max(2, t - el)))
+                actual.append(Int((ContinuousClock.now - t0) / .milliseconds(1)))
+                frames.append((t, measure()))
             }
+            let final = frames.last!.1
+            // A capture takes ~100ms on the main thread and holds back the view's own fade work, so frames before the
+            // first blank one are only "fading" (the old layout, still on screen because its fade-out was starved).
+            // What the harness can assert: a blank window exists, every frame after it is blank or the final layout at
+            // the final shape width (content never appears at an intermediate layout), and the blank span is short.
+            var seenBlank = false
+            for (i, (t, f)) in frames.enumerated() {
+                let blank = f.lit * 10 < final.lit
+                if blank { seenBlank = true; blankSpan.append(actual[i]) }
+                let atFinal = same(f, final) && abs(f.width - final.width) <= 4
+                let cls = blank ? "blank" : !seenBlank ? (same(f, start) ? "old" : "fading") : atFinal ? "final" : "intermediate"
+                print("live \(phase) t=\(t)ms at=\(actual[i])ms w=\(Int(f.width)) lit=\(f.lit) minX=\(Int(f.minX)) pillY=\(Int(f.pillY)) newest=\(f.newest) h=\(Int(vm.notchSize.height)) lvl=\(OrchestratorExpand.shared.level(for: vm)) \(cls)")
+                if cls == "intermediate" || (t >= 700 && cls != "final") { bad.append("\(phase) \(t)ms \(cls)") }
+                if phase == "collapse" && t >= 700 && f.newest * 4 < newestBase { bad.append("\(phase) \(t)ms newest row missing") }
+                if [0, 30, 60, 120, 200, 280, 350, 450, 700, 1200].contains(t) { try? f.rep?.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("transition-live-\(phase)-\(t).png")) }
+            }
+            if !seenBlank { bad.append("\(phase) never blank") }
+            if let lo = blankSpan.min(), let hi = blankSpan.max(), hi - lo > 350 { bad.append("\(phase) blank window \(lo)..\(hi)ms") }
+            spans.append("\(phase) \(blankSpan.min() ?? 0)..\(blankSpan.max() ?? 0)")
+            blankSpan.removeAll()
+            settled = final
         }
         OrchestratorExpand.shared.reset()
         window.contentView = nil
         window.orderOut(nil)
-        print(bad.isEmpty ? "OK: content present in every live frame" : "FAIL: content missing at " + bad.joined(separator: ", "))
+        print(bad.isEmpty ? "OK: no intermediate-layout frames; blank " + spans.joined(separator: ", ") + "ms" : "FAIL: " + bad.joined(separator: ", "))
     }
-
 
     /// Gap under the composer / rail Terminal pill in ContentView's full root chain, after states that used to
     /// leave a non-zero fit or extra height behind (composer growth, notes, a prompt at open, the terminal level).

@@ -7,6 +7,8 @@ extension Defaults.Keys {
 }
 
 private let railSpring = Animation.spring(response: 0.3, dampingFraction: 0.85)
+// Level-change fade, tuned to OrchestratorExpand's notch spring (response 0.4): out, then in once the shape is near final.
+private let fadeOut = 0.08, fadeInDelay = 0.28, fadeIn = 0.15
 
 /// Rail collapse state. Persisted choice lives in Defaults; auto-open is a transient reveal.
 /// Keeps its own waiting baseline (same idea as the wings model) so it does not depend on 07-03.
@@ -143,9 +145,29 @@ struct OrchestratorExpandedView: View {
     @ObservedObject var store = OrchestratorTranscriptStore.shared
     @Default(.orchRunsRailCollapsed) var persisted
     @EnvironmentObject var vm: BoringViewModel
+    /// The level the content is laid out for: it lags the live level while the content is hidden, so nothing reflows on screen.
+    @State private var shown: ExpandLevel?
+    @State private var contentOpacity: Double = 1
+    @State private var fadeGen = 0
+
+    /// Fade out, lay out once at the new level while invisible, fade in near the end of the shape spring. Newest change wins.
+    private func levelChanged() {
+        fadeGen += 1
+        let gen = fadeGen
+        withAnimation(.easeOut(duration: fadeOut)) { contentOpacity = 0 }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(fadeOut))
+            guard gen == fadeGen else { return }
+            var t = Transaction(); t.disablesAnimations = true
+            withTransaction(t) { shown = expand.level(for: vm) }
+            try? await Task.sleep(for: .seconds(fadeInDelay - fadeOut))
+            guard gen == fadeGen else { return }
+            withAnimation(.easeOut(duration: fadeIn)) { contentOpacity = 1 }
+        }
+    }
 
     var body: some View {
-        let level = expand.level(for: vm)
+        let level = shown ?? expand.level(for: vm)
         let collapsed = persisted && !rail.autoOpened
         let open = level == .open
         HStack(alignment: .top, spacing: open ? 0 : 12) {
@@ -160,14 +182,16 @@ struct OrchestratorExpandedView: View {
                 .overlay(alignment: .leading) { if !collapsed { Rectangle().fill(OT.C.divider).frame(width: 1) } }
                 .frame(width: collapsed ? 30 : 178)
                 .frame(maxHeight: .infinity, alignment: .top)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .transition(.identity) // nothing moves while the content is hidden
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, open ? 8 : 0)
         .padding(.top, open ? 0 : 6) // bottom comes only from ContentView's 12pt, same as at open
-        .animation(.spring(response: 0.4, dampingFraction: 0.82), value: level)
+        .opacity(contentOpacity)
         .animation(railSpring, value: collapsed)
+        .onAppear { shown = expand.level(for: vm) }
+        .onChange(of: expand.level(for: vm)) { _, _ in levelChanged() }
         // The sticky Runs board must not hide a live prompt or outlive a disconnect.
         .onChange(of: manager.prompt != nil) { _, has in if has { manager.showRunsBoard = false } }
         .onChange(of: manager.offline) { _, off in if off { manager.showRunsBoard = false } }
