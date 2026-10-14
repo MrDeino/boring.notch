@@ -125,6 +125,8 @@ private let editBlocks = blocks(#"""
 """#)
 
 private let shortNote = "Remember to ask about the Railway migration.\n\n- notch: back-nav for question chips\n- notes drop-down autosaves after 1s\n- check usage ring colour at 90%"
+private let wordyDraft = "Please look at how the composer grows while I type a long message that wraps over several lines in the notch, and make sure the send button stays on the last line even when the text keeps going well past two full lines of the pill"
+private let tenLineDraft = (1...10).map { "Line \($0) of a very long draft that keeps going and going" }.joined(separator: "\n")
 private let longNote = (1...30).map { "Note line \($0): a longer scratch line that wraps when the panel is narrow enough to need it." }.joined(separator: "\n")
 
 struct Scene {
@@ -142,6 +144,7 @@ struct Scene {
     var notes: (String, NotesStatus)?
     var attachments: [Data] = []
     var dismissed = false
+    var draft = ""
 }
 
 /// Two-colour test PNG through the real orchestratorPNG path.
@@ -219,6 +222,9 @@ struct Snap {
             Scene(name: "22-permission-retry-note", chat: chat(fixture("phase6-edit.txt")), note: "Didn't go through"),
             Scene(name: "34-expanded-question-transcript", chat: chat(longQuestion), blocks: longBlocks, expanded: true),
             Scene(name: "35-expanded-question-dismissed", chat: chat(longQuestion), blocks: longBlocks, expanded: true, dismissed: true),
+            Scene(name: "37-composer-multiline", chat: chat(""), blocks: markerBlocks, draft: wordyDraft),
+            Scene(name: "38-composer-five-lines", chat: chat(""), blocks: markerBlocks, draft: tenLineDraft),
+            Scene(name: "39-expanded-composer-multiline", chat: chat(""), blocks: editBlocks, expanded: true, draft: wordyDraft),
             Scene(name: "36-permission-dismissed-open", chat: chat(fixture("phase6-edit.txt")), blocks: markerBlocks, dismissed: true),
         ]
 
@@ -228,7 +234,7 @@ struct Snap {
             let vm = BoringViewModel()
             let m = OrchestratorManager.shared
             await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: state, runsBoard: s.runsBoard)
-            OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends, attachments: s.attachments)
+            OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends, attachments: s.attachments, draft: s.draft)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
             PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending, dismissCurrent: s.dismissed)
             if let n = s.notes { OrchestratorNotesStore.shared.snapshotSet(text: n.0, status: n.1); m.notesOpen = true }
@@ -252,8 +258,17 @@ struct Snap {
                 // Let onAppear/.task fade-ins and the scroll anchor settle.
                 try? await Task.sleep(for: .milliseconds(700))
                 host.layoutSubtreeIfNeeded()
+                // Content-driven fits (composer, notes, prompt context) land after the first layout: re-size to the settled notch.
+                let settled = CGSize(width: max(openNotchSize.width, vm.notchSize.width), height: vm.notchSize.height + shadowPadding)
+                if settled != size {
+                    host.frame = NSRect(origin: .zero, size: settled)
+                    window.setContentSize(settled)
+                    try? await Task.sleep(for: .milliseconds(300))
+                    host.layoutSubtreeIfNeeded()
+                }
                 if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
                     host.cacheDisplay(in: host.bounds, to: rep)
+                    print("\(s.name): notch h=\(Int(vm.notchSize.height))")
                     png = rep.representation(using: .png, properties: [:])
                     if s.expanded {
                         // Runs rail header: leftmost column / topmost row of lit pixels in the right 190pt below the header row.

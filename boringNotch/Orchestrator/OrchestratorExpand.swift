@@ -10,6 +10,8 @@ final class OrchestratorExpand: ObservableObject {
     /// Per-vm terminal flag, always a subset of `expanded`.
     @Published private(set) var terminal: Set<ObjectIdentifier> = []
     private var sizes: [ObjectIdentifier: CGSize] = [:]
+    /// Extra open-level height asked for by content (composer lines, notes text, prompt context), per source.
+    private var fits: [ObjectIdentifier: [String: CGFloat]] = [:]
     private var windows: [ObjectIdentifier: WeakWindow] = [:]
     private var shrinkTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var globalMonitor: Any?
@@ -24,7 +26,45 @@ final class OrchestratorExpand: ObservableObject {
     func isExpanded(_ vm: BoringViewModel) -> Bool { expanded.contains(key(vm)) }
 
     func openSize(for vm: BoringViewModel) -> CGSize {
-        sizes[key(vm)] ?? openNotchSize
+        let k = key(vm)
+        return sizes[k] ?? CGSize(width: openNotchSize.width, height: openNotchSize.height + fitHeight(k))
+    }
+
+    /// Current extra height of one source (so a view can exclude its own fit when measuring).
+    func fit(_ source: String, vm: BoringViewModel) -> CGFloat { fits[key(vm)]?[source] ?? 0 }
+
+    private func fitHeight(_ k: ObjectIdentifier) -> CGFloat {
+        let screen = windows[k]?.w?.screen?.frame.size ?? CGSize(width: 1440, height: 900)
+        let maxFit = expandedSize(screen: screen, openWidth: openNotchSize.width).height - openNotchSize.height
+        return min(maxFit, fits[k]?.values.max() ?? 0)
+    }
+
+    /// Content at the open level asks for `extra` more height than openNotchSize (capped at the expanded height).
+    /// The window grows first, the notch springs after; shrinking waits for the spring.
+    func setFit(_ source: String, extra: CGFloat, vm: BoringViewModel, window: NSWindow?) {
+        let k = key(vm)
+        let e = max(0, extra.rounded())
+        guard fits[k]?[source] ?? 0 != e else { return }
+        fits[k, default: [:]][source] = e
+        if let window { windows[k] = WeakWindow(window) }
+        vms[k] = WeakVM(vm)
+        guard level(for: vm) == .open, vm.notchState == .open else { return }
+        let target = openSize(for: vm)
+        guard target.height != vm.notchSize.height else { return }
+        let win = windows[k]?.w
+        if target.height > vm.notchSize.height {
+            shrinkTasks[k]?.cancel()
+            if let win { win.setFrame(pinnedFrame(current: win.frame, newSize: CGSize(width: windowSize.width, height: windowHeight(base: windowSize.height, notchHeight: target.height, openHeight: openNotchSize.height))), display: true) }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = target }
+        } else {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = target }
+            shrinkTasks[k]?.cancel()
+            shrinkTasks[k] = Task { [weak win] in
+                try? await Task.sleep(for: .milliseconds(650))
+                guard !Task.isCancelled, let win else { return }
+                win.setFrame(pinnedFrame(current: win.frame, newSize: CGSize(width: windowSize.width, height: windowHeight(base: windowSize.height, notchHeight: target.height, openHeight: openNotchSize.height))), display: true)
+            }
+        }
     }
 
     func level(for vm: BoringViewModel) -> ExpandLevel {
@@ -112,18 +152,27 @@ final class OrchestratorExpand: ObservableObject {
         guard expanded.contains(k) else { return }
         let win = windows[k]?.w
         finish(k, refocus: refocus)
-        if vm.notchState == .open { withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = openNotchSize } }
+        let target = openSize(for: vm)
+        if vm.notchState == .open { withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = target } }
         shrinkTasks[k]?.cancel()
         // Let the spring finish before the window stops covering the expanded area.
         shrinkTasks[k] = Task { [weak win] in
             try? await Task.sleep(for: .milliseconds(650))
             guard !Task.isCancelled, let win else { return }
-            win.setFrame(pinnedFrame(current: win.frame, newSize: windowSize), display: true)
+            win.setFrame(pinnedFrame(current: win.frame, newSize: CGSize(width: windowSize.width, height: windowHeight(base: windowSize.height, notchHeight: target.height, openHeight: openNotchSize.height))), display: true)
         }
     }
 
     /// Notch closed or tab left: collapse everything now, no animation.
     func reset() {
+        // Fits belong to the open notch; a closed notch starts from openNotchSize again.
+        let fitted = fits.filter { $0.value.values.contains { $0 > 0 } }.keys
+        fits = [:]
+        for k in fitted where !expanded.contains(k) {
+            shrinkTasks[k]?.cancel()
+            if let vm = vms[k]?.vm, vm.notchState == .open { vm.notchSize = openNotchSize }
+            if let w = windows[k]?.w { w.setFrame(pinnedFrame(current: w.frame, newSize: windowSize), display: true) }
+        }
         guard !expanded.isEmpty else { return }
         for k in Array(expanded) {
             shrinkTasks[k]?.cancel()

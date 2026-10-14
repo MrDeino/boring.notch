@@ -368,17 +368,18 @@ struct OrchestratorChatView: View {
     private var composer: some View {
         VStack(spacing: 4) {
             if !store.attachments.isEmpty { chipRow }
-            HStack(spacing: 6) {
-                HStack(spacing: 0) {
+            HStack(alignment: .bottom, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
                     if store.draftFromTerminal && !store.draft.isEmpty {
                         Text(verbatim: "from terminal · ").font(OT.F.ui).foregroundStyle(OT.C.text5)
                     }
-                    ZStack(alignment: .leading) {
+                    ZStack(alignment: .topLeading) {
                         ghostLayer
                         // The AppKit-backed TextField swallows clicks even under allowsHitTesting(false) and a
                         // tap overlay, so it only exists while typing; otherwise a Text shows the draft.
                         if manager.wantsKeyboard {
-                            TextField("", text: $store.draft)
+                            TextField("", text: $store.draft, axis: .vertical)
+                                .lineLimit(1...5)
                                 .textFieldStyle(.plain)
                                 .font(OT.F.ui)
                                 .foregroundStyle(OT.C.text)
@@ -388,23 +389,35 @@ struct OrchestratorChatView: View {
                                 .onAppear { DispatchQueue.main.async { if manager.wantsKeyboard { fieldFocused = true } } }
                         } else {
                             Text(verbatim: store.draft).font(OT.F.ui).foregroundStyle(OT.C.text)
-                                .lineLimit(1).truncationMode(.head)
-                            Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() }
+                                .lineLimit(1...5).truncationMode(.tail)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // Overlay, not a ZStack child: Color.clear is greedy and would stretch the pill vertically.
+                    .overlay { if !manager.wantsKeyboard { Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() } } }
+                    .padding(.vertical, 6)
                 }
-                accessory
-                sendButton
+                accessory.frame(height: 30)
+                sendButton.frame(height: 30)
             }
             .padding(.leading, 14).padding(.trailing, 5)
             .frame(maxWidth: .infinity)
-            .frame(height: 30)
+            .frame(minHeight: 30)
             .background(RoundedRectangle(cornerRadius: OT.R.pill30).fill(OT.C.raised))
+            .background(GeometryReader { g in
+                Color.clear.onAppear { fitComposer(g.size.height) }.onChange(of: g.size.height) { _, h in fitComposer(h) }
+            })
             .overlay {
                 if fieldFocused || dropTargeted { RoundedRectangle(cornerRadius: OT.R.pill30).stroke(OT.C.claude, lineWidth: 1.5) }
             }
         }
         .onDrop(of: [.image, .fileURL], isTargeted: $dropTargeted) { providers in handleDrop(providers) }
+        .onDisappear { OrchestratorExpand.shared.setFit("composer", extra: 0, vm: vm, window: anchor.window) }
+    }
+
+    /// The open notch grows with extra composer lines; at expanded/terminal the column absorbs them.
+    private func fitComposer(_ h: CGFloat) {
+        OrchestratorExpand.shared.setFit("composer", extra: expanded ? 0 : h - 30, vm: vm, window: anchor.window)
     }
 
     // ponytail: thumbnails decode from PNG per render; cache if chips ever get many.
@@ -520,6 +533,12 @@ struct OrchestratorChatView: View {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard fieldFocused, event.window === keyWindow else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
+            // Plain Return sends (the vertical field would insert a line); Shift/Option-Return fall through.
+            if (event.keyCode == 36 || event.keyCode == 76), mods.isEmpty,
+               (event.window?.firstResponder as? NSTextView)?.hasMarkedText() != true {
+                submit()
+                return nil
+            }
             if (event.keyCode == 48 || event.keyCode == 124), mods.isEmpty, let g = suggestion {
                 store.draft = g
                 store.draftFromTerminal = false
