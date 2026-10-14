@@ -51,6 +51,19 @@ Not in this phase: transcript rows/composer (5), runs/expand levels/wings (7), c
 </decisions>
 
 
+<post_research_decisions>
+## Post-research decisions (orchestrator, 2026-10-14) — override earlier D-items where they differ
+
+- R-01 Parser anchors on the option run and the nearest full `─` rule above it (not on "Do you want to proceed?"); one scan shared by `detectPrompt` and `detectPromptCard`; existing `main.swift` preconditions stay untouched (add fields with defaults to `PromptCard`; keep `PromptOption` as is or add a separate card option type). Special options found by label. Progress = ☒ count + 1 over non-Submit chips. Edit/Write diff bodies are dropped (title only, no command block).
+- R-02 No real fixtures exist for Edit/Write/WebFetch/MCP prompts or multi-question chips: use synthetic fixtures named `Tests/fixtures/phase6-*` marked ASSUMED; ask the user for real captures at UAT.
+- R-03 "Something else…": number via `pressOption`, then the text via `sendText` after a short delay with a bounded retry while `sending` — no Manager edit. Whether the TUI accepts text after the number is a UAT item.
+- R-04 PRM-04 uses a gated key-take on hover (~300ms dwell while a prompt is shown): `beginTyping` + `OrchestratorKeyGate.activate` + `makeKey`, local keyDown monitor (ignores modifier combos, passes keys through while a text field edits); release on pointer exit, answer, prompt gone, or disappear. Own window anchor in the card file. Before any key-triggered answer, refresh and check the prompt is still the same one.
+- R-05 ⏎ sends the highlighted option's number directly; never Up/Down.
+- R-06 Questions call `setLevel(.expanded)` and restore `.open` only if this card raised it; never downgrade `.terminal`.
+- R-07 No `matchedGeometryEffect`: use a bottom-move + opacity spring transition. Deviation noted.
+- R-08 Keep `OrchestratorPromptCard()` parameterless. Read Phase 4's PLAN files (`<api_contract>` blocks) for exact names.
+</post_research_decisions>
+
 <canonical_refs>
 ## Canonical References
 

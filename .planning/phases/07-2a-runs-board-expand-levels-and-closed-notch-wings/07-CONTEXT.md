@@ -51,6 +51,22 @@ Not in this phase: transcript rows/composer (5), prompt cards (6), Allow/Deny on
 </decisions>
 
 
+<post_research_decisions>
+## Post-research decisions (orchestrator, 2026-10-14) — override earlier D-items where they differ
+
+- R-01 `latest` is a truncated "[Tool] {json" string: extract command/path by regex, never JSON-decode. `startedAt`/`lastOutput` have fractional seconds (use `.withFractionalSeconds`). Waiting = denials present or `result` ends in "?".
+- R-02 "Ask in chat" message starts with a letter (a leading "/" or "!" switches Claude Code's mode), is one line, sent only on tap; enabled only when chat is running, no live prompt, not sending.
+- R-03 Wings: one `else if` in ContentView's closed-notch layout chain after the music branch and before the face branch (music wins by construction); the 7px dot is an `.overlay` on the visualizer container (no width change to music). Hide the old corner attention dot when wings or the music dot show. Working wing is driven by the chat's live status only.
+- R-04 Finished-run detection, rail auto-open and wing state come from a Combine sink on `manager.$runs` in a Phase 7 object — no Manager edit.
+- R-05 Expanded height = new pure `expandedHeight` (min(440, 45% of screen), floor 300); leave `expandedExtra` alone. Window shrink delay ~650ms for the 0.4/0.82 spring. Exactly one begin/endInteraction per open→expanded cycle.
+- R-06 ⌘↓/⌘↑/⌘T/⌘\ work through a local keyDown monitor only while the panel is key (typing or terminal) — documented limit. Esc keeps its existing meanings; "back one level" is the ⌃ button / ⌘↑.
+- R-07 The shell already renders `OrchestratorExpandedView()` when level != .open (Phase 4) — fill that stub; don't edit the shell. Embed `OrchestratorChatView(showComposer: false)` in the conversation column and one composer + Terminal pill in the bottom row (`OrchestratorChatView()` with composer, or put the Terminal pill in the rail column if a composer-only view isn't available — note it).
+- R-08 Change `OrchestratorExpand.transcriptTapped` policy to `.expanded`.
+- R-09 Runs sort: waiting first, then running/stuck, then the rest — new pure function; leave `stripRuns`.
+- R-10 Pass `offline` to `pollInterval` so closed offline polling stays 10s; closed + chatRunning = 3s.
+- R-11 Read Phase 4's PLAN files (`<api_contract>` blocks) for exact names.
+</post_research_decisions>
+
 <canonical_refs>
 ## Canonical References
 

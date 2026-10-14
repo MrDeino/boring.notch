@@ -51,6 +51,23 @@ Not in this phase: transcript rows from `/api/chat/blocks` (5), new composer/mes
 </decisions>
 
 
+<post_research_decisions>
+## Post-research decisions (orchestrator, 2026-10-14) — override earlier D-items where they differ
+
+- R-01 Header fit: the left side (~196px) can't hold the three tab buttons (~47px each) plus the segment (~104px). Allowed: one-line edit to the tab button horizontal padding in `TabButton.swift` (upstream file, declared minimal hook) so tabs become ~24px circles as the README shows. Visual check goes in UAT.
+- R-02 Shell order: connecting → offline → runs board (segment = Runs) → stopped → chat. So "see Runs" works while stopped.
+- R-03 Capsule state order (D-04): Connecting, Offline, Stopped, Needs you, Running, Idle. Running requires the live line to contain "esc to interrupt" (a "✻ Sautéed for 22s" line is finished, i.e. Idle).
+- R-04 Capsule on other tabs: tapping it switches to the Orchestrator tab and opens the menu (no ContentView edit). Capsule does nothing while connecting/offline.
+- R-05 Segment count hidden at 0 runs; "1 run" / "N runs" pluralised in the stopped line.
+- R-06 Opening the status menu while typing calls `stopTyping` (one added line, allowed).
+- R-07 Usage ring uses the 5h window only (`fiveHourFraction`); leave `usageFraction` (hairline uses it, tests pin it).
+- R-08 `ExpandLevel { open, expanded, terminal }` lives in `OrchestratorPure.swift`. `OrchestratorExpand` gets `level(for:)`, `setLevel(_:vm:window:)`, `transcriptTapped(vm:window:)` (Phase 4 → `.terminal`; Phase 7 → `.expanded`); `.expanded` grows the window without the terminal overlay.
+- R-09 The shell renders `OrchestratorExpandedView()` when level != .open (stub reproduces today's expanded behaviour). Phase 7 fills it; it never edits the shell.
+- R-10 `OrchestratorChatView(showComposer: Bool = true)`; Phase 5 keeps it. The prompt card is a sibling below the chat in the shell (chat hides its composer while a prompt shows).
+- R-11 `pollInterval(notchOpen:chatRunning:offline:)` stub in `OrchestratorRunsPure.swift`: 2 open / 10 closed / 10 offline.
+- R-12 Pure files never import SwiftUI; `OrchestratorPromptCard()`, `OrchestratorRunsBoard()` and `OrchestratorChatView()` need no required arguments.
+</post_research_decisions>
+
 <canonical_refs>
 ## Canonical References
 

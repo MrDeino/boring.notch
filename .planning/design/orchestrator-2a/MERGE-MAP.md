@@ -61,3 +61,4 @@ The swiftc harness command, fixed in Phase 4 and used unchanged by 5–7:
 - `OrchestratorChatView(showComposer: Bool = true)` from Phase 4; Phase 5 keeps the parameter.
 - Phase 4 may make a one-line padding edit in `TabButton.swift` (header fit).
 - `pollInterval(notchOpen:chatRunning:offline:)`.
+- (Revision after planning) The shell shows `OrchestratorPromptCard()` **instead of** `OrchestratorChatView()` while `manager.prompt != nil` (README 03: the card replaces the transcript). Phase 7's expanded view must do the same in its conversation column (show `OrchestratorPromptCard()` while a prompt is up) so a question card that raised the notch to `.expanded` stays visible.

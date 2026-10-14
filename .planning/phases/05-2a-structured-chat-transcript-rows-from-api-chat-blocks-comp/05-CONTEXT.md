@@ -49,6 +49,21 @@ Not in this phase: prompt cards (6), runs board/expand levels/expanded view/wing
 </decisions>
 
 
+<post_research_decisions>
+## Post-research decisions (orchestrator, 2026-10-14) — override earlier D-items where they differ
+
+- R-01 The endpoint is live on serve (orchestrator main 09da209): response is `{"running": bool, "blocks": [...]}`, ids are strings (uuid for user/prose, `toolu_…` for tool), tool `result` is null until the result arrives, Edit/MultiEdit/Write add `added`, `removed`, `diff` (up to 4 hunks `{oldStart,newStart,lines}`), and the server keeps the last 80 blocks; `since` re-sends the trailing tool blocks. Decode lossily and still accept a bare array.
+- R-02 Merge by id (replace in place, else append), cap 200; full reset on first load, when `chatRunning` goes false→true, when 80 blocks come back with no overlap, and a full resync about every 15th poll (`/clear` is otherwise invisible). `running:false` with empty blocks → fall back to `chatTail`.
+- R-03 Read results look like "first line (+N lines)": derive the "N lines" display from that.
+- R-04 Ghost-vs-draft (overrides D-09): box text shows as a ghost suggestion by default (README 02b a). It counts as a terminal draft (pulled in with "from terminal · " on focus) only when it changed between polls while the notch field wasn't editing. Ponytail comment; Phase 8's `suggested` flag replaces it.
+- R-05 Duplicate-text guard: because `POST {text}` types into Claude's real box, when the box is non-empty send `{key:"C-u"}` before the text. Wrap `submit()`, don't rewrite the typing logic.
+- R-06 Keys: a local `NSEvent` keyDown monitor installed only while the field is focused handles Tab (48), → (124), ⌃U (32); reach the field editor for the caret, fall back to clearing the whole field.
+- R-07 Layout: bottom-aligned last ~12 rows, no ScrollView in the open notch, prose `lineLimit(4)`; animate inserts only when a merge appended. Views and `OrchestratorTranscriptStore` live in `OrchestratorChat.swift`; `OrchestratorTranscript.swift` stays Foundation-only.
+- R-08 Keep Phase 4's API exactly: `OrchestratorChatView(showComposer:)`, the transcript tap calling `OrchestratorExpand.shared.transcriptTapped(vm:window:)`, and `OrchestratorTranscriptStore.shared.refresh(base:session:screen:chatRunning:)` (the manager call line is Phase 4's; don't edit it).
+- R-09 User row shows the ❯ glyph per README text. The idle "✻ Brewed for 2m 4s" line shows as a dim, non-live status row.
+- R-10 Read Phase 4's PLAN files (`<api_contract>` blocks) for exact names before writing tasks.
+</post_research_decisions>
+
 <canonical_refs>
 ## Canonical References
 

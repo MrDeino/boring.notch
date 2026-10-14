@@ -112,10 +112,12 @@ Plans:
   4. Stopped, offline and connecting states show the specified copy and layout; message box, prompt options, Esc, expand/terminal, attention dot and usage hairline still work
   5. Music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 4 to break down)
+- [ ] 04-01-PLAN.md — Seams + tokens: pure helpers (PromptCard, parseLiveStatus, capsuleState, pollInterval, ExpandLevel), Phase4-7 test runners, 11 files registered in pbxproj, manager + expand hooks
+- [ ] 04-02-PLAN.md — View split (Chat, PromptCard, RunsBoard), stopped/offline/connecting screens, thin shell with expand-level hook
+- [ ] 04-03-PLAN.md — Chat | Runs segment, status capsule + usage ring, in-notch status menu, BoringHeader swap
 
 **UI hint**: yes
 
@@ -134,10 +136,14 @@ Plans:
   4. The message box shows Claude Code's suggestion as ghost text with Tab/→ accept (also POSTs Tab), ⌃U clears locally and POSTs `{key:"C-u"}` with a "line cleared" tag, and a terminal draft is pulled in on focus with "from terminal · "
   5. New rows animate in from the bottom; clicking the transcript still opens the terminal; music unaffected
 
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 5 to break down)
+- [ ] 05-01-PLAN.md — Transcript pure core (TDD): blocks decode (both shapes), merge by id, since-chain reset, input-box parse, ghost-vs-draft, clear-to-caret, tool display strings
+- [ ] 05-02-PLAN.md — Blocks store (GET /api/chat/blocks?since=, chatTail fallback), frame 01 rows, live/idle status rows, insert motion
+- [ ] 05-03-PLAN.md — Frame 02/02b composer: pill, ring, hint row, ghost suggestion + Tab/→ accept, ⌃U (C-u), terminal draft, C-u before send, UAT list
+
+**Merge points:** no shared-file edits (state on OrchestratorTranscriptStore); OrchestratorChatView gains only defaulted init params
 
 **UI hint**: yes
 
@@ -156,10 +162,14 @@ Plans:
   4. 1–9 and esc answer while the pointer is over the notch; "Something else…" sends its option number then the typed text, and "Chat about this" sends its number
   5. Music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 6 to break down)
+- [ ] 06-01-PLAN.md — Parser: detectPromptCard title/purpose/body/kind/header/progress/descriptions/default, shortLabel, promptIdentity, key mapping; real + synthetic fixtures
+- [ ] 06-02-PLAN.md — Frame 03 permission card and frame 04 question list, stale-prompt guard, 3s lock dim, setLevel(.expanded) for questions, Chat about this, esc
+- [ ] 06-03-PLAN.md — 1–9/esc/↑↓/⏎ while hovered (gated key-take + local monitor), 'Something else…' free text, phase checks, UAT list
+
+**Merge points:** no shared-file edits
 
 **UI hint**: yes
 
@@ -178,10 +188,21 @@ Plans:
   4. The rail collapses to the 30px strip (‹ or ⌘\), persists in `Defaults` `orchRunsRailCollapsed`, and re-opens when a run starts waiting unless collapsed this session
   5. The closed notch shows Working / Needs you / Run finished wings and the usage hairline; with music playing the music live activity is unchanged apart from a 7px orange dot; closed polling drops to 3s while the chat runs
 
-**Plans:** 0 plans
+**Plans:** 5 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 7 to break down)
+**Wave 1**
+- [ ] 07-01-PLAN.md — OrchestratorRun fields + pure helpers (TDD): elapsed, latest action, waiting question, Ask-in-chat message, sort, pollInterval 3s, nextLevel, expandedHeight, wing kind/width
+
+**Wave 2** *(blocked on 07-01; disjoint files)*
+- [ ] 07-02-PLAN.md — Runs board (frame 05), waiting card with question + Ask in chat (no Allow/Deny), bottom status line
+- [ ] 07-03-PLAN.md — Closed-notch wings (frame 00), music dot overlay, corner-dot hide, radius 26 (ContentView: one else-if after music)
+- [ ] 07-04-PLAN.md — Expand level machine, ⌘ shortcut monitor, transcriptTapped → .expanded, framed terminal (frame 10), ⌃ collapse button
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 07-05-PLAN.md — Expanded body (frame 12), runs rail + 30px strip (12b), orchRunsRailCollapsed, auto re-open, cross-fade, UAT list
+
+**Merge points:** OrchestratorRun fields (Models), ContentView wing hook, OrchestratorHeaderTrailing — all Phase 7-only
 
 **UI hint**: yes
 
@@ -235,9 +256,9 @@ Plans:
 | 1. Read-only Orchestrator Tab | 2/2 | Complete   | 2026-10-14 |
 | 2. Sending & Prompt Answers | 2/2 | Awaiting UAT | - |
 | 3. Compact Indicators & Expand-Down | 2/2 | Awaiting UAT | - |
-| 4. 2a Foundation | 0/0 | Not planned | - |
-| 5. 2a Structured Chat | 0/0 | Not planned | - |
-| 6. 2a Prompt Cards | 0/0 | Not planned | - |
-| 7. 2a Runs Board, Expand Levels & Wings | 0/0 | Not planned | - |
+| 4. 2a Foundation | 0/3 | Planned | - |
+| 5. 2a Structured Chat | 0/3 | Planned | - |
+| 6. 2a Prompt Cards | 0/3 | Planned | - |
+| 7. 2a Runs Board, Expand Levels & Wings | 0/5 | Planned | - |
 | 8. Phase B Live Data | 0/0 | Not planned | - |
 | 9. Phase B Approvals | 0/0 | Not planned | - |

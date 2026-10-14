@@ -232,7 +232,9 @@ Fixtures for `Phase5Tests.swift` (inline strings, harness style): bare array; `{
 | A6 | TimelineView/gradient shimmer cost is negligible | Status | Battery in closed state; mitigated by instantiating only while live and open |
 | A7 | macOS 14 TextField has no selection API | Composer | If wrong, simpler caret code |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+Resolved: Q1 → 05-CONTEXT R-04 (ghost by default, draft only when changed); Q2 → R-05 (wrap submit with C-u); Q3 → R-09 (❯ shown, dim idle row); Q4 → R-10 (names from Phase 4 api_contract); Q5 → plan 05-02 (fetch only while the notch is open).
 
 1. **D-09 vs README 02b(a):** D-09 says on focus the box text is pulled in as a "from terminal" draft; frame (a) shows a focused composer with ghost + Tab hint. Phase A cannot tell them apart. If D-09 is applied literally, a suggestion becomes a white draft the moment the user clicks the composer and the Tab-accept flow (a, b, d) never appears. Recommendation: ghost by default; classify as a terminal draft only if the box text has been seen changing between polls (A5); record with the ponytail comment; ask the user to confirm. **Needs user decision.**
 2. **`submit()` unchanged vs C-u-before-send:** see Send sync. Recommendation: add the pre-send C-u in a wrapper around the unchanged `submit()`.

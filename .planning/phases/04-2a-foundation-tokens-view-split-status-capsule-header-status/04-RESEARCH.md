@@ -278,7 +278,10 @@ Stopped content: `VStack(spacing: 10) { Text("Orchestrator chat is stopped").fon
 | A3 | Menu fits in ~144px with 3px row padding | 4 | Needs tighter rows |
 | A4 | `handBack:false` when menu opens during typing is acceptable | 4 | Focus glitch; UAT |
 
-## Open Questions (spec gaps for the user/planner)
+## Open Questions (RESOLVED)
+
+Resolved by 04-CONTEXT post_research_decisions: 1 → R-01 (padding edit allowed); 2 → R-02 (runs board first); 3 → R-05 (no number at 0); 4 → R-04 (tap jumps to tab + opens menu); 5 → D-06 (keep repo symbols); 6 → R-03/R-05 (D-04 order kept, pluralised).
+
 1. Tab buttons must shrink (TabButton padding 15 -> ~5) or the segment cannot fit; D-06 says tab icons stay. Recommend approving the 1-line upstream edit.
 2. Shell order: MERGE-MAP says stopped before runs board; D-08's "see Runs" link requires runs board first. Recommend runs board first.
 3. "Runs N": count of live (running/waiting/stuck) runs; show no number at 0? Recommend omit at 0.
