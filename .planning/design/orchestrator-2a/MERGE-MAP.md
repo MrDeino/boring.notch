@@ -26,7 +26,7 @@ Phase 4 adds every file below to the Xcode project (file reference, group entry,
 
 The swiftc harness command, fixed in Phase 4 and used unchanged by 5–7:
 
-`mkdir -p /tmp/orch-test && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swiftc -o /tmp/orch-test/t boringNotch/Orchestrator/OrchestratorModels.swift boringNotch/Orchestrator/OrchestratorPure.swift boringNotch/Orchestrator/OrchestratorTranscript.swift boringNotch/Orchestrator/OrchestratorPromptParse.swift boringNotch/Orchestrator/OrchestratorRunsPure.swift boringNotch/Orchestrator/Tests/*.swift && /tmp/orch-test/t`
+`mkdir -p /tmp/orch-test && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swiftc -o /tmp/orch-test/t boringNotch/Orchestrator/OrchestratorModels.swift boringNotch/Orchestrator/OrchestratorPure.swift boringNotch/Orchestrator/OrchestratorTranscript.swift boringNotch/Orchestrator/OrchestratorPromptParse.swift boringNotch/Orchestrator/OrchestratorRunsPure.swift boringNotch/Orchestrator/OrchestratorStream.swift boringNotch/Orchestrator/Tests/*.swift && /tmp/orch-test/t`
 
 (Pure files import Foundation/CoreGraphics only — never SwiftUI or app types.)
 
@@ -62,3 +62,4 @@ The swiftc harness command, fixed in Phase 4 and used unchanged by 5–7:
 - Phase 4 may make a one-line padding edit in `TabButton.swift` (header fit).
 - `pollInterval(notchOpen:chatRunning:offline:)`.
 - (Revision after planning) The shell shows `OrchestratorPromptCard()` **instead of** `OrchestratorChatView()` while `manager.prompt != nil` (README 03: the card replaces the transcript). Phase 7's expanded view must do the same in its conversation column (show `OrchestratorPromptCard()` while a prompt is up) so a question card that raised the notch to `.expanded` stays visible.
+- Phase 8 adds `OrchestratorStream.swift` (pure, in the harness command above) and `Tests/Phase8Tests.swift`.

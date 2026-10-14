@@ -6,15 +6,49 @@ struct ChatResponse: Decodable {
     let running: Bool?
     let screen: String?
     var live: Bool? = nil
+    var input: ChatInput? = nil
+    var context: ChatContext? = nil
+    /// True when serve sent the `input` key at all (null = no box on screen; absent = old serve, use the heuristic).
+    var hasInputKey = false
+}
+
+/// Serve's exact input-box state (Phase 8).
+struct ChatInput: Decodable, Equatable {
+    let text: String?
+    let suggested: Bool?
+    private enum CodingKeys: String, CodingKey { case text, suggested }
+    init(text: String?, suggested: Bool?) { self.text = text; self.suggested = suggested }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        text = try? c.decodeIfPresent(String.self, forKey: .text)
+        suggested = try? c.decodeIfPresent(Bool.self, forKey: .suggested)
+    }
+}
+
+struct ChatContext: Decodable, Equatable {
+    let tokens: Int?
+    let window: Int?
+    let percent: Int?
+    private enum CodingKeys: String, CodingKey { case tokens, window, percent }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tokens = try? c.decodeIfPresent(Int.self, forKey: .tokens)
+        window = try? c.decodeIfPresent(Int.self, forKey: .window)
+        percent = try? c.decodeIfPresent(Int.self, forKey: .percent)
+    }
 }
 
 extension ChatResponse {
-    private enum CodingKeys: String, CodingKey { case running, screen, live }
+    private enum CodingKeys: String, CodingKey { case running, screen, live, input, context }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         running = try c.decodeIfPresent(Bool.self, forKey: .running)
         screen = try c.decodeIfPresent(String.self, forKey: .screen)
-        live = try? c.decodeIfPresent(Bool.self, forKey: .live) // lossy: a wrong-typed flag must not fail the chat decode
+        // lossy: a wrong-typed field must not fail the chat decode
+        live = try? c.decodeIfPresent(Bool.self, forKey: .live)
+        input = try? c.decodeIfPresent(ChatInput.self, forKey: .input)
+        context = try? c.decodeIfPresent(ChatContext.self, forKey: .context)
+        hasInputKey = c.contains(.input)
     }
 }
 
