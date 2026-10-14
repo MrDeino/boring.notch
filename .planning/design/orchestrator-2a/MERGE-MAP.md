@@ -53,3 +53,11 @@ The swiftc harness command, fixed in Phase 4 and used unchanged by 5–7:
 2. `Tests/main.swift` — none expected (Phase 4 already calls all runners).
 3. `.planning/STATE.md` / `ROADMAP.md` — always; keep both sides.
 4. Expanded view embeds `OrchestratorChatView` (Phase 5 rows) and `OrchestratorPromptCard` (Phase 6) by type name, so after merge 7's expanded column shows 5's rows without code changes.
+
+## Post-research amendments (2026-10-14)
+
+- `ExpandLevel` enum lives in `OrchestratorPure.swift` (Phase 4). `OrchestratorExpand` also gets `transcriptTapped(vm:window:)` (Phase 4 → `.terminal`; Phase 7 changes it to `.expanded`). The chat calls it, so Phase 5 never edits for Phase 7.
+- The shell renders `OrchestratorExpandedView()` when level != `.open` (Phase 4 hook; stub reproduces today's expanded behaviour). Phase 7 fills it; nobody else edits the shell.
+- `OrchestratorChatView(showComposer: Bool = true)` from Phase 4; Phase 5 keeps the parameter.
+- Phase 4 may make a one-line padding edit in `TabButton.swift` (header fit).
+- `pollInterval(notchOpen:chatRunning:offline:)`.

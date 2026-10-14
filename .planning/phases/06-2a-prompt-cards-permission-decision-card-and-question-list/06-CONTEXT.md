@@ -50,6 +50,7 @@ Not in this phase: transcript rows/composer (5), runs/expand levels/wings (7), c
 - `matchedGeometryEffect` rise-from-composer motion (README) — do it if it stays inside owned files; otherwise a simple transition.
 </decisions>
 
+
 <canonical_refs>
 ## Canonical References
 

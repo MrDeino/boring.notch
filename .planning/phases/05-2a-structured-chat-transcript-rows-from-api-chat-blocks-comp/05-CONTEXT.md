@@ -48,6 +48,7 @@ Not in this phase: prompt cards (6), runs board/expand levels/expanded view/wing
 - How the composer intercepts Tab/→/⌃U in a SwiftUI TextField (`onKeyPress` is macOS 14+, fine).
 </decisions>
 
+
 <canonical_refs>
 ## Canonical References
 

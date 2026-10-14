@@ -50,6 +50,7 @@ Not in this phase: transcript rows/composer (5), prompt cards (6), Allow/Deny on
 - Hover-peek implementation for rail dots.
 </decisions>
 
+
 <canonical_refs>
 ## Canonical References
 

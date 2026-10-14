@@ -50,6 +50,7 @@ Not in this phase: transcript rows from `/api/chat/blocks` (5), new composer/mes
 - Cross-fade for capsule label changes (README motion summary).
 </decisions>
 
+
 <canonical_refs>
 ## Canonical References
 
