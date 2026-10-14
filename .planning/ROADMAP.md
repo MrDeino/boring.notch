@@ -11,7 +11,7 @@ Phases 4–9 rebuild the tab to the high-fidelity design handoff (option 2a, `.p
 - [x] **Phase 1: Read-only Orchestrator Tab** - Fork builds from CLI; tab shows chat tail, runs, usage, offline state, with polling (verified; human UAT passed 2026-10-14)
 - [ ] **Phase 2: Sending & Prompt Answers** - Type messages, answer numbered prompts, Esc, start/end the chat from the notch (built and verified at code level 2026-10-14; awaiting human UAT)
 - [ ] **Phase 3: Compact Indicators & Expand-Down** - Closed-notch usage + attention dot; notch grows down for larger chat and live terminal (built and verified at code level 2026-10-14; awaiting human UAT)
-- [ ] **Phase 4: 2a Foundation** - Design tokens, OrchestratorView split, Chat | Runs segment + status capsule header, status menu, stopped/offline/connecting screens, shared seams for 5–7
+- [x] **Phase 4: 2a Foundation** - Design tokens, OrchestratorView split, Chat | Runs segment + status capsule header, status menu, stopped/offline/connecting screens, shared seams for 5–7 (completed 2026-10-14)
 - [ ] **Phase 5: 2a Structured Chat** - Transcript rows from serve's GET /api/chat/blocks, live status, composer and message box (suggestion, Tab, ⌃U, terminal draft), row-insert motion (parallel with 6, 7)
 - [ ] **Phase 6: 2a Prompt Cards** - Permission decision card, vertical question list, richer detectPrompt, 1–9/esc while hovered, 'Something else…' and 'Chat about this' (parallel with 5, 7)
 - [ ] **Phase 7: 2a Runs Board, Expand Levels & Wings** - Runs board, open→expanded→terminal levels with runs rail, closed-notch live-activity wings (parallel with 5, 6)
@@ -112,12 +112,12 @@ Plans:
   4. Stopped, offline and connecting states show the specified copy and layout; message box, prompt options, Esc, expand/terminal, attention dot and usage hairline still work
   5. Music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 04-01-PLAN.md — Seams + tokens: pure helpers (PromptCard, parseLiveStatus, capsuleState, pollInterval, ExpandLevel), Phase4-7 test runners, 11 files registered in pbxproj, manager + expand hooks
 - [x] 04-02-PLAN.md — View split (Chat, PromptCard, RunsBoard), stopped/offline/connecting screens, thin shell with expand-level hook
-- [ ] 04-03-PLAN.md — Chat | Runs segment, status capsule + usage ring, in-notch status menu, BoringHeader swap
+- [x] 04-03-PLAN.md — Chat | Runs segment, status capsule + usage ring, in-notch status menu, BoringHeader swap
 
 **UI hint**: yes
 
@@ -256,7 +256,7 @@ Plans:
 | 1. Read-only Orchestrator Tab | 2/2 | Complete   | 2026-10-14 |
 | 2. Sending & Prompt Answers | 2/2 | Awaiting UAT | - |
 | 3. Compact Indicators & Expand-Down | 2/2 | Awaiting UAT | - |
-| 4. 2a Foundation | 2/3 | In Progress|  |
+| 4. 2a Foundation | 3/3 | Complete   | 2026-10-14 |
 | 5. 2a Structured Chat | 0/3 | Planned | - |
 | 6. 2a Prompt Cards | 0/3 | Planned | - |
 | 7. 2a Runs Board, Expand Levels & Wings | 0/5 | Planned | - |
