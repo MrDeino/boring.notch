@@ -69,11 +69,11 @@ Plans:
   4. Clicking anywhere outside the expanded notch collapses it back to normal size
   5. Music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Closed-notch attention dot (shown with music) + usage hairline overlay
+- [x] 03-01-PLAN.md — Closed-notch attention dot (shown with music) + usage hairline overlay
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -87,4 +87,4 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Read-only Orchestrator Tab | 2/2 | Complete   | 2026-10-14 |
 | 2. Sending & Prompt Answers | 0/TBD | Not started | - |
-| 3. Compact Indicators & Expand-Down | 0/TBD | Not started | - |
+| 3. Compact Indicators & Expand-Down | 1/2 | In Progress|  |

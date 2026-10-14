@@ -31,8 +31,8 @@
 
 ### Compact & Expand
 
-- [ ] **CMP-01**: With the notch closed, user sees a small Claude usage indicator
-- [ ] **CMP-02**: With the notch closed, user sees a dot when any run is `waiting` or the chat shows a question/permission prompt — including while music is playing (small dot at the notch edge alongside the music activity; never hidden by music)
+- [x] **CMP-01**: With the notch closed, user sees a small Claude usage indicator
+- [x] **CMP-02**: With the notch closed, user sees a dot when any run is `waiting` or the chat shows a question/permission prompt — including while music is playing (small dot at the notch edge alongside the music activity; never hidden by music)
 - [ ] **EXP-01**: User can expand the notch further downward (same window) to see a larger chat view
 - [ ] **EXP-02**: In the expanded notch, user can see and type into the full live terminal (`/term` in a WKWebView)
 - [ ] **EXP-03**: Clicking anywhere outside the expanded notch collapses it back
@@ -75,8 +75,8 @@
 | INT-04 | Phase 2 | Pending |
 | INT-05 | Phase 2 | Pending |
 | INT-06 | Phase 2 | Pending |
-| CMP-01 | Phase 3 | Pending |
-| CMP-02 | Phase 3 | Pending |
+| CMP-01 | Phase 3 | Complete |
+| CMP-02 | Phase 3 | Complete |
 | EXP-01 | Phase 3 | Pending |
 | EXP-02 | Phase 3 | Pending |
 | EXP-03 | Phase 3 | Pending |
