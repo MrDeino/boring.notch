@@ -1022,6 +1022,7 @@ final class OrchestratorSelectableTextView: NSTextView {
             }
             layer?.addSublayer(caretLayer)
         }
+        lm.ensureLayout(for: tc)
         let g = lm.glyphRange(for: tc)
         guard g.length > 0 else { caretLayer.removeFromSuperlayer(); return }
         let r = lm.lineFragmentUsedRect(forGlyphAt: g.upperBound - 1, effectiveRange: nil)
@@ -1145,6 +1146,7 @@ struct OrchestratorSelectableText: NSViewRepresentable {
         if v.current?.isEqual(to: text) != true { // keep the selection across polls
             v.current = text
             v.textStorage?.setAttributedString(text)
+            if v.caretOn { v.needsLayout = true }
         }
     }
 
