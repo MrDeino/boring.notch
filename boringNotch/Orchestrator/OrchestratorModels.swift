@@ -39,6 +39,12 @@ struct OrchestratorRun: Decodable, Equatable {
     let agent: String?
     let prompt: String?
     let state: String?
+    let startedAt: String?
+    let lastOutput: String?
+    let result: String?
+    let denials: [String]?
+    let latest: String?
+    let activity: RunActivity?
 
     /// ForEach id that survives a nil id.
     var stableID: String { id ?? "\(project ?? "")|\(prompt ?? "")" }
@@ -49,6 +55,9 @@ struct OrchestratorRun: Decodable, Equatable {
             .first { !$0.isEmpty } ?? ""
     }
 }
+
+struct RunActivity: Decodable, Equatable { let step: String?; let agents: [RunAgent]? }
+struct RunAgent: Decodable, Equatable { let type: String?; let desc: String? }
 
 struct OrchestratorUsage: Decodable, Equatable {
     let fiveHour: UsageWindow?
