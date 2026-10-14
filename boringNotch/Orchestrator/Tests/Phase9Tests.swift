@@ -57,3 +57,53 @@ func runPhase9Tests() {
     precondition(approvalKeyLabels(ctrl: false).allow == "⌥⏎" && approvalKeyLabels(ctrl: false).deny == "⌥⎋")
     precondition(approvalKeyLabels(ctrl: true).allow == "⌃⌥⏎" && approvalKeyLabels(ctrl: true).deny == "⌃⌥⎋")
 }
+
+/// Approval answer round trip against Tests/approval-mock.py on 47999 (never the live serve). Only runs with ORCH_APPROVAL_MOCK set.
+/// Mirrors OrchestratorManager.answerApproval: fresh GET, approvalAnswer gate, then POST {key}.
+func runPhase9Mock() async {
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    proc.arguments = ["-I", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("approval-mock.py").path]
+    try! proc.run()
+    defer { proc.terminate() }
+    let b = URL(string: "http://127.0.0.1:47999")!
+    let ses = URLSession(configuration: .ephemeral)
+    for _ in 0..<50 { if (try? await ses.data(from: b.appendingPathComponent("__log"))) != nil { break }; try! await Task.sleep(for: .milliseconds(100)) }
+
+    func setChat(_ j: String) async {
+        var r = URLRequest(url: b.appendingPathComponent("__set")); r.httpMethod = "POST"; r.httpBody = Data(j.utf8)
+        _ = try! await ses.data(for: r)
+    }
+    func answer(allow: Bool, answeringId: String) async -> ApprovalAnswer {
+        let (data, _) = try! await ses.data(from: b.appendingPathComponent("api/chat"))
+        let c = try! d.decode(ChatResponse.self, from: data)
+        let ans = approvalAnswer(allow: allow, pendingId: c.approval?.id, answeringId: answeringId, options: detectPrompt(screen: c.screen ?? ""))
+        if case .send(let k) = ans { let code = try! await sendOrchestratorPost(.key(k), base: b, session: ses); precondition(code == 200) }
+        return ans
+    }
+    func posts() async -> [[String: Any]] {
+        let (data, _) = try! await ses.data(from: b.appendingPathComponent("__log"))
+        return try! JSONSerialization.jsonObject(with: data) as! [[String: Any]]
+    }
+    let screen = "Do you want to proceed?\\n❯ 1. Yes\\n  2. Yes, and don't ask again\\n  3. No, and tell Claude what to do differently (esc)\\n Esc to cancel · Tab to amend\\n"
+    let ap = #""approval":{"id":"a1","tool":"Bash","command":"ls"}"#
+
+    await setChat(#"{"running":true,"screen":"\#(screen)",\#(ap)}"#)
+    do { let r = await answer(allow: true, answeringId: "a1"); precondition(r == .send("1")) }
+    do { let r = await answer(allow: false, answeringId: "a1"); precondition(r == .send("Escape")) }
+    let p = await posts()
+    precondition(p.count == 2)
+    precondition((p[0]["body"] as! [String: String]) == ["key": "1"] && (p[1]["body"] as! [String: String]) == ["key": "Escape"])
+    for e in p { precondition(e["xorch"] as? String == "1" && e["ctype"] as? String == "application/json") }
+
+    // Changed approval id (a newer prompt replaced the one the user saw): nothing posted.
+    await setChat(#"{"running":true,"screen":"\#(screen)","approval":{"id":"a2","tool":"Bash","command":"rm"}}"#)
+    do { let r = await answer(allow: true, answeringId: "a1"); precondition(r == .skip) }
+    do { let r = await answer(allow: false, answeringId: "a1"); precondition(r == .skip) }
+    // No prompt on screen, or no approval at all: nothing posted.
+    await setChat(#"{"running":true,"screen":"just output\\n",\#(ap)}"#)
+    do { let r = await answer(allow: true, answeringId: "a1"); precondition(r == .skip) }
+    await setChat(#"{"running":true,"screen":"\#(screen)","approval":null}"#)
+    do { let r = await answer(allow: false, answeringId: "a1"); precondition(r == .skip) }
+    let n = await posts().count; precondition(n == 2)
+}
