@@ -14,6 +14,7 @@ final class OrchestratorWingsModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
+        _ = OrchestratorRailState.shared // eager, so its waiting baseline exists before the first expand (WR-02)
         manager.$runs.combineLatest(manager.$offline, manager.$hasLoaded)
             .sink { [weak self] runs, offline, loaded in self?.runsChanged(runs, offline, loaded) }
             .store(in: &cancellables)
