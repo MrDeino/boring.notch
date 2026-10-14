@@ -10,20 +10,6 @@ private func bitmapImage(_ w: Int, _ h: Int) -> NSImage {
 }
 
 func runQuickRm9Tests() {
-    // hairline
-    let s = CGSize(width: 440, height: 32)
-    for hw in [CGFloat(32), 0] {
-        let r = usageHairlineRect(shape: s, notchWidth: 185, hardwareHeight: hw, fraction: 0.5)
-        precondition(r.minX == 14 && r.minY == 30 && r.height == 2 && r.width == (440 - 28) * 0.5)
-    }
-    let r33 = usageHairlineRect(shape: s, notchWidth: 185, hardwareHeight: 33, fraction: 0.5)
-    precondition(r33.maxY == 33 && r33.minX == (440 - 185) / 2 + 14 && r33.width == (185 - 28) * 0.5)
-    let r38 = usageHairlineRect(shape: CGSize(width: 440, height: 38), notchWidth: 185, hardwareHeight: 38, fraction: 0)
-    precondition(r38.minY == 36 && r38.width == 0 && r38.minX == 14)
-    precondition(usageHairlineRect(shape: CGSize(width: 440, height: 38), notchWidth: 185, hardwareHeight: 38, fraction: 1).width == 412)
-    let wide = usageHairlineRect(shape: s, notchWidth: 900, hardwareHeight: 40, fraction: 1)
-    precondition(wide.minX == 14 && wide.width == 412 && wide.maxY == 40)
-
     // wire text
     precondition(chatTextWithImages("look", paths: ["/a.png", "/b.png"]) == "look [image: /a.png] [image: /b.png]")
     precondition(chatTextWithImages("  ", paths: ["/a.png"]) == "[image: /a.png]")

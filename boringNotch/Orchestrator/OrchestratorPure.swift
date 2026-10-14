@@ -2,13 +2,6 @@
 import Foundation
 import CoreGraphics
 
-/// Highest of the 5h/7d usage windows as 0...1, nil when unknown.
-func usageFraction(_ u: OrchestratorUsage?) -> Double? {
-    let p = [u?.fiveHour?.usedPercentage, u?.sevenDay?.usedPercentage].compactMap { $0 }
-    guard let m = p.max() else { return nil }
-    return min(max(m / 100, 0), 1)
-}
-
 /// Extra height the expanded notch adds below the normal open size.
 func expandedExtra(screenHeight: CGFloat, openHeight: CGFloat) -> CGFloat {
     max(0, min(300, screenHeight - openHeight - 40))
@@ -101,14 +94,3 @@ func fiveHourFraction(_ u: OrchestratorUsage?) -> Double? {
 }
 
 func usageIsHigh(_ percent: Double?) -> Bool { (percent ?? 0) >= 80 }
-
-/// Usage hairline rect inside the closed shape. The hardware notch / menu-bar band can reach below the drawn
-/// shape (measured 32 vs 33 on the user's Mac), so the bottom is the lower of the two; then the line spans only
-/// the hardware notch width so it never hangs below the wings over the wallpaper.
-func usageHairlineRect(shape: CGSize, notchWidth: CGFloat, hardwareHeight: CGFloat, fraction: Double) -> CGRect {
-    let lower = hardwareHeight > shape.height + 0.5
-    let spanW = lower ? min(notchWidth, shape.width) : shape.width
-    let spanX = lower ? (shape.width - spanW) / 2 : 0
-    let bottom = lower ? hardwareHeight : shape.height
-    return CGRect(x: spanX + 14, y: bottom - 2, width: max(0, spanW - 28) * min(max(fraction, 0), 1), height: 2)
-}
