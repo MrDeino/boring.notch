@@ -33,7 +33,7 @@ expected: Clicking the transcript opens the terminal.
 result: pending
 
 ### 6. Composer look and typing
-expected: Unfocused: 30px pill, "Message orchestrator" placeholder, grey send circle. Focused: accent ring, accent send circle with black arrow, hint row "⏎ send · ⌃U clear line · esc release". Typing activates and releases the keyboard as before (esc releases; clicking another app hands focus back).
+expected: Unfocused: 30px pill, "Message orchestrator" placeholder, grey send circle. Focused: accent ring, accent send circle with black arrow; no hint row under the composer (removed 2026-10-14). Typing activates and releases the keyboard as before (esc releases; clicking another app hands focus back).
 result: pending
 
 ### 7. Ghost suggestion
@@ -60,8 +60,8 @@ result: pending
 expected: play/pause/skip, artwork and the closed-notch music live activity are unchanged with the Orchestrator tab open and closed.
 result: pending
 
-### 13. Send clears the real box safely (CR-01)
-expected: With a two-line draft in the Claude box, or the cursor moved mid-line, sending from the notch sends nothing and keeps the notch draft. A normal send still works and the extra screen read (up to ~750ms) does not feel slow.
+### 13. Send posts C-u then the text (2026-10-14)
+expected: With Claude's dim suggested prompt showing in its box, sending from the notch posts the message (the suggestion does not block it). If serve is down or the chat stopped, a red "Couldn't send" shows in the field for ~2s and the draft stays.
 result: pending
 
 ### 14. Enter while busy (CR-02)

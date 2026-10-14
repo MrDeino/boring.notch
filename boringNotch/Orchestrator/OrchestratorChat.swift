@@ -93,28 +93,17 @@ final class OrchestratorTranscriptStore: ObservableObject {
         return decodeChatBlocks(data)
     }
 
-    func postKey(_ key: String) async {
-        guard let base, let session else { return }
-        _ = try? await sendOrchestratorPost(.key(key), base: base, session: session)
-    }
-
-    /// R-05: C-u the real box when it holds text, then confirm from a fresh screen that it is empty.
-    /// C-u only kills to line start, so a multi-line box or a mid-line cursor leaves text: false = don't send.
-    func clearRealLineIfNeeded() async -> Bool {
+    /// R-05: always C-u Claude's box before typing; no wait-for-empty check. Claude's dim suggested
+    /// prompt reads as plain box text in capture-pane and C-u can't clear it (fixtures/idle-suggestion.txt),
+    /// but typing replaces it. false = the C-u POST failed, so don't type.
+    func clearRealLine() async -> Bool {
         guard let base, let session else { return false }
-        for attempt in 0..<6 {
-            guard let (d, _) = try? await session.data(from: base.appendingPathComponent("api/chat")),
-                  let r = try? JSONDecoder().decode(ChatResponse.self, from: d) else { return false }
-            guard let box = parseInputLine(screen: r.screen ?? ""), !box.isEmpty else { return true }
-            if attempt == 0 { await postKey("C-u") }
-            try? await Task.sleep(for: .milliseconds(150))
-        }
-        return false
+        return (try? await sendOrchestratorPost(.key("C-u"), base: base, session: session)) == 200
     }
 
     /// Clear + send as one manager operation: no other POST can land between C-u and the text.
     func submit(_ text: String) async -> Bool {
-        await OrchestratorManager.shared.sendText(text) { await self.clearRealLineIfNeeded() }
+        await OrchestratorManager.shared.sendText(text) { await self.clearRealLine() }
     }
 }
 
@@ -137,8 +126,8 @@ struct OrchestratorChatView: View {
     @FocusState private var fieldFocused: Bool
     @State private var fromTerminal = false
     @State private var keyMonitor: Any?
-    @State private var clearedGen = 0
-    @State private var showCleared = false
+    @State private var tagGen = 0
+    @State private var tag: (text: String, error: Bool)?
     @ObservedObject var store = OrchestratorTranscriptStore.shared
     private let showComposer: Bool
     private let proseLineLimit: Int?
@@ -267,12 +256,6 @@ struct OrchestratorChatView: View {
             .overlay {
                 if fieldFocused { RoundedRectangle(cornerRadius: OT.R.pill30).stroke(OT.C.claude, lineWidth: 1.5) }
             }
-            if manager.wantsKeyboard {
-                Text("⏎ send · ⌃U clear line · esc release")
-                    .font(OT.F.hint).foregroundStyle(OT.C.text6)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.top, 12)
-            }
         }
     }
 
@@ -288,8 +271,8 @@ struct OrchestratorChatView: View {
     }
 
     @ViewBuilder private var accessory: some View {
-        if showCleared {
-            Text("line cleared").font(OT.F.hint).foregroundStyle(OT.C.text5)
+        if let tag {
+            Text(tag.text).font(OT.F.hint).foregroundStyle(tag.error ? OT.C.redText : OT.C.text5)
                 .padding(.vertical, 2).padding(.horizontal, 7)
                 .background(OT.C.selected, in: RoundedRectangle(cornerRadius: 8))
                 .transition(.opacity)
@@ -343,16 +326,21 @@ struct OrchestratorChatView: View {
                 let tv = event.window?.firstResponder as? NSTextView
                 draft = clearToCaret(draft, caretUTF16: tv?.selectedRange().location)
                 DispatchQueue.main.async { tv?.setSelectedRange(NSRange(location: 0, length: 0)) }
-                clearedGen += 1
-                let gen = clearedGen
-                withAnimation(.easeOut(duration: 0.15)) { showCleared = true }
-                Task {
-                    try? await Task.sleep(for: .milliseconds(1200))
-                    if clearedGen == gen { withAnimation(.easeOut(duration: 0.15)) { showCleared = false } }
-                }
+                flashTag("line cleared", error: false, ms: 1200)
                 return nil
             }
             return event
+        }
+    }
+
+    /// Brief inline tag in the composer pill ("line cleared", "Couldn't send").
+    private func flashTag(_ text: String, error: Bool, ms: Int) {
+        tagGen += 1
+        let gen = tagGen
+        withAnimation(.easeOut(duration: 0.15)) { tag = (text, error) }
+        Task {
+            try? await Task.sleep(for: .milliseconds(ms))
+            if tagGen == gen { withAnimation(.easeOut(duration: 0.15)) { tag = nil } }
         }
     }
 
@@ -408,7 +396,10 @@ struct OrchestratorChatView: View {
             return
         }
         stopTyping()
-        Task { if await store.submit(t) { draft = ""; fromTerminal = false } }
+        Task {
+            if await store.submit(t) { draft = ""; fromTerminal = false }
+            else { flashTag("Couldn't send", error: true, ms: 2000) } // draft is kept
+        }
     }
 }
 

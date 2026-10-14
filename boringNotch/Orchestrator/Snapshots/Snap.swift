@@ -135,6 +135,7 @@ struct Snap {
             Scene(name: "11-expanded-rail-collapsed", chat: chat(""), blocks: longBlocks, expanded: true, railCollapsed: true),
             Scene(name: "12-expanded-question-long", chat: chat(longQuestion), expanded: true),
             Scene(name: "13-expanded-permission", chat: chat(fixture("phase6-edit.txt")), expanded: true),
+            Scene(name: "14-chat-idle-suggestion", chat: chat(fixture("idle-suggestion.txt")), blocks: shortBlocks),
         ]
 
         let savedRail = Defaults[.orchRunsRailCollapsed]
