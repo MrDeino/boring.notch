@@ -67,6 +67,8 @@ final class OrchestratorManager: ObservableObject {
             if promptOptions != po { promptOptions = po }
         } catch {
             if !offline { offline = true }
+            if !runs.isEmpty { runs = [] }
+            if !promptOptions.isEmpty { promptOptions = [] }
         }
         if !hasLoaded { hasLoaded = true }
     }
