@@ -94,7 +94,7 @@ func runPhase6Tests() {
 
     // promptKey
     let n: Set<Int> = [1, 2, 3, 4]
-    func k(_ code: UInt16, _ ch: String? = nil, cmd: Bool = false, edit: Bool = false, _ kind: PromptCard.Kind = .question) -> PromptKey {
+    func k(_ code: UInt16, _ ch: String? = nil, cmd: Bool = false, edit: Bool = false, kind: PromptCard.Kind = .question) -> PromptKey {
         promptKey(keyCode: code, characters: ch, commandLike: cmd, editingText: edit, kind: kind, numbers: n)
     }
     precondition(k(19, "2") == .answer(2))
@@ -106,7 +106,7 @@ func runPhase6Tests() {
     precondition(k(126) == .up)
     precondition(k(125) == .down)
     precondition(k(36) == .select && k(76) == .select)
-    precondition(k(126, .permission) == .pass)
-    precondition(k(36, .permission) == .pass)
+    precondition(k(126, kind: .permission) == .pass)
+    precondition(k(36, kind: .permission) == .pass)
     precondition(k(0, "a") == .pass)
 }
