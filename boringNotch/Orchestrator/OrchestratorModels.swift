@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// GET /api/chat. All fields optional so server omissions never break decoding.
 struct ChatResponse: Decodable {
@@ -96,6 +97,8 @@ enum OrchestratorPost: Equatable {
     case text(String), key(String), start, stop
     /// POST /api/notes: raw full text (not JSON).
     case notes(String)
+    /// POST /api/chat/image: raw PNG body.
+    case image(Data)
 
     static let allowedKeys: Set<String> = ["Enter", "Escape", "Up", "Down", "Left", "Right", "Tab", "BTab", "C-u", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
@@ -112,6 +115,15 @@ enum OrchestratorPost: Equatable {
             r.httpBody = data
             return r
         }
+        if case .image(let data) = self {
+            guard !data.isEmpty, data.count <= 10 * 1024 * 1024 else { return nil } // serve's IMAGE_MAX
+            var r = URLRequest(url: base.appendingPathComponent("api/chat/image"))
+            r.httpMethod = "POST"
+            r.setValue("1", forHTTPHeaderField: "x-orch")
+            r.setValue("image/png", forHTTPHeaderField: "Content-Type")
+            r.httpBody = data
+            return r
+        }
         switch self {
         case .text(let s):
             guard !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
@@ -121,7 +133,7 @@ enum OrchestratorPost: Equatable {
             path = "api/chat"; body = ["key": k]
         case .start: path = "api/chat/start"; body = [:]
         case .stop: path = "api/chat/stop"; body = [:]
-        case .notes: return nil
+        case .notes, .image: return nil
         }
         var r = URLRequest(url: base.appendingPathComponent(path))
         r.httpMethod = "POST"
@@ -145,4 +157,38 @@ func fetchOrchestratorNotes(base: URL, session: URLSession) async throws -> Stri
     let (data, resp) = try await session.data(for: URLRequest(url: base.appendingPathComponent("api/notes")))
     guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
     return String(decoding: data, as: UTF8.self)
+}
+
+private struct ImagePathResponse: Decodable { let path: String? }
+
+func decodeImagePath(_ data: Data) -> String? {
+    guard let p = (try? JSONDecoder().decode(ImagePathResponse.self, from: data))?.path, !p.isEmpty else { return nil }
+    return p
+}
+
+/// Server path of the uploaded image; nil on any failure (non-200, network, bad body).
+func uploadOrchestratorImage(_ png: Data, base: URL, session: URLSession) async -> String? {
+    guard let req = OrchestratorPost.image(png).request(base: base),
+          let (data, resp) = try? await session.data(for: req),
+          (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+    return decodeImagePath(data)
+}
+
+/// PNG of the image, longest pixel side capped at maxSide (never upscaled); 2000px keeps retina screenshots far below serve's 10 MB cap.
+func orchestratorPNG(from image: NSImage, maxSide: CGFloat = 2000) -> Data? {
+    var w = CGFloat(0), h = CGFloat(0)
+    for r in image.representations { w = max(w, CGFloat(r.pixelsWide)); h = max(h, CGFloat(r.pixelsHigh)) }
+    if w <= 0 || h <= 0 { w = image.size.width; h = image.size.height }
+    guard w > 0, h > 0 else { return nil }
+    let k = min(1, maxSide / max(w, h))
+    let pw = max(1, Int((w * k).rounded())), ph = max(1, Int((h * k).rounded()))
+    guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pw, pixelsHigh: ph, bitsPerSample: 8, samplesPerPixel: 4,
+                                     hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+          let ctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+    rep.size = NSSize(width: pw, height: ph)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = ctx
+    image.draw(in: NSRect(x: 0, y: 0, width: pw, height: ph), from: .zero, operation: .copy, fraction: 1)
+    NSGraphicsContext.restoreGraphicsState()
+    return rep.representation(using: .png, properties: [:])
 }

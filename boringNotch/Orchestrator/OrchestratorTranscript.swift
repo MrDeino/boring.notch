@@ -200,6 +200,13 @@ struct PendingMessage: Equatable, Identifiable {
     let text: String
     var state: State
     var sentAt: Date?
+    var images: [Data] = []   // PNG bytes
+    var paths: [String] = []  // server paths uploaded so far; Retry reuses them
+    var wireText: String { chatTextWithImages(text, paths: paths) }
+}
+
+func chatTextWithImages(_ text: String, paths: [String]) -> String {
+    ([text.trimmingCharacters(in: .whitespacesAndNewlines)] + paths.map { "[image: \($0)]" }).filter { !$0.isEmpty }.joined(separator: " ")
 }
 
 func normalizeChatText(_ s: String) -> String {
@@ -211,13 +218,13 @@ func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: S
     var out: [PendingMessage] = []
     for p in pending {
         if p.state != .queued {
-            let want = normalizeChatText(p.text)
+            let want = normalizeChatText(p.wireText)
             if let b = blocks.last(where: { $0.kind == .user && !known.contains($0.id) && normalizeChatText($0.text ?? "") == want }) {
                 known.insert(b.id)
                 continue
             }
             // ponytail: a sent message whose block text differs (e.g. a slash command) is dropped after staleAfter;
-            // upgrade = serve echoing a client id.
+            // upgrade = serve echoing a client id. Same for images if Claude Code rewrites the path (e.g. [Image #1]).
             if p.state == .sent, let t = p.sentAt, now.timeIntervalSince(t) > staleAfter { continue }
         }
         out.append(p)
