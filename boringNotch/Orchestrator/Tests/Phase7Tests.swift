@@ -26,6 +26,8 @@ func runPhase7Tests() {
     precondition(rs[5].startedAt == nil && rs[5].lastOutput == nil && rs[5].result == nil && rs[5].denials == nil && rs[5].latest == nil && rs[5].activity == nil)
     precondition(rs[0].denials == ["Bash"])
     precondition(mk("a", "running").state == "running")
+    let odd = try! d.decode(StateResponse.self, from: Data(#"{"runs":[{"id":"a","state":"waiting","denials":["Bash",null],"activity":{"agents":[1]},"startedAt":5},{"id":"b","state":"running"}]}"#.utf8))
+    precondition(odd.runs!.count == 2 && odd.runs![0].denials == ["Bash"] && odd.runs![0].activity == nil && odd.runs![0].startedAt == nil && odd.runs![0].state == "waiting")
 
     // parseRunDate
     precondition(parseRunDate("2026-10-14T02:45:42.415Z") != nil && parseRunDate("2026-10-14T02:45:42Z") != nil)

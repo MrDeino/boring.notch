@@ -46,6 +46,19 @@ struct OrchestratorRun: Decodable, Equatable {
     let latest: String?
     let activity: RunActivity?
 
+    private enum CodingKeys: String, CodingKey { case id, project, ws, agent, prompt, state, startedAt, lastOutput, result, denials, latest, activity }
+
+    /// Lenient (WR-05): a field of the wrong type becomes nil and null denials are dropped,
+    /// so one odd run never fails StateResponse and takes the tab offline.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func str(_ k: CodingKeys) -> String? { try? c.decodeIfPresent(String.self, forKey: k) }
+        id = str(.id); project = str(.project); ws = str(.ws); agent = str(.agent); prompt = str(.prompt)
+        state = str(.state); startedAt = str(.startedAt); lastOutput = str(.lastOutput); result = str(.result); latest = str(.latest)
+        denials = (try? c.decodeIfPresent([String?].self, forKey: .denials))?.compactMap { $0 }
+        activity = try? c.decodeIfPresent(RunActivity.self, forKey: .activity)
+    }
+
     /// ForEach id that survives a nil id.
     var stableID: String { id ?? "\(project ?? "")|\(prompt ?? "")" }
 
