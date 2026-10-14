@@ -32,26 +32,63 @@ final class OrchestratorExpand: ObservableObject {
         return terminal.contains(k) ? .terminal : expanded.contains(k) ? .expanded : .open
     }
 
-    func setLevel(_ level: ExpandLevel, vm: BoringViewModel, window: NSWindow?) {
+    func setLevel(_ target: ExpandLevel, vm: BoringViewModel, window: NSWindow?) {
         let k = key(vm)
-        switch level {
+        let w = window ?? windows[k]?.w
+        let cur = level(for: vm)
+        guard target != cur else { return }
+        switch target {
         case .open: collapse(vm: vm)
         case .expanded:
-            grow(vm, window)
-            if terminal.remove(k) != nil { releaseKey(windows[k]?.w) }
+            if cur == .open { grow(vm, w) }
+            if cur == .terminal { terminal.remove(k); releaseKey(w) }
         case .terminal:
-            grow(vm, window)
+            if cur == .open { grow(vm, w) }
             if expanded.contains(k) { terminal.insert(k) }
         }
     }
 
-    /// Phase 4: tapping the transcript opens the terminal; Phase 7 changes this to .expanded.
-    func transcriptTapped(vm: BoringViewModel, window: NSWindow?) { setLevel(.terminal, vm: vm, window: window) }
+    func back(_ vm: BoringViewModel) { setLevel(nextLevel(level(for: vm), .back), vm: vm, window: nil) }
+
+    /// Phase 7: tapping the transcript expands (the terminal is reached via Open terminal / ⌘T).
+    func transcriptTapped(vm: BoringViewModel, window: NSWindow?) { setLevel(.expanded, vm: vm, window: window) }
+
+    private final class WeakView { weak var v: NSView?; init(_ v: NSView) { self.v = v } }
+    private var anchors: [ObjectIdentifier: (vm: WeakVM, view: WeakView)] = [:]
+    private var keyMonitor: Any?
+
+    /// Lets ⌘↓ find the notch window while still at level .open.
+    func register(vm: BoringViewModel, anchor: NSView) { anchors[key(vm)] = (WeakVM(vm), WeakView(anchor)) }
+
+    private init() {
+        // ⌘↓/⌘↑/⌘T/⌘\ only while the notch panel is key (typing or terminal); a level change remounts the chat and ends typing (Phase 4 shell swap).
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            let cmd = e.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+            guard let sc = shortcut(keyCode: e.keyCode, chars: e.charactersIgnoringModifiers, commandOnly: cmd) else { return e }
+            let handled = MainActor.assumeIsolated { self?.handle(sc, window: e.window) ?? false }
+            return handled ? nil : e
+        }
+    }
+
+    private func handle(_ sc: OrchShortcut, window: NSWindow?) -> Bool {
+        guard let window, BoringViewCoordinator.shared.currentView == .orchestrator else { return false }
+        let vm = anchors.values.first { $0.view.v?.window === window }?.vm.vm
+            ?? vms.values.first { v in v.vm.flatMap { windows[key($0)]?.w } === window }?.vm
+        guard let vm else { return false }
+        let cur = level(for: vm)
+        switch sc {
+        case .deeper: setLevel(nextLevel(cur, .deeper), vm: vm, window: window)
+        case .back: back(vm)
+        case .terminal: setLevel(.terminal, vm: vm, window: window)
+        case .toggleRail: return false
+        }
+        return true
+    }
 
     private func grow(_ vm: BoringViewModel, _ window: NSWindow?) {
         let k = key(vm)
         guard !expanded.contains(k), let window else { return }
-        let e = expandedExtra(screenHeight: window.screen?.frame.height ?? 900, openHeight: openNotchSize.height)
+        let e = expandedHeight(screenHeight: window.screen?.frame.height ?? 900) - openNotchSize.height
         extra[k] = e
         windows[k] = WeakWindow(window)
         shrinkTasks[k]?.cancel()
@@ -60,7 +97,7 @@ final class OrchestratorExpand: ObservableObject {
         vms[k] = WeakVM(vm)
         installMonitors()
         SharingStateManager.shared.beginInteraction()
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) { vm.notchSize = openSize(for: vm) }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = openSize(for: vm) }
     }
 
     func collapse(vm: BoringViewModel, refocus: Bool = true) {
@@ -68,11 +105,11 @@ final class OrchestratorExpand: ObservableObject {
         guard expanded.contains(k) else { return }
         let win = windows[k]?.w
         finish(k, refocus: refocus)
-        if vm.notchState == .open { withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) { vm.notchSize = openNotchSize } }
+        if vm.notchState == .open { withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = openNotchSize } }
         shrinkTasks[k]?.cancel()
         // Let the spring finish before the window stops covering the expanded area.
         shrinkTasks[k] = Task { [weak win] in
-            try? await Task.sleep(for: .milliseconds(450))
+            try? await Task.sleep(for: .milliseconds(650))
             guard !Task.isCancelled, let win else { return }
             win.setFrame(pinnedFrame(current: win.frame, newHeight: windowSize.height), display: true)
         }
