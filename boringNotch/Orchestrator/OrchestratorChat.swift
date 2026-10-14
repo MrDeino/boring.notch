@@ -369,6 +369,12 @@ struct OrchestratorChatView: View {
         let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { stopTyping(); return }
         guard !manager.sending, !store.submitting else { return } // Enter is ignored like the disabled send button
+        // A terminal draft not pulled in on focus would be C-u'd unseen: pull it in front and wait for a second Enter.
+        if !fromTerminal, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
+            draft = l + " " + draft
+            fromTerminal = true
+            return
+        }
         stopTyping()
         Task { if await store.submit(t) { draft = ""; fromTerminal = false } }
     }
