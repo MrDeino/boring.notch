@@ -13,9 +13,9 @@ final class PromptCardController: ObservableObject {
     @Published var highlighted: Int?
     @Published var flash = false
     private var shown: PromptCard?
-    private var raisedByCard = false
-    private weak var vm: BoringViewModel?
-    private weak var window: NSWindow?
+    private struct Raised { weak var vm: BoringViewModel?; weak var window: NSWindow? }
+    private var raised: [Raised] = [] // one per display panel the question card expanded
+    private weak var hoverWindow: NSWindow?
     private var bag = Set<AnyCancellable>()
     private weak var keyWindow: NSWindow?
     private var monitor: Any?
@@ -38,17 +38,17 @@ final class PromptCardController: ObservableObject {
 
     private func promptChanged(_ card: PromptCard?) {
         pressed = nil
-        if card == nil { release() } else if hovering, let w = window { hover(true, window: w) }
+        if card == nil { release() } else if hovering, let w = hoverWindow { hover(true, window: w) }
         guard card?.kind != .question else { return }
-        if raisedByCard, let vm, let window, OrchestratorExpand.shared.level(for: vm) == .expanded {
-            OrchestratorExpand.shared.setLevel(.open, vm: vm, window: window)
+        for r in raised {
+            if let vm = r.vm, OrchestratorExpand.shared.level(for: vm) == .expanded {
+                OrchestratorExpand.shared.setLevel(.open, vm: vm, window: r.window)
+            }
         }
-        raisedByCard = false
+        raised = []
     }
 
     func sync(_ card: PromptCard?, vm: BoringViewModel, window: NSWindow?) {
-        self.vm = vm
-        self.window = window
         if card != shown {
             shown = card
             highlighted = card?.highlighted ?? card?.items.first?.number
@@ -56,7 +56,7 @@ final class PromptCardController: ObservableObject {
         }
         if card?.kind == .question, OrchestratorExpand.shared.level(for: vm) == .open {
             OrchestratorExpand.shared.setLevel(.expanded, vm: vm, window: window)
-            raisedByCard = true
+            if !raised.contains(where: { $0.vm === vm }) { raised.append(Raised(vm: vm, window: window)) }
         }
     }
 
@@ -101,6 +101,7 @@ final class PromptCardController: ObservableObject {
 
     func hover(_ inside: Bool, window w: NSWindow?) {
         hovering = inside
+        if inside { hoverWindow = w }
         dwell?.cancel()
         if inside {
             dwell = Task {
