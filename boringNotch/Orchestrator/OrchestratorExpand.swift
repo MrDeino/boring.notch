@@ -7,6 +7,8 @@ final class OrchestratorExpand: ObservableObject {
     static let shared = OrchestratorExpand()
 
     @Published private(set) var expanded: Set<ObjectIdentifier> = []
+    /// Per-vm terminal flag, always a subset of `expanded`.
+    @Published private(set) var terminal: Set<ObjectIdentifier> = []
     private var extra: [ObjectIdentifier: CGFloat] = [:]
     private var windows: [ObjectIdentifier: WeakWindow] = [:]
     private var shrinkTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
@@ -25,7 +27,28 @@ final class OrchestratorExpand: ObservableObject {
         CGSize(width: openNotchSize.width, height: openNotchSize.height + (extra[key(vm)] ?? 0))
     }
 
-    func expand(vm: BoringViewModel, window: NSWindow?) {
+    func level(for vm: BoringViewModel) -> ExpandLevel {
+        let k = key(vm)
+        return terminal.contains(k) ? .terminal : expanded.contains(k) ? .expanded : .open
+    }
+
+    func setLevel(_ level: ExpandLevel, vm: BoringViewModel, window: NSWindow?) {
+        let k = key(vm)
+        switch level {
+        case .open: collapse(vm: vm)
+        case .expanded:
+            grow(vm, window)
+            if terminal.remove(k) != nil { releaseKey(windows[k]?.w) }
+        case .terminal:
+            grow(vm, window)
+            if expanded.contains(k) { terminal.insert(k) }
+        }
+    }
+
+    /// Phase 4: tapping the transcript opens the terminal; Phase 7 changes this to .expanded.
+    func transcriptTapped(vm: BoringViewModel, window: NSWindow?) { setLevel(.terminal, vm: vm, window: window) }
+
+    private func grow(_ vm: BoringViewModel, _ window: NSWindow?) {
         let k = key(vm)
         guard !expanded.contains(k), let window else { return }
         let e = expandedExtra(screenHeight: window.screen?.frame.height ?? 900, openHeight: openNotchSize.height)
@@ -103,6 +126,7 @@ final class OrchestratorExpand: ObservableObject {
     /// Shared bookkeeping: exactly one endInteraction per expand.
     private func finish(_ k: ObjectIdentifier, refocus: Bool = true) {
         expanded.remove(k)
+        terminal.remove(k)
         releaseKey(windows[k]?.w, refocus: refocus)
         extra[k] = nil
         if expanded.isEmpty { removeMonitors() }
@@ -127,7 +151,7 @@ struct OrchestratorExpandOverlay: View {
     @State private var termID = UUID()
 
     var body: some View {
-        let isExp = expand.isExpanded(vm)
+        let isExp = expand.level(for: vm) == .terminal
         ZStack {
             if isExp {
                 Color.black

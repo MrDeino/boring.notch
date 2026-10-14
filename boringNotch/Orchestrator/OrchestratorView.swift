@@ -21,7 +21,7 @@ struct OrchestratorView: View {
             } else {
                 chat
                     .overlay(alignment: .topTrailing) {
-                        if manager.showRuns {
+                        if manager.showRunsBoard {
                             runsStrip
                                 .frame(width: 200, alignment: .topLeading)
                                 .padding(8)
@@ -110,7 +110,7 @@ struct OrchestratorView: View {
     /// Clicking the conversation opens the terminal below; it takes the keyboard itself.
     private func expandChat() {
         stopTyping(handBack: false)
-        OrchestratorExpand.shared.expand(vm: vm, window: anchor.window)
+        OrchestratorExpand.shared.transcriptTapped(vm: vm, window: anchor.window)
     }
 
     private func startTyping() {
@@ -195,9 +195,9 @@ struct OrchestratorRunsButton: View {
         Button {
             if coordinator.currentView != .orchestrator {
                 coordinator.currentView = .orchestrator
-                manager.showRuns = true
+                manager.showRunsBoard = true
             } else {
-                manager.showRuns.toggle()
+                manager.showRunsBoard.toggle()
             }
         } label: {
             Capsule()
@@ -205,7 +205,7 @@ struct OrchestratorRunsButton: View {
                 .frame(width: 30, height: 30)
                 .overlay {
                     Image(systemName: "list.bullet.rectangle")
-                        .foregroundColor(manager.showRuns ? .white : .gray)
+                        .foregroundColor(manager.showRunsBoard ? .white : .gray)
                         .imageScale(.medium)
                 }
         }

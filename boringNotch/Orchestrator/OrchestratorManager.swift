@@ -15,15 +15,22 @@ final class OrchestratorManager: ObservableObject {
     var needsAttention: Bool { runs.contains { $0.state == "waiting" } || !promptOptions.isEmpty }
     /// False until the first response or error, so the view doesn't flash "offline".
     @Published private(set) var hasLoaded = false
-    /// Runs panel toggled by the header button.
-    @Published var showRuns = false
+    // Phase 4
+    /// Chat | Runs segment state.
+    @Published var showRunsBoard = false
+    @Published var statusMenuOpen = false
+    @Published private(set) var prompt: PromptCard? = nil
+    @Published private(set) var liveStatus: LiveStatus? = nil
+    var capsuleStatus: CapsuleState {
+        capsuleState(hasLoaded: hasLoaded, offline: offline, chatRunning: chatRunning, needsAttention: needsAttention, working: liveStatus != nil)
+    }
 
     /// Fed by notch open/close hooks; opening triggers an immediate refresh.
     var notchOpen = false {
         didSet {
             // Typing teardown is owned by OrchestratorView (close() is blocked while typing).
             if notchOpen && !oldValue { Task { await refresh() } }
-            if !notchOpen { OrchestratorExpand.shared.reset() }
+            if !notchOpen { OrchestratorExpand.shared.reset(); statusMenuOpen = false }
         }
     }
 
@@ -105,7 +112,7 @@ final class OrchestratorManager: ObservableObject {
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.refresh()
-                let secs = self.notchOpen ? 2 : 10
+                let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning, offline: self.offline)
                 try? await Task.sleep(for: .seconds(secs))
             }
         }
@@ -137,10 +144,18 @@ final class OrchestratorManager: ObservableObject {
             if usage != st.usage { usage = st.usage }
             let po = running ? detectPrompt(screen: s) : []
             if promptOptions != po { promptOptions = po; optionsLocked = false }
+            let pc = running ? detectPromptCard(screen: s) : nil
+            if prompt != pc { prompt = pc }
+            let ls = running ? parseLiveStatus(screen: s) : nil
+            if liveStatus != ls { liveStatus = ls }
+            await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, screen: s, chatRunning: running)
         } catch {
             if !offline { offline = true }
             if !runs.isEmpty { runs = [] }
             if !promptOptions.isEmpty { promptOptions = [] }
+            if prompt != nil { prompt = nil }
+            if liveStatus != nil { liveStatus = nil }
+            statusMenuOpen = false
         }
         if !hasLoaded { hasLoaded = true }
     }
