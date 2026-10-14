@@ -2,10 +2,6 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 // Phase 5 owns this file.
-// The store property `boxIsDraft` shadows the global function inside the class.
-private func globalBoxIsDraft(previous: String?, current: String?, wasDraft: Bool, editing: Bool) -> Bool {
-    boxIsDraft(previous: previous, current: current, wasDraft: wasDraft, editing: editing)
-}
 
 @MainActor
 final class OrchestratorTranscriptStore: ObservableObject {
@@ -34,16 +30,20 @@ final class OrchestratorTranscriptStore: ObservableObject {
     private var polls = 0
     private var failures = 0
 
-    func refresh(base: URL, session: URLSession, screen: String, chatRunning: Bool) async {
+    /// Input box + idle status from a chat payload (polled or pushed). Phase 8: serve's `input` wins over the heuristic.
+    func applyScreen(_ r: ChatResponse) {
+        let running = r.running ?? false
+        let res = resolveInput(hasKey: r.hasInputKey, input: r.input, screen: r.screen ?? "", chatRunning: running,
+                               previous: inputLine, wasDraft: boxIsDraft, editing: OrchestratorManager.shared.wantsKeyboard)
+        if res.draft != boxIsDraft { boxIsDraft = res.draft }
+        if res.line != inputLine { inputLine = res.line }
+        let idle = running ? parseIdleStatus(screen: r.screen ?? "") : nil
+        if idle != idleStatus { idleStatus = idle }
+    }
+
+    func refresh(base: URL, session: URLSession, chatRunning: Bool) async {
         self.base = base
         self.session = session
-        let il = chatRunning ? parseInputLine(screen: screen) : nil
-        let draft = globalBoxIsDraft(previous: inputLine, current: il, wasDraft: boxIsDraft, editing: OrchestratorManager.shared.wantsKeyboard)
-        if draft != boxIsDraft { boxIsDraft = draft }
-        if il != inputLine { inputLine = il }
-        let idle = chatRunning ? parseIdleStatus(screen: screen) : nil
-        if idle != idleStatus { idleStatus = idle }
-
         guard chatRunning else {
             if !blocks.isEmpty { blocks = [] }
             needsFull = true

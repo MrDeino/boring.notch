@@ -129,6 +129,10 @@ struct OrchestratorStatusCapsule: View {
             HStack(spacing: 7) {
                 Circle().fill(dot).frame(width: 6, height: 6)
                 Text(label).id(s).transition(.opacity).foregroundColor(fg)
+                if s == .running, let p = manager.contextPercent {
+                    Rectangle().fill(OT.C.selected2).frame(width: 1, height: 10)
+                    Text(verbatim: "ctx \(p)%").foregroundColor(usageIsHigh(Double(p)) ? OT.C.orange : OT.C.text5)
+                }
                 if showRing, let f = fiveHourFraction(manager.usage) {
                     OrchestratorUsageRing(fraction: f, high: usageIsHigh(manager.usage?.fiveHour?.usedPercentage))
                 }

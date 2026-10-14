@@ -24,6 +24,9 @@ final class OrchestratorManager: ObservableObject {
     @Published private(set) var prompt: PromptCard? = nil
     @Published private(set) var liveStatus: LiveStatus? = nil
     @Published private(set) var chatLive: Bool? = nil
+    // Phase 8
+    /// serve's context.percent while the chat runs; nil on old serve.
+    @Published private(set) var contextPercent: Int? = nil
     var capsuleStatus: CapsuleState {
         capsuleState(hasLoaded: hasLoaded, offline: offline, chatRunning: chatRunning, needsAttention: needsAttention, working: liveStatus != nil)
     }
@@ -158,24 +161,33 @@ final class OrchestratorManager: ObservableObject {
             async let chat: ChatResponse = get("api/chat")
             async let state: StateResponse = get("api/state")
             let (r, st) = try await (chat, state)
-            await apply(r, st)
+            applyState(st)
+            await applyChat(r)
         } catch {
             applyOffline()
         }
         if !hasLoaded { hasLoaded = true }
     }
 
-    private func apply(_ r: ChatResponse, _ st: StateResponse) async {
+    private func applyState(_ st: StateResponse) {
+        if offline { offline = false }
+        let rs = st.runs ?? []
+        if runs != rs { runs = rs }
+        if usage != st.usage { usage = st.usage }
+    }
+
+    /// Reused by the SSE stream (08-02): screen/input first, then blocks, then the prompt that needs them.
+    private func applyChat(_ r: ChatResponse) async {
         if offline { offline = false }
         let running = r.running ?? false
         if chatRunning != running { chatRunning = running }
         let s = r.screen ?? ""
         if screen != s { screen = s }
-        let rs = st.runs ?? []
-        if runs != rs { runs = rs }
-        if usage != st.usage { usage = st.usage }
+        let cp = running ? r.context?.percent.flatMap { $0 >= 0 ? $0 : nil } : nil
+        if contextPercent != cp { contextPercent = cp }
+        OrchestratorTranscriptStore.shared.applyScreen(r)
         // Blocks first: a new card must appear with its context (Phase 8: ingest blocks before publishing a prompt).
-        await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, screen: s, chatRunning: running)
+        await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, chatRunning: running)
         let po = running ? detectPrompt(screen: s) : []
         if promptOptions != po { promptOptions = po }
         let pc = running ? detectPromptCard(screen: s) : nil
@@ -193,6 +205,7 @@ final class OrchestratorManager: ObservableObject {
         if prompt != nil { prompt = nil }
         if liveStatus != nil { liveStatus = nil }
         if chatLive != nil { chatLive = nil }
+        if contextPercent != nil { contextPercent = nil }
         statusMenuOpen = false
         notesOpen = false
     }
@@ -206,7 +219,7 @@ extension OrchestratorManager {
         hasLoaded = loaded
         showRunsBoard = runsBoard
         guard loaded else { return }
-        if let chat { await apply(chat, state) } else { applyOffline() }
+        if let chat { applyState(state); await applyChat(chat) } else { applyOffline() }
     }
 }
 #endif
