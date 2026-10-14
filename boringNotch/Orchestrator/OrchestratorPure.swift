@@ -25,10 +25,17 @@ func pinnedFrame(current: CGRect, newHeight: CGFloat) -> CGRect {
 
 enum TerminalState: Equatable { case connecting, connected, inUse, unavailable }
 
-/// Maps the ttyd page text to a state; a second ttyd client shows xterm's "Connection Closed / Reconnect" overlay.
-func terminalState(pageText: String?) -> TerminalState {
-    guard let t = pageText, !t.isEmpty else { return .connecting }
-    return t.contains("Reconnect") || t.contains("Connection Closed") ? .inUse : .connected
+/// Maps ttyd's overlay text to a state. nil = terminal not on the page yet.
+/// A socket close shows the "Connection Closed" overlay: a second client before ever connecting (in use),
+/// or a dropped session after it was connected (unavailable). Whole-line match, so terminal output never counts.
+func terminalState(overlayText: String?, previous: TerminalState = .connecting) -> TerminalState {
+    guard let t = overlayText else { return .connecting }
+    let closed = t.split(separator: "\n").contains { line in
+        let l = line.trimmingCharacters(in: .whitespaces)
+        return l == "Connection Closed" || l.hasSuffix("to Reconnect")
+    }
+    guard closed else { return .connected }
+    return previous == .connected ? .unavailable : .inUse
 }
 
 /// True when a screen point is outside the notch rect (centred on the window, top-pinned).

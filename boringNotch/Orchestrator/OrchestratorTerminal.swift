@@ -36,6 +36,14 @@ struct OrchestratorTerminalView: NSViewRepresentable {
         var poll: Task<Void, Never>?
         init(state: Binding<TerminalState>) { self.state = state }
 
+        /// Text of leaf divs outside xterm's rows (ttyd's overlay has no class); null until xterm exists.
+        static let overlayJS = """
+        (() => { if (!document.querySelector('.xterm')) return null;
+          return [...document.querySelectorAll('div')]
+            .filter(d => !d.childElementCount && !d.closest('.xterm-rows, .xterm-accessibility'))
+            .map(d => d.textContent).join('\\n'); })()
+        """
+
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             let u = navigationAction.request.url
             let ok = u?.absoluteString == "about:blank" || (u?.host == "127.0.0.1" && u?.port == 4777)
@@ -64,14 +72,17 @@ struct OrchestratorTerminalView: NSViewRepresentable {
             webView.window?.makeKey()
             webView.window?.makeFirstResponder(webView)
             poll?.cancel()
+            // Polls for as long as the terminal is shown (cancelled in dismantleNSView), so later drops are caught.
             poll = Task { [weak webView] in
-                for _ in 0..<5 {
-                    try? await Task.sleep(for: .seconds(1))
+                var first = true
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(first ? 1 : 2))
+                    first = false
                     guard !Task.isCancelled, let webView else { return }
-                    let text = try? await webView.evaluateJavaScript("document.body.innerText") as? String
-                    let s = terminalState(pageText: text)
+                    let text = try? await webView.evaluateJavaScript(Self.overlayJS) as? String
+                    let s = terminalState(overlayText: text, previous: state.wrappedValue)
                     state.wrappedValue = s
-                    if s == .inUse { return }
+                    if s == .inUse || s == .unavailable { return }
                 }
             }
         }
