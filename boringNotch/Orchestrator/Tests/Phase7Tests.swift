@@ -114,6 +114,19 @@ func runPhase7Tests() {
     let late = try! d.decode(OrchestratorRun.self, from: Data(#"{"id":"l","state":"done","startedAt":"2026-10-14T02:00:00.000Z"}"#.utf8))
     precondition(finishedTransition(old: ["e": "running", "l": "running"], new: [early, late])?.id == "l")
 
+    // RunsBaseline (WR-01): launch, offline blip, reconnect with an already-waiting run
+    var b = RunsBaseline()
+    let wa = [mk("a", "waiting")]
+    precondition(b.advance([], offline: false, loaded: false) == nil)
+    precondition(b.advance(wa, offline: false, loaded: false) == nil)
+    precondition(!newlyWaiting(old: b.advance(wa, offline: false, loaded: true), new: wa))
+    precondition(b.advance([], offline: true, loaded: true) == nil)
+    precondition(b.advance([], offline: false, loaded: true) == nil)
+    precondition(!newlyWaiting(old: b.advance(wa, offline: false, loaded: true), new: wa))
+    precondition(newlyWaiting(old: b.advance(wa + [mk("c", "waiting")], offline: false, loaded: true), new: wa + [mk("c", "waiting")]))
+    precondition(b.advance([], offline: false, loaded: true) == ["a": "waiting", "c": "waiting"]) // emptied while online is a real baseline
+    precondition(newlyWaiting(old: b.advance(wa, offline: false, loaded: true), new: wa))
+
     // wings
     precondition(wingKind(needsYou: true, needsLabel: "Bash?", finishedProject: "p", working: true) == .needsYou("Bash?"))
     precondition(wingKind(needsYou: false, needsLabel: "", finishedProject: "p", working: true) == .finished("p"))

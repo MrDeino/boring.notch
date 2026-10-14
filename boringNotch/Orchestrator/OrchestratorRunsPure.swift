@@ -165,6 +165,21 @@ func newlyWaiting(old: [String: String]?, new: [OrchestratorRun]) -> Bool {
     return new.contains { $0.state == "waiting" && old[$0.id ?? ""] != "waiting" }
 }
 
+/// Waiting/finished baseline (WR-01): none until the manager has loaded, none while offline,
+/// and none from the empty list offline leaves behind (reconnect clears `offline` before `runs` arrive).
+struct RunsBaseline {
+    private var states: [String: String]?
+    private var stale = true
+    /// Returns the baseline to diff `runs` against (nil = no baseline), then stores `runs` as the new one.
+    mutating func advance(_ runs: [OrchestratorRun], offline: Bool, loaded: Bool) -> [String: String]? {
+        if !loaded || offline { states = nil; stale = true; return nil }
+        if stale && runs.isEmpty { return nil }
+        stale = false
+        defer { states = runStates(runs) }
+        return states
+    }
+}
+
 func finishedTransition(old: [String: String]?, new: [OrchestratorRun]) -> OrchestratorRun? {
     guard let old else { return nil }
     let hits = new.filter { $0.state == "done" && ["running", "stuck"].contains(old[$0.id ?? ""] ?? "") }

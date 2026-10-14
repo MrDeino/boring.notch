@@ -8,24 +8,22 @@ final class OrchestratorWingsModel: ObservableObject {
     static let shared = OrchestratorWingsModel()
     @Published private(set) var kind: WingKind? = nil
     private let manager = OrchestratorManager.shared
-    private var previous: [String: String]?
+    private var baseline = RunsBaseline()
     private var finished: (id: String, project: String)?
     private var generation = 0
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
-        manager.$runs.combineLatest(manager.$offline)
-            .sink { [weak self] runs, offline in self?.runsChanged(runs, offline) }
+        manager.$runs.combineLatest(manager.$offline, manager.$hasLoaded)
+            .sink { [weak self] runs, offline, loaded in self?.runsChanged(runs, offline, loaded) }
             .store(in: &cancellables)
         manager.objectWillChange.receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.recompute() }
             .store(in: &cancellables)
     }
 
-    private func runsChanged(_ runs: [OrchestratorRun], _ offline: Bool) {
-        if offline { previous = nil; return }
-        if let r = finishedTransition(old: previous, new: runs) { showFinished(r) }
-        previous = runStates(runs)
+    private func runsChanged(_ runs: [OrchestratorRun], _ offline: Bool, _ loaded: Bool) {
+        if let r = finishedTransition(old: baseline.advance(runs, offline: offline, loaded: loaded), new: runs) { showFinished(r) }
     }
 
     private func showFinished(_ r: OrchestratorRun) {

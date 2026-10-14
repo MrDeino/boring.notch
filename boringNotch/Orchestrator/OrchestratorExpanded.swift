@@ -15,18 +15,17 @@ final class OrchestratorRailState: ObservableObject {
     static let shared = OrchestratorRailState()
     @Published private(set) var autoOpened = false
     private(set) var userCollapsedThisSession = false // "session" = this app launch
-    private var previous: [String: String]?
+    private var baseline = RunsBaseline()
     private var bag = Set<AnyCancellable>()
 
     private init() {
         let m = OrchestratorManager.shared
-        m.$runs.combineLatest(m.$offline).sink { [weak self] runs, offline in
+        m.$runs.combineLatest(m.$offline, m.$hasLoaded).sink { [weak self] runs, offline, loaded in
             guard let self else { return }
-            if offline { self.previous = nil; return }
-            if newlyWaiting(old: self.previous, new: runs) && Defaults[.orchRunsRailCollapsed] && !self.userCollapsedThisSession {
+            let old = self.baseline.advance(runs, offline: offline, loaded: loaded)
+            if newlyWaiting(old: old, new: runs) && Defaults[.orchRunsRailCollapsed] && !self.userCollapsedThisSession {
                 withAnimation(railSpring) { self.autoOpened = true }
             }
-            self.previous = runStates(runs)
         }.store(in: &bag)
     }
 
