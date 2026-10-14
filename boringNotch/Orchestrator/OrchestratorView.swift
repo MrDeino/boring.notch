@@ -38,6 +38,9 @@ struct OrchestratorView: View {
             if let w = keyWindow, (n.object as? NSWindow) === w { stopTyping() }
         }
         .onDisappear { stopTyping() }
+        // Never keep the keyboard unnoticed: focus loss or the pointer leaving ends typing (draft kept).
+        .onChange(of: fieldFocused) { _, f in if !f { stopTyping() } }
+        .onHover { if !$0 { stopTyping() } }
         .onChange(of: manager.chatRunning) { _, running in if !running { stopTyping() } }
         .onChange(of: manager.offline) { _, off in if off { stopTyping() } }
         .onChange(of: manager.promptOptions) { _, o in if !o.isEmpty { stopTyping() } }
