@@ -40,4 +40,35 @@ precondition(detectPrompt(screen: opts.split(separator: "\n").map { "│ \($0) �
 precondition(detectPrompt(screen: "1. foo\n2. bar\n").isEmpty)
 precondition(detectPrompt(screen: "❯ 1. x\n").isEmpty)
 precondition(detectPrompt(screen: opts + "1. foo\n") == want)
+
+func fixture(_ n: String) -> String {
+    try! String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("fixtures/\(n).txt"), encoding: .utf8)
+}
+func po(_ l: [(Int, String)]) -> [PromptOption] { l.map { PromptOption(number: $0.0, label: $0.1) } }
+precondition(detectPrompt(screen: fixture("question")) == po([(1, "apple"), (2, "banana"), (3, "cherry"), (4, "Type something."), (5, "Chat about this")])) // question.txt
+precondition(detectPrompt(screen: fixture("permission")) == po([(1, "Yes"), (2, "Yes, and always allow access to /tmp/notch-fixture.WJuB from this project"), (3, "Yes, and switch to auto mode · auto mode handles these prompts for you"), (4, "No")])) // permission.txt
+precondition(detectPrompt(screen: opts + "a\nb\nc\nd\ne\n").isEmpty)
+
+let b = URL(string: "http://127.0.0.1:4799")!
+for bad in [OrchestratorPost.text("   "), .text(""), .key("x"), .key("0"), .key("10")] { precondition(bad.request(base: b) == nil) }
+let kr = OrchestratorPost.key("Escape").request(base: b)!
+precondition(kr.httpMethod == "POST" && kr.value(forHTTPHeaderField: "x-orch") == "1" && kr.value(forHTTPHeaderField: "Content-Type") == "application/json")
+precondition(kr.url!.path == "/api/chat" && (try! d.decode([String: String].self, from: kr.httpBody!)) == ["key": "Escape"])
+
+if let logPath = ProcessInfo.processInfo.environment["ORCH_MOCK_LOG"] {
+    let ses = URLSession(configuration: .ephemeral)
+    for (p, want) in [(OrchestratorPost.text("hello"), 200), (.key("1"), 200), (.key("Escape"), 200), (.start, 200), (.stop, 200), (.text("busy-409"), 409)] {
+        let got = try! await sendOrchestratorPost(p, base: b, session: ses)
+        precondition(got == want)
+    }
+    for bad in [OrchestratorPost.text("  "), .key("x")] { let r = try! await sendOrchestratorPost(bad, base: b, session: ses); precondition(r == nil) }
+    let log = try! String(contentsOfFile: logPath, encoding: .utf8).split(separator: "\n")
+    precondition(log.count == 6)
+    let ents = log.map { try! JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: String] }
+    let paths = ["/api/chat", "/api/chat", "/api/chat", "/api/chat/start", "/api/chat/stop", "/api/chat"]
+    let bodies = [#"{"text":"hello"}"#, #"{"key":"1"}"#, #"{"key":"Escape"}"#, "{}", "{}", #"{"text":"busy-409"}"#]
+    for (i, e) in ents.enumerated() {
+        precondition(e["method"] == "POST" && e["path"] == paths[i] && e["xorch"] == "1" && e["ctype"] == "application/json" && e["host"] == "127.0.0.1:4799" && e["body"] == bodies[i])
+    }
+}
 print("OK")
