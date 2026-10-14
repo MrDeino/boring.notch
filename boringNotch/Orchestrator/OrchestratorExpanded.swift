@@ -165,7 +165,7 @@ struct OrchestratorExpandedView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, open ? 8 : 0)
-        .padding(.top, open ? 0 : 6).padding(.bottom, open ? 0 : 10)
+        .padding(.top, open ? 0 : 6) // bottom comes only from ContentView's 12pt, same as at open
         .animation(.spring(response: 0.4, dampingFraction: 0.82), value: level)
         .animation(railSpring, value: collapsed)
         // The sticky Runs board must not hide a live prompt or outlive a disconnect.

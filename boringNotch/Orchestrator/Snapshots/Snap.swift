@@ -278,6 +278,7 @@ struct Snap {
             Scene(name: "52-open-diff-expanded", chat: chat(""), blocks: editBlocks, diffOpen: true),
         ]
 
+        var gapBad: [String] = [], gapOK = 0
         let savedRail = Defaults[.orchRunsRailCollapsed]
         defer { Defaults[.orchRunsRailCollapsed] = savedRail }
         for s in scenes {
@@ -321,6 +322,13 @@ struct Snap {
                     host.cacheDisplay(in: host.bounds, to: rep)
                     print("\(s.name): notch h=\(Int(vm.notchSize.height))")
                     png = rep.representation(using: .png, properties: [:])
+                    if s.loaded, s.chat?.running == true, !s.runsBoard, s.notes == nil, m.prompt == nil {
+                        let w = host.bounds.width
+                        let c = bottomGap(rep, xPt: 200) ?? -1
+                        let r = s.expanded ? (bottomGap(rep, xPt: w - 90) ?? -1) : 12
+                        print("gap \(s.name): composer=\(c) rail=\(s.expanded ? "\(r)" : "-")")
+                        if abs(c - 12) > 1 || abs(r - 12) > 1 { gapBad.append("\(s.name)=\(c)/\(r)"); } else { gapOK += 1 }
+                    }
                     if s.expanded {
                         // Runs rail header: leftmost column / topmost row of lit pixels in the right 190pt below the header row.
                         let k = CGFloat(rep.pixelsWide) / host.bounds.width
@@ -337,6 +345,20 @@ struct Snap {
             PromptCardController.shared.snapshotSet()
             if let png { try? png.write(to: url); print("wrote", url.path) } else { print("FAILED", s.name) }
         }
+        print(gapBad.isEmpty ? "OK: composer bottom padding 12 in \(gapOK) scenes" : "FAIL: composer bottom padding \(gapBad.joined(separator: ", "))")
+    }
+
+
+    /// Distance in pt from the notch's black bottom edge up to the first non-black pixel at column `xPt`
+    /// (the composer pill / rail Terminal pill bottom). nil when no black bottom is found.
+    static func bottomGap(_ rep: NSBitmapImageRep, xPt: CGFloat) -> CGFloat? {
+        let k = CGFloat(rep.pixelsWide) / rep.size.width
+        let x = Int(xPt * k)
+        guard x >= 0, x < rep.pixelsWide else { return nil }
+        func dark(_ y: Int) -> Bool { let c = rep.colorAt(x: x, y: y); return (c?.alphaComponent ?? 0) > 0.5 && (c?.brightnessComponent ?? 1) < 0.05 }
+        guard let bottom = (0..<rep.pixelsHigh).reversed().first(where: dark),
+              let pill = (0...bottom).reversed().first(where: { !dark($0) }) else { return nil }
+        return CGFloat(bottom - pill) / k
     }
 
     /// Height changes in a fixed window, like the app: the window is resized at once (top pinned) and
@@ -450,6 +472,62 @@ struct Snap {
         window.contentView = nil
         window.orderOut(nil)
         print(bad.isEmpty ? "OK: content present in every live frame" : "FAIL: content missing at " + bad.joined(separator: ", "))
+    }
+
+
+    /// Gap under the composer / rail Terminal pill in ContentView's full root chain, after states that used to
+    /// leave a non-zero fit or extra height behind (composer growth, notes, a prompt at open, the terminal level).
+    static func gapPass() async -> Bool {
+        let m = OrchestratorManager.shared
+        let store = OrchestratorTranscriptStore.shared
+        var bad: [String] = []
+        let cases: [(String, Bool, Bool, Bool, Bool)] = [ // name, draft, notes, prompt-then-cleared, terminal
+            ("expanded", false, false, false, false), ("composer-grown", true, false, false, false),
+            ("notes-open", false, true, false, false), ("prompt-then-cleared", false, false, true, false),
+            ("terminal", false, false, false, true), ("all", true, true, true, false),
+        ]
+        for (name, draft, notes, prompt, term) in cases {
+            await m.snapshotApply(loaded: true, chat: ChatResponse(running: true, screen: prompt ? fixture("phase6-edit.txt") : ""), state: StateResponse(runs: [], usage: nil))
+            store.snapshotSet(blocks: editBlocks, draft: draft ? wordyDraft : "")
+            PromptCardController.shared.snapshotSet()
+            let vm = BoringViewModel()
+            let window = KeyablePanel(contentRect: NSRect(x: -20000, y: -20000, width: windowSize.width, height: windowSize.height),
+                                      styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            window.isOpaque = false; window.backgroundColor = .clear
+            // The offscreen spring stalls, so the level is set before the tree is mounted (as in the normal pass). What an
+            // open-level state leaves behind is reproduced through the real fit sources and stores.
+            if draft { OrchestratorExpand.shared.setFit("composer", extra: 40, vm: vm, window: window) }
+            if prompt { OrchestratorExpand.shared.setFit("prompt", extra: 60, vm: vm, window: window) }
+            if notes { OrchestratorNotesStore.shared.snapshotSet(text: shortNote, status: .saved); m.notesOpen = true }
+            OrchestratorExpand.shared.setLevel(term ? .terminal : .expanded, vm: vm, window: window)
+            // Built after the level change: `core` and the root frame read the notch size once (ContentView re-evaluates them).
+            let mainLayout = NotchReplica(vm: vm).core.environmentObject(vm).contentShape(Rectangle()).onHover { _ in }.onTapGesture { }
+            let root = ZStack(alignment: .top) { VStack(spacing: 0) { mainLayout } }
+                .padding(.bottom, 8).notchRootFrame(notchSize: vm.notchSize).compositingGroup().scaleEffect(x: 1, y: 1, anchor: .top)
+            let host = NSHostingView(rootView: root)
+            window.contentView = host
+            // window stays unordered: an ordered-in window runs the stalled spring from the model value
+            
+            try? await Task.sleep(for: .milliseconds(1200))
+            host.layoutSubtreeIfNeeded()
+            if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                host.cacheDisplay(in: host.bounds, to: rep)
+                let mid = host.bounds.width / 2, half = vm.notchSize.width / 2
+                let c = term ? nil : bottomGap(rep, xPt: mid - half + 200)
+                let r = bottomGap(rep, xPt: mid + half - 90)
+                print("hittest gap \(name): composer=\(c.map { "\($0)" } ?? "-") rail=\(r ?? -1) h=\(Int(vm.notchSize.height)) win=\(Int(host.bounds.height)) lvl=\(OrchestratorExpand.shared.level(for: vm))")
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/notch-snapshots/hittest-gap-\(name).png"))
+                // notes dim the tab (35% opacity) and cover the composer: printed, not asserted
+                if !notes, (c.map { abs($0 - 12) > 1 } ?? false) || abs((r ?? -1) - 12) > 1 { bad.append("\(name)=\(c ?? -1)/\(r ?? -1)") }
+            } else { bad.append("\(name)=norep") }
+            m.notesOpen = false
+            OrchestratorExpand.shared.releaseKey(window)
+            OrchestratorExpand.shared.reset()
+            window.contentView = nil
+            window.orderOut(nil)
+        }
+        print(bad.isEmpty ? "OK: hittest gap 12 in every state" : "FAIL: hittest gap " + bad.joined(separator: ", "))
+        return bad.isEmpty
     }
 
     /// Clicks into the real tab inside a copy of ContentView's root chain (mainLayout tap/hover, ZStack,
@@ -724,6 +802,7 @@ struct Snap {
             window.contentView = nil
             window.orderOut(nil)
         }
+        ok = await gapPass() && ok
         print(ok ? "OK: composer, segment, capsule and notes button respond to clicks" : "FAIL: a click target did not respond")
     }
 }
