@@ -14,7 +14,7 @@ Phases 4–9 rebuild the tab to the high-fidelity design handoff (option 2a, `.p
 - [x] **Phase 4: 2a Foundation** - Design tokens, OrchestratorView split, Chat | Runs segment + status capsule header, status menu, stopped/offline/connecting screens, shared seams for 5–7 (completed 2026-10-14)
 - [x] **Phase 5: 2a Structured Chat** - Transcript rows from serve's GET /api/chat/blocks, live status, composer and message box (suggestion, Tab, ⌃U, terminal draft), row-insert motion (parallel with 6, 7) (completed 2026-10-14)
 - [x] **Phase 6: 2a Prompt Cards** - Permission decision card, vertical question list, richer detectPrompt, 1–9/esc while hovered, 'Something else…' and 'Chat about this' (parallel with 5, 7) (completed 2026-10-14)
-- [ ] **Phase 7: 2a Runs Board, Expand Levels & Wings** - Runs board, open→expanded→terminal levels with runs rail, closed-notch live-activity wings (parallel with 5, 6)
+- [x] **Phase 7: 2a Runs Board, Expand Levels & Wings** - Runs board, open→expanded→terminal levels with runs rail, closed-notch live-activity wings (parallel with 5, 6) (completed 2026-10-14)
 - [ ] **Phase 8: Phase B Live Data** - SSE push from serve, streaming caret, ▸ diff expansion, suggested flag, context %
 - [ ] **Phase 9: Phase B Approvals** - Closed-notch approval drop-down, global ⌥⏎/⌥⎋, Claude Code hook posting to serve, panel frame sized to content
 
@@ -188,19 +188,19 @@ Plans:
   4. The rail collapses to the 30px strip (‹ or ⌘\), persists in `Defaults` `orchRunsRailCollapsed`, and re-opens when a run starts waiting unless collapsed this session
   5. The closed notch shows Working / Needs you / Run finished wings and the usage hairline; with music playing the music live activity is unchanged apart from a 7px orange dot; closed polling drops to 3s while the chat runs
 
-**Plans:** 5 plans
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
-- [ ] 07-01-PLAN.md — OrchestratorRun fields + pure helpers (TDD): elapsed, latest action, waiting question, Ask-in-chat message, sort, pollInterval 3s, nextLevel, expandedHeight, wing kind/width
+- [x] 07-01-PLAN.md — OrchestratorRun fields + pure helpers (TDD): elapsed, latest action, waiting question, Ask-in-chat message, sort, pollInterval 3s, nextLevel, expandedHeight, wing kind/width
 
 **Wave 2** *(blocked on 07-01; disjoint files — run ONE AT A TIME, user 2026-10-14: commit-range checks assume serial commits)*
-- [ ] 07-02-PLAN.md — Runs board (frame 05), waiting card with question + Ask in chat (no Allow/Deny), bottom status line
-- [ ] 07-03-PLAN.md — Closed-notch wings (frame 00), music dot overlay, corner-dot hide, radius 26 (ContentView: one else-if after music)
-- [ ] 07-04-PLAN.md — Expand level machine, ⌘ shortcut monitor, transcriptTapped → .expanded, framed terminal (frame 10), ⌃ collapse button
+- [x] 07-02-PLAN.md — Runs board (frame 05), waiting card with question + Ask in chat (no Allow/Deny), bottom status line
+- [x] 07-03-PLAN.md — Closed-notch wings (frame 00), music dot overlay, corner-dot hide, radius 26 (ContentView: one else-if after music)
+- [x] 07-04-PLAN.md — Expand level machine, ⌘ shortcut monitor, transcriptTapped → .expanded, framed terminal (frame 10), ⌃ collapse button
 
 **Wave 3** *(blocked on Wave 2)*
-- [ ] 07-05-PLAN.md — Expanded body (frame 12), runs rail + 30px strip (12b), orchRunsRailCollapsed, auto re-open, cross-fade, UAT list
+- [x] 07-05-PLAN.md — Expanded body (frame 12), runs rail + 30px strip (12b), orchRunsRailCollapsed, auto re-open, cross-fade, UAT list
 
 **Merge points:** OrchestratorRun fields (Models), ContentView wing hook, OrchestratorHeaderTrailing — all Phase 7-only
 
@@ -259,6 +259,6 @@ Plans:
 | 4. 2a Foundation | 3/3 | Awaiting UAT | - |
 | 5. 2a Structured Chat | 3/3 | Complete   | 2026-10-14 |
 | 6. 2a Prompt Cards | 3/3 | Complete   | 2026-10-14 |
-| 7. 2a Runs Board, Expand Levels & Wings | 0/5 | Planned | - |
+| 7. 2a Runs Board, Expand Levels & Wings | 5/5 | Complete   | 2026-10-14 |
 | 8. Phase B Live Data | 0/0 | Not planned | - |
 | 9. Phase B Approvals | 0/0 | Not planned | - |

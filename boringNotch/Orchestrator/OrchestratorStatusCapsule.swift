@@ -44,9 +44,27 @@ struct OrchestratorHeaderSegment: View {
     }
 }
 
-/// Phase 7 adds the collapse button here.
+/// Status capsule plus (Phase 7) the ⌃ back-one-level button above level .open.
 struct OrchestratorHeaderTrailing: View {
-    var body: some View { OrchestratorStatusCapsule() }
+    @EnvironmentObject var vm: BoringViewModel
+    @ObservedObject var expand = OrchestratorExpand.shared
+    @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @State private var anchor = NSView()
+
+    var body: some View {
+        HStack(spacing: 6) {
+            OrchestratorStatusCapsule()
+            if coordinator.currentView == .orchestrator && expand.level(for: vm) != .open {
+                Button { expand.back(vm) } label: {
+                    Image(systemName: "chevron.up").font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(OT.C.text).frame(width: 24, height: 24)
+                        .background(OT.C.raised, in: Circle())
+                }.buttonStyle(.plain).help("Back one level (⌘↑)")
+            }
+        }
+        .background(WindowAnchor(view: anchor))
+        .onAppear { expand.register(vm: vm, anchor: anchor) }
+    }
 }
 
 struct OrchestratorUsageRing: View {
