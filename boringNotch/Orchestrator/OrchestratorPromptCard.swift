@@ -121,7 +121,7 @@ final class PromptCardController: ObservableObject {
         // ponytail: hover-dwell focus take steals keystrokes from the frontmost app while the pointer rests
         // on the notch; upgrade path is Phase 9's global option-return / option-escape.
         let m = OrchestratorManager.shared
-        guard keyWindow == nil, m.prompt != nil, !m.wantsKeyboard else { return }
+        guard keyWindow == nil, m.prompt != nil, !m.wantsKeyboard, !OrchestratorKeyGate.terminalWantsKey else { return }
         m.beginTyping(in: w)
         keyWindow = w
         OrchestratorKeyGate.activate()
@@ -147,14 +147,17 @@ final class PromptCardController: ObservableObject {
         resignObserver = nil
         fieldEditing = false
         let wasKey = w.isKeyWindow
-        w.makeFirstResponder(nil)
         OrchestratorManager.shared.endTyping()
         keyWindow = nil
+        // The terminal took the panel over: leave its focus and activation alone.
+        guard !OrchestratorKeyGate.terminalWantsKey else { return }
+        w.makeFirstResponder(nil)
         OrchestratorKeyGate.restore(refocus: refocus && wasKey)
     }
 
     private func handle(_ e: NSEvent) -> NSEvent? {
-        guard let card = shown else { return e }
+        // Keys for other windows, or the ttyd terminal once it is up, are never prompt answers.
+        guard let card = shown, e.window === keyWindow, !OrchestratorKeyGate.terminalWantsKey else { return e }
         let combo = !e.modifierFlags.intersection([.command, .control, .option]).isEmpty
         let k = promptKey(keyCode: e.keyCode, characters: e.charactersIgnoringModifiers, commandLike: combo,
                           editingText: fieldEditing || NSApp.keyWindow?.firstResponder is NSText,
