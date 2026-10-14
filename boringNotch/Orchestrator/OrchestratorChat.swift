@@ -790,7 +790,7 @@ private struct ChatBlockRow: View {
         case .prose: dot(OT.C.text)
         case .tool:
             switch toolMarker(result: block.result) {
-            case .running: dot(OT.C.text6)
+            case .running: if toolDescription(block) != nil { dot(OT.C.text6).modifier(OrchPulse()) } else { dot(OT.C.text6) }
             case .done: dot(OT.C.green)
             case .error: dot(OT.C.red)
             }
@@ -801,6 +801,7 @@ private struct ChatBlockRow: View {
     private func dot(_ c: Color) -> some View {
         Circle().fill(c).frame(width: 7, height: 7)
             .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 0.5 }
+            .animation(.easeOut(duration: 0.25), value: c)
     }
 
     @ViewBuilder private var content: some View {
@@ -820,7 +821,51 @@ private struct ChatBlockRow: View {
         }
     }
 
-    private var toolRow: some View {
+    @ViewBuilder private var toolRow: some View {
+        if let desc = toolDescription(block) { describedToolRow(desc) } else { plainToolRow }
+    }
+
+    private func describedToolRow(_ desc: String) -> some View {
+        let target = toolTargetDisplay(name: block.name, target: block.target)
+        let isPath = target.contains("/")
+        let result = toolResultDisplay(name: block.name, result: block.result, added: block.added)
+        return VStack(alignment: .leading, spacing: 2) {
+            if block.result == nil {
+                Text(verbatim: desc).font(OT.F.ui).foregroundStyle(OT.C.text2).lineLimit(2).truncationMode(.tail)
+                    .orchShimmer()
+            } else {
+                OrchestratorSelectableText(desc, font: NSFont.systemFont(ofSize: 12), color: NSColor(OT.C.text2), maxLines: 2,
+                                           lineBreak: .byTruncatingTail, onClick: onClick, onCopied: onCopied)
+                    .baselineAligned()
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(verbatim: block.name ?? "Tool")
+                    .font(OT.F.monoChip.weight(.medium)).foregroundStyle(OT.C.text4)
+                    .padding(.vertical, 1).padding(.horizontal, 5)
+                    .background(OT.C.raised, in: RoundedRectangle(cornerRadius: 5))
+                OrchestratorSelectableText(target, font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular), color: NSColor(OT.C.text6), maxLines: 1,
+                                           lineBreak: isPath ? .byTruncatingMiddle : .byTruncatingTail, onClick: onClick, onCopied: onCopied)
+                    .baselineAligned()
+                if let add = block.added {
+                    Text(verbatim: "+\(add)").font(OT.F.monoChip).foregroundStyle(OT.C.green)
+                    Text(verbatim: "\u{2212}\(block.removed ?? 0)").font(OT.F.monoChip).foregroundStyle(OT.C.redText)
+                    Text(verbatim: "▸ diff").font(OT.F.meta).foregroundStyle(OT.C.text6)
+                }
+            }
+            if let r = result {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(verbatim: "\u{23BF}").font(OT.F.meta).foregroundStyle(OT.C.text6)
+                    OrchestratorSelectableText(r, font: NSFont.systemFont(ofSize: 11), color: NSColor(toolResultIsError(block.result) ? OT.C.redText : OT.C.text6),
+                                               maxLines: 1, lineBreak: .byTruncatingTail, onClick: onClick, onCopied: onCopied)
+                        .baselineAligned()
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: toolMarker(result: block.result))
+    }
+
+    private var plainToolRow: some View {
         let target = toolTargetDisplay(name: block.name, target: block.target)
         let isPath = target.contains("/")
         return HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -869,9 +914,18 @@ private struct OrchestratorLiveStatusRow: View {
         var t = "✻ " + (verb.isEmpty ? "Working" : verb)
         if status.elapsed != nil { t += " · " + formatElapsed(anchor.base + now.timeIntervalSince(anchor.at)) }
         if let k = status.tokens { t += " · " + k }
-        let text = Text(verbatim: t).font(OT.F.meta).foregroundStyle(OT.C.claude).lineLimit(1)
-        return text.overlay {
-            if !reduceMotion {
+        return Text(verbatim: t).font(OT.F.meta).foregroundStyle(OT.C.claude).lineLimit(1).orchShimmer()
+    }
+}
+
+/// White highlight sweeping across the content every 1.6s, masked by the content; static with Reduce Motion.
+private struct OrchShimmer: ViewModifier {
+    let active: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if active && !reduceMotion {
                 TimelineView(.animation(minimumInterval: 1.0 / 30)) { c in
                     let p = c.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
                     GeometryReader { g in
@@ -880,9 +934,23 @@ private struct OrchestratorLiveStatusRow: View {
                             .offset(x: (p * 1.5 - 0.5) * g.size.width)
                     }
                 }
-                .mask(text)
+                .mask(content)
             }
         }
+    }
+}
+
+private extension View {
+    func orchShimmer(_ active: Bool = true) -> some View { modifier(OrchShimmer(active: active)) }
+}
+
+/// Grey running dot that pulses 1 <-> 0.35 (static with Reduce Motion).
+private struct OrchPulse: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dim = false
+    func body(content: Content) -> some View {
+        content.opacity(dim ? 0.35 : 1)
+            .onAppear { if !reduceMotion { withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { dim = true } } }
     }
 }
 

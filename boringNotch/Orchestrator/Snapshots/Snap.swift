@@ -112,6 +112,20 @@ private let markerBlocks = blocks(#"""
 ]}
 """#)
 
+/// Described tool rows: ok, error, Edit with +/-, pending, then null / missing description (today's layout).
+private let toolDescBlocks = blocks(#"""
+{"running":true,"blocks":[
+ {"id":"d1","kind":"user","text":"Check the result file and rebuild."},
+ {"id":"d2","kind":"tool","name":"Read","target":"/Users/x/proj/11-fix-result.md","description":"Read 11-fix result, restart notch, start next step","result":"import SwiftUI (+120 lines)"},
+ {"id":"d3","kind":"tool","name":"Bash","target":"xcodebuild -scheme boringNotch build","description":"Build the notch app","result":"error: exit 65"},
+ {"id":"d4","kind":"tool","name":"Edit","target":"/Users/x/proj/OrchestratorChat.swift","description":"Add described tool row","result":"updated","added":3,"removed":1},
+ {"id":"d5","kind":"tool","name":"Bash","target":"run.sh --transition","description":"Run the transition harness","result":null},
+ {"id":"d6","kind":"tool","name":"Grep","target":"toolRow","description":null,"result":"4 matches"},
+ {"id":"d7","kind":"tool","name":"Glob","target":"**/*.swift","result":"31 files"},
+ {"id":"d8","kind":"prose","text":"Build failed with exit 65; looking at the errors now."}
+]}
+"""#)
+
 /// Long user message, a Read, an Edit with two hunks (context, removed, added), then prose.
 private let editBlocks = blocks(#"""
 {"running":true,"blocks":[
@@ -212,6 +226,8 @@ struct Snap {
             Scene(name: "14-chat-idle-suggestion", chat: chat(fixture("idle-suggestion.txt")), blocks: shortBlocks),
             Scene(name: "15-chat-markers", chat: chat(""), blocks: markerBlocks),
             Scene(name: "16-expanded-markers", chat: chat(""), blocks: markerBlocks, expanded: true),
+            Scene(name: "46-tools-described-open", chat: chat(""), blocks: toolDescBlocks),
+            Scene(name: "47-expanded-tools-described", chat: chat(""), blocks: toolDescBlocks, expanded: true),
             Scene(name: "23-expanded-bubbles-edit", chat: chat(""), blocks: editBlocks, expanded: true),
             Scene(name: "24-chat-edit-compact", chat: chat(""), blocks: editBlocks),
             Scene(name: "25-chat-pending", chat: chat(""), blocks: markerBlocks, sends: [

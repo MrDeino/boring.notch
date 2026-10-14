@@ -42,4 +42,16 @@ func runQuickTmqTests() {
     precondition(st(false, 560, 500, -100) == (false, false, false))
     precondition(st(false, 500, 500, -285) == (true, false, false))  // 500-285-200 = 15
     precondition(st(true, 500, 500, -260) == (false, false, false))  // 40
+
+    func td(_ extra: String) -> String? {
+        let j = #"{"blocks":[{"id":"1","kind":"tool","name":"Bash","target":"x"\#(extra)}]}"#
+        let b = decodeChatBlocks(Data(j.utf8))!.blocks
+        precondition(b.count == 1)
+        return toolDescription(b[0])
+    }
+    precondition(td(#","description":"Run the build""#) == "Run the build")
+    for e in [#","description":null"#, "", #","description":42"#, #","description":"   ""#] { precondition(td(e) == nil) }
+    precondition(td(#","description":" Run it \n more""#) == "Run it")
+    let pr = decodeChatBlocks(Data(#"{"blocks":[{"id":"2","kind":"prose","text":"hi","description":"x"}]}"#.utf8))!.blocks[0]
+    precondition(toolDescription(pr) == nil)
 }

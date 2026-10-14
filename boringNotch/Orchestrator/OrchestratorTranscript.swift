@@ -19,8 +19,9 @@ struct ChatBlock: Decodable, Equatable, Identifiable {
     let added: Int?
     let removed: Int?
     let diff: [ChatDiffHunk]?
+    let description: String?
 
-    private enum CodingKeys: String, CodingKey { case id, kind, text, name, target, result, added, removed, diff }
+    private enum CodingKeys: String, CodingKey { case id, kind, text, name, target, result, added, removed, diff, description }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -38,7 +39,15 @@ struct ChatBlock: Decodable, Equatable, Identifiable {
         added = try? c.decodeIfPresent(Int.self, forKey: .added)
         removed = try? c.decodeIfPresent(Int.self, forKey: .removed)
         diff = try? c.decodeIfPresent([ChatDiffHunk].self, forKey: .diff)
+        description = try? c.decodeIfPresent(String.self, forKey: .description)
     }
+}
+
+/// Serve's one-line tool description (first line, trimmed); nil for non-tools, missing or blank.
+func toolDescription(_ b: ChatBlock) -> String? {
+    guard b.kind == .tool, let d = b.description else { return nil }
+    let first = d.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
+    return first
 }
 
 private struct LossyChatBlock: Decodable {
@@ -244,6 +253,6 @@ func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: S
 extension ChatBlock {
     init(pendingID: String, text: String) {
         id = pendingID; kind = .user; self.text = text
-        name = nil; target = nil; result = nil; added = nil; removed = nil; diff = nil
+        name = nil; target = nil; result = nil; added = nil; removed = nil; diff = nil; description = nil
     }
 }
