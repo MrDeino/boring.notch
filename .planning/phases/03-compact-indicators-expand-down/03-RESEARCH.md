@@ -239,9 +239,11 @@ Threats: WebView navigating to arbitrary page in a privileged always-on-top pane
 | A5 | Local+global monitors together cover all outside clicks including panel margin | Margin clicks ignored; verify at UAT |
 | A6 | `window.setFrame` growth without AppKit animation is visually fine because window is transparent | Flicker; use animate: true |
 
-## Open Questions
+## Open Questions (RESOLVED)
 1. Per-screen vs single expanded state with `showOnAllDisplays`: recommended per-screen; low impact if only one display.
+   RESOLVED: per-screen. `OrchestratorExpand` keys expanded state by `vm.screenUUID ?? ""` (03-02 Task 1).
 2. Whether UAT wants usage bar visible with music: record the choice; easy to gate.
+   RESOLVED: D-02 bottom hairline usage overlay, shown with music (no layout change). If UAT dislikes it while music plays, gate it on `!MusicManager.shared.isPlaying` (03-01 Task 2, recorded in summary).
 
 ## Validation Architecture
 `workflow.nyquist_validation` is false in `.planning/config.json`: section skipped. Automated checks are the swiftc assert harness (above) and the xcodebuild compile; runtime (dot, expand, terminal typing, outside click) is human UAT.
