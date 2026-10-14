@@ -65,7 +65,7 @@ final class PromptCardController: ObservableObject {
     private func stillCurrent(_ displayed: PromptCard) async -> Bool {
         await OrchestratorManager.shared.refresh(fresh: true)
         let m = OrchestratorManager.shared
-        guard let cur = m.prompt, promptIdentity(cur) == promptIdentity(displayed), !m.optionsLocked else {
+        guard let cur = m.prompt, promptIdentity(cur) == promptIdentity(displayed), true else {
             await flashStale()
             return false
         }
@@ -83,7 +83,7 @@ final class PromptCardController: ObservableObject {
         Task {
             guard await stillCurrent(displayed) else { return }
             pressed = n
-            OrchestratorManager.shared.pressOption(n)
+            _ = await OrchestratorManager.shared.pressKeys([String(n)])
             release()
         }
     }
@@ -202,7 +202,7 @@ final class PromptCardController: ObservableObject {
             let m = OrchestratorManager.shared
             guard await stillCurrent(displayed) else { return }
             // ponytail: number-then-text acceptance is UAT A1; upgrade = awaitable pressOption in the manager.
-            m.pressOption(ft.number)
+            _ = await m.pressKeys([String(ft.number)])
             try? await Task.sleep(for: .milliseconds(350))
             // Only type once the select list has left the screen; if the press was dropped, digits and
             // Enter would answer the list, so re-check a few times.
@@ -283,7 +283,7 @@ private struct PromptKeycap: View {
 
 /// Locked-state feedback shared by pills and rows.
 @MainActor private func pressState(_ n: Int, _ m: OrchestratorManager, _ c: PromptCardController) -> (pressed: Bool, dim: Bool) {
-    let on = m.optionsLocked && c.pressed != nil
+    let on = false && c.pressed != nil
     return (on && c.pressed == n, on && c.pressed != n)
 }
 
@@ -342,7 +342,7 @@ private struct PermissionCard: View {
         }
         .buttonStyle(.plain)
         .opacity(st.dim ? 0.4 : 1)
-        .disabled(manager.optionsLocked || manager.sending)
+        .disabled(manager.sending)
         .help(item.label)
     }
 }
@@ -409,7 +409,7 @@ private struct QuestionCard: View {
         }
         .buttonStyle(.plain)
         .opacity(st.dim ? 0.4 : 1)
-        .disabled(manager.optionsLocked || manager.sending)
+        .disabled(manager.sending)
         .id(item.number)
     }
 
@@ -418,7 +418,7 @@ private struct QuestionCard: View {
             if let ft = card.items.first(where: { $0.role == .freeText }) { freeField(ft) } else { Spacer(minLength: 0) }
             if let chat = card.items.first(where: { $0.role == .chat }) {
                 footPill("Chat about this", key: "\(chat.number)") { ctl.choose(chat.number, displayed: card) }
-                    .disabled(manager.optionsLocked || manager.sending)
+                    .disabled(manager.sending)
             }
             footPill(nil, key: "esc") { ctl.escape(displayed: card) }
                 .disabled(manager.sending)
@@ -444,7 +444,7 @@ private struct QuestionCard: View {
         .padding(.leading, 12).padding(.trailing, 7)
         .frame(maxWidth: .infinity).frame(height: 28)
         .background(OT.C.raised, in: Capsule())
-        .disabled(manager.optionsLocked && !ctl.submitting)
+        .disabled(false)
         .onChange(of: ctl.focusField) { _, f in
             if f { DispatchQueue.main.async { fieldFocused = true }; ctl.focusField = false }
         }

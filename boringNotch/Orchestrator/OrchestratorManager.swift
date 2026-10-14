@@ -36,9 +36,7 @@ final class OrchestratorManager: ObservableObject {
 
     @Published private(set) var wantsKeyboard = false
     @Published private(set) var sending = false
-    @Published private(set) var optionsLocked = false
     private var typing = false
-    private var lockGen = 0
 
     /// The one notch panel allowed to become key (one panel per display).
     private(set) weak var keyboardWindow: NSWindow?
@@ -95,16 +93,16 @@ final class OrchestratorManager: ObservableObject {
     func startChat() async { await post(.start) }
     func stopChat() async { await post(.stop) }
 
-    func pressOption(_ n: Int) {
-        guard !optionsLocked, (1...9).contains(n) else { return }
-        optionsLocked = true
-        lockGen += 1
-        let gen = lockGen
-        Task {
-            await post(.key(String(n)))
-            try? await Task.sleep(for: .seconds(3))
-            if lockGen == gen { optionsLocked = false }
+    /// A key sequence in one `sending` window. Stops at the first non-200; true only if every key landed.
+    func pressKeys(_ keys: [String]) async -> Bool {
+        guard !sending else { return false }
+        sending = true
+        defer { sending = false }
+        for k in keys {
+            guard (try? await sendOrchestratorPost(.key(k), base: Self.baseURL, session: session)) == 200 else { await refresh(); return false }
         }
+        await refresh()
+        return true
     }
 
     private let session: URLSession = {
@@ -174,7 +172,7 @@ final class OrchestratorManager: ObservableObject {
         if runs != rs { runs = rs }
         if usage != st.usage { usage = st.usage }
         let po = running ? detectPrompt(screen: s) : []
-        if promptOptions != po { promptOptions = po; optionsLocked = false }
+        if promptOptions != po { promptOptions = po }
         let pc = running ? detectPromptCard(screen: s) : nil
         if prompt != pc { prompt = pc }
         let ls = running ? parseLiveStatus(screen: s) : nil

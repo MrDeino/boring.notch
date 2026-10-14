@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.299
+▝▜██████▀  Opus 5.5 (1M context) · Claude Max
+ ▝▝   ▝▝   /private/var/folders/fb/mb8cnk7s78zb5zxh_d3qjqvc0000gn/T/tmp.tEZk1pnCYZ
+
+
+❯ Use the AskUserQuestion tool once with two questions and do nothing else: question 1 header 'Fruit', multiSelect true, options apple, banana, cherry; question 2 header 'Color', single select,       
+  options red, blue.                                                                                                                                                                                    
+
+⏺ User answered Claude's questions:                                                                                                                                                                     
+  ⎿  · Which fruits do you want? → cherry, apple
+
+⏺ I asked both questions, but only one answer came back:
+
+  - Fruit: cherry and apple
+  - Color: no answer was recorded
+                            
+✻ Churned for 4s · done 6:44 pm
+
+❯ Use the AskUserQuestion tool once with ONE question, header 'Pet', multiSelect true, options cat, dog. Nothing else.                                                                                  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Pet  ✔ Submit  →
+                    
+Which pets do you want?
+
+❯ 1. [ ] cat
+         Cat
+  2. [ ] dog
+         Dog
+  3. [ ] Type something
+     Submit
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                        
+
+
+
+                                                      
+                                                     
