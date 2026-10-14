@@ -1,0 +1,12 @@
+#!/bin/sh
+# Snapshot harness: renders the Orchestrator tab at the real notch sizes with fixture data.
+# Needs one app build first (for the Defaults module): xcodebuild ... -derivedDataPath "${DD:-/tmp/notch-dd}" build
+# Usage: boringNotch/Orchestrator/Snapshots/run.sh [--image-renderer]   ->  /tmp/notch-snapshots/*.png
+set -e
+cd "$(dirname "$0")/../../.."
+P="${DD:-/tmp/notch-dd}/Build/Products/Debug"
+mkdir -p /tmp/notch-snap-build
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swiftc -parse-as-library -swift-version 5 \
+  -target arm64-apple-macos14.0 -D ORCH_SNAPSHOT -I "$P" -o /tmp/notch-snap-build/snap \
+  $(ls boringNotch/Orchestrator/Orchestrator*.swift) boringNotch/Orchestrator/Snapshots/*.swift "$P/Defaults.o"
+/tmp/notch-snap-build/snap "$@"

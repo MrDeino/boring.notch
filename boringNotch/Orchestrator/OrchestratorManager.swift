@@ -157,29 +157,50 @@ final class OrchestratorManager: ObservableObject {
             async let chat: ChatResponse = get("api/chat")
             async let state: StateResponse = get("api/state")
             let (r, st) = try await (chat, state)
-            if offline { offline = false }
-            let running = r.running ?? false
-            if chatRunning != running { chatRunning = running }
-            let s = r.screen ?? ""
-            if screen != s { screen = s }
-            let rs = st.runs ?? []
-            if runs != rs { runs = rs }
-            if usage != st.usage { usage = st.usage }
-            let po = running ? detectPrompt(screen: s) : []
-            if promptOptions != po { promptOptions = po; optionsLocked = false }
-            let pc = running ? detectPromptCard(screen: s) : nil
-            if prompt != pc { prompt = pc }
-            let ls = running ? parseLiveStatus(screen: s) : nil
-            if liveStatus != ls { liveStatus = ls }
-            await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, screen: s, chatRunning: running)
+            await apply(r, st)
         } catch {
-            if !offline { offline = true }
-            if !runs.isEmpty { runs = [] }
-            if !promptOptions.isEmpty { promptOptions = [] }
-            if prompt != nil { prompt = nil }
-            if liveStatus != nil { liveStatus = nil }
-            statusMenuOpen = false
+            applyOffline()
         }
         if !hasLoaded { hasLoaded = true }
     }
+
+    private func apply(_ r: ChatResponse, _ st: StateResponse) async {
+        if offline { offline = false }
+        let running = r.running ?? false
+        if chatRunning != running { chatRunning = running }
+        let s = r.screen ?? ""
+        if screen != s { screen = s }
+        let rs = st.runs ?? []
+        if runs != rs { runs = rs }
+        if usage != st.usage { usage = st.usage }
+        let po = running ? detectPrompt(screen: s) : []
+        if promptOptions != po { promptOptions = po; optionsLocked = false }
+        let pc = running ? detectPromptCard(screen: s) : nil
+        if prompt != pc { prompt = pc }
+        let ls = running ? parseLiveStatus(screen: s) : nil
+        if liveStatus != ls { liveStatus = ls }
+        await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, screen: s, chatRunning: running)
+    }
+
+    private func applyOffline() {
+        if !offline { offline = true }
+        if !runs.isEmpty { runs = [] }
+        if !promptOptions.isEmpty { promptOptions = [] }
+        if prompt != nil { prompt = nil }
+        if liveStatus != nil { liveStatus = nil }
+        statusMenuOpen = false
+    }
 }
+
+#if ORCH_SNAPSHOT
+extension OrchestratorManager {
+    /// Snapshot harness only (Orchestrator/Snapshots): fixture responses through the real apply path.
+    /// loaded false = connecting; chat nil = offline.
+    func snapshotApply(loaded: Bool, chat: ChatResponse?, state: StateResponse, runsBoard: Bool = false) async {
+        hasLoaded = loaded
+        showRunsBoard = runsBoard
+        guard loaded else { return }
+        if let chat { await apply(chat, state) } else { applyOffline() }
+    }
+}
+#endif

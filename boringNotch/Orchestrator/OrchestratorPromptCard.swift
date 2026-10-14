@@ -454,10 +454,11 @@ private struct QuestionCard: View {
     private func footPill(_ title: String?, key: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                if let title { Text(title).font(OT.F.ui).foregroundStyle(OT.C.text).lineLimit(1).fixedSize() }
+                if let title { Text(title).font(OT.F.ui).foregroundStyle(OT.C.text) }
                 PromptKeycap(text: key, light: false)
             }
             .padding(.leading, title == nil ? 7 : 14).padding(.trailing, 7)
+            .fixedSize() // the free-text field gives way; title and keycap never squeeze
             .frame(height: 28)
             .background(OT.C.raised, in: Capsule())
         }

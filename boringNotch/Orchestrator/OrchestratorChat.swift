@@ -118,6 +118,16 @@ final class OrchestratorTranscriptStore: ObservableObject {
     }
 }
 
+#if ORCH_SNAPSHOT
+extension OrchestratorTranscriptStore {
+    /// Snapshot harness only: fixture blocks instead of /api/chat/blocks.
+    func snapshotSet(blocks: [ChatBlock]) {
+        self.blocks = blocks
+        fallback = blocks.isEmpty
+    }
+}
+#endif
+
 struct OrchestratorChatView: View {
     @ObservedObject var manager = OrchestratorManager.shared
     @State private var draft = ""
@@ -133,29 +143,33 @@ struct OrchestratorChatView: View {
     private let showComposer: Bool
     private let proseLineLimit: Int?
     private let maxRows: Int
-    private let scrolls: Bool
 
-    /// scrolls: the expanded column (frame 12) shows full prose and scrolls, pinned to the newest row.
-    init(showComposer: Bool = true, proseLineLimit: Int? = 4, maxRows: Int = 12, scrolls: Bool = false) {
+    init(showComposer: Bool = true, proseLineLimit: Int? = 4, maxRows: Int = 12) {
         self.showComposer = showComposer
         self.proseLineLimit = proseLineLimit
         self.maxRows = maxRows
-        self.scrolls = scrolls
     }
 
     var body: some View {
         VStack(spacing: 4) {
-            Group {
-                if scrolls {
-                    ScrollView(.vertical, showsIndicators: false) { rows }.defaultScrollAnchor(.bottom)
-                } else {
-                    rows
+            // The rows take only the height left under the header and above the composer and scroll,
+            // pinned to the newest row; short transcripts sit at the bottom.
+            GeometryReader { g in
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 0) {
+                            rows
+                            Color.clear.frame(height: 0).id(Self.bottomID)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.bottom, 8)
+                        .frame(minHeight: g.size.height, alignment: .bottomLeading)
+                    }
+                    .defaultScrollAnchor(.bottom)
+                    .onChange(of: pinKey) { _, _ in proxy.scrollTo(Self.bottomID, anchor: .bottom) }
                 }
             }
-            .padding(.horizontal, 6)
-            .padding(.bottom, 8)
-            .clipped()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             .contentShape(Rectangle())
             .onTapGesture { expandChat() }
             if showComposer { composer }
@@ -199,6 +213,12 @@ struct OrchestratorChatView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private static let bottomID = "bottom"
+    /// Changes whenever a row is added or the status row appears/disappears.
+    private var pinKey: String {
+        "\(store.fallback ? fallbackLines.count : store.blocks.count)|\(store.blocks.last?.id ?? "")|\(manager.liveStatus != nil)|\(store.idleStatus ?? "")"
     }
 
     /// chatTail lines minus spinner lines (the status row shows those).

@@ -51,7 +51,10 @@ struct OrchestratorView: View {
                 OrchestratorTabContent()
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // minHeight 0: take exactly the space under the header. A taller body would otherwise make the
+        // notch's fixed-height frame centre it, pushing the header and the composer out of the notch.
+        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+        .clipped()
         .opacity(manager.statusMenuOpen ? 0.35 : 1)
         .allowsHitTesting(!manager.statusMenuOpen)
         .overlay(alignment: .topTrailing) {
