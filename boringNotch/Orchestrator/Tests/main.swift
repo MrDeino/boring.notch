@@ -13,6 +13,6 @@ precondition(chatTail(screen: "x\u{a0}\u{a0} \ny \u{a0}", maxLines: 5) == ["x", 
 
 let box = "─────────────────  \n❯\u{a0}merge 199" + String(repeating: " ", count: 150) + "\n─────────────────  \n  ? for shortcuts   \n"
 let t = chatTail(screen: box, maxLines: 8)
-precondition(t.count == 3)
+precondition(t.count == 4)
 precondition(t[1] == "❯\u{a0}merge 199")
 print("OK")
