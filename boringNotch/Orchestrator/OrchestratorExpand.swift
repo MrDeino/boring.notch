@@ -176,6 +176,8 @@ struct OrchestratorExpandOverlay: View {
             }
         }
         .background(WindowAccessor { window = $0 })
+        // Pins the button bottom-trailing; the empty frame area has no hit shape, so chat clicks pass through.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         .onChange(of: isExp) { _, on in if on { termState = .connecting; termID = UUID() } }
         .onDisappear { expand.reset() }
     }
