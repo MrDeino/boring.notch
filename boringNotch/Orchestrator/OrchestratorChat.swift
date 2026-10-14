@@ -38,18 +38,13 @@ final class OrchestratorTranscriptStore: ObservableObject {
             return
         }
         guard OrchestratorManager.shared.notchOpen else { return }
-        // ponytail: full resync about every 15th open poll (~30 s) because /clear or a new transcript is
-        // otherwise invisible to `since`; SSE in Phase 8 removes it.
+        // ponytail: full resync about every 15th open poll (~30 s) for what the overlap check can't see
+        // (e.g. /clear with no new blocks yet); SSE in Phase 8 removes it.
         let full = needsFull || polls % 15 == 0
         polls += 1
 
-        var comps = URLComponents(url: base.appendingPathComponent("api/chat/blocks"), resolvingAgainstBaseURL: false)
         let sinceSent = !full && !blocks.isEmpty
-        if sinceSent { comps?.queryItems = [URLQueryItem(name: "since", value: blocks.last?.id)] }
-        guard let url = comps?.url,
-              let (data, resp) = try? await session.data(from: url),
-              (resp as? HTTPURLResponse)?.statusCode == 200,
-              let decoded = decodeChatBlocks(data) else {
+        guard var decoded = await fetchBlocks(base: base, session: session, since: sinceSent ? blocks.last?.id : nil) else {
             if !fallback { fallback = true }
             return
         }
@@ -59,7 +54,16 @@ final class OrchestratorTranscriptStore: ObservableObject {
             needsFull = true
             return
         }
-        let reset = full || blocksDiscontinuous(sinceSent: sinceSent, incoming: decoded.blocks, existing: blocks)
+        var reset = full
+        if blocksDiscontinuous(sinceSent: sinceSent, incoming: decoded.blocks, existing: blocks) {
+            // Full fetch: still holding our last block = plain append, else the conversation changed (/clear): replace.
+            guard let all = await fetchBlocks(base: base, session: session, since: nil) else {
+                if !fallback { fallback = true }
+                return
+            }
+            decoded = all
+            reset = !all.blocks.contains { $0.id == blocks.last?.id }
+        }
         let m = mergeChatBlocks(blocks, decoded.blocks, reset: reset)
         if m.blocks != blocks {
             if m.appended && !reset {
@@ -70,6 +74,15 @@ final class OrchestratorTranscriptStore: ObservableObject {
         }
         if fallback { fallback = false }
         needsFull = false
+    }
+
+    private func fetchBlocks(base: URL, session: URLSession, since: String?) async -> (running: Bool?, blocks: [ChatBlock])? {
+        var comps = URLComponents(url: base.appendingPathComponent("api/chat/blocks"), resolvingAgainstBaseURL: false)
+        if let since { comps?.queryItems = [URLQueryItem(name: "since", value: since)] }
+        guard let url = comps?.url,
+              let (data, resp) = try? await session.data(from: url),
+              (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return decodeChatBlocks(data)
     }
 
     func postKey(_ key: String) async {

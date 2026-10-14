@@ -72,9 +72,11 @@ func mergeChatBlocks(_ existing: [ChatBlock], _ incoming: [ChatBlock], reset: Bo
     return (Array(out.suffix(cap)), appended)
 }
 
-/// A full 80-block since-response sharing no id with what we hold means we missed blocks: reset.
+/// A non-empty since-response sharing no id with what we hold is ambiguous: serve didn't know `since`
+/// (/clear, new transcript, >80 missed; it then sends its last 80) or `since` was a non-tool block with
+/// new blocks after it. The caller resolves it with a full fetch.
 func blocksDiscontinuous(sinceSent: Bool, incoming: [ChatBlock], existing: [ChatBlock]) -> Bool {
-    guard sinceSent, incoming.count >= 80 else { return false }
+    guard sinceSent, !incoming.isEmpty else { return false }
     let have = Set(existing.map(\.id))
     return !incoming.contains { have.contains($0.id) }
 }

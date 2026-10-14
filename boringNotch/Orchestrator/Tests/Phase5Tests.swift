@@ -54,7 +54,9 @@ func runPhase5Tests() {
     precondition(blocksDiscontinuous(sinceSent: true, incoming: new80, existing: [u1]))
     precondition(!blocksDiscontinuous(sinceSent: true, incoming: [u1] + new80.dropFirst(), existing: [u1]))
     precondition(!blocksDiscontinuous(sinceSent: false, incoming: new80, existing: [u1]))
-    precondition(!blocksDiscontinuous(sinceSent: true, incoming: Array(new80.prefix(79)), existing: [u1]))
+    // WR-03: unknown `since` after /clear (fewer than 80 blocks, no overlap) must be caught too
+    precondition(blocksDiscontinuous(sinceSent: true, incoming: Array(new80.prefix(3)), existing: [u1]))
+    precondition(!blocksDiscontinuous(sinceSent: true, incoming: [], existing: [u1]))
 
     // input line
     precondition(parseInputLine(screen: fixture("inputbox")) == "make it my real app")
