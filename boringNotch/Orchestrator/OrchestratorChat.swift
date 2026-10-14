@@ -235,13 +235,35 @@ struct OrchestratorChatView: View {
                         .padding(.horizontal, 6)
                         .padding(.bottom, 8)
                         .frame(minHeight: g.size.height, alignment: .bottomLeading)
+                        .background(GeometryReader { c in
+                            Color.clear
+                                .onAppear { chatGeometry(c.frame(in: .named("orchChatScroll")), viewport: g.size.height, proxy: proxy) }
+                                .onChange(of: c.frame(in: .named("orchChatScroll"))) { _, f in chatGeometry(f, viewport: g.size.height, proxy: proxy) }
+                        })
                     }
                     .defaultScrollAnchor(.bottom)
-                    .onChange(of: pinKey) { _, _ in proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                    // Also catches a new row that leaves the height unchanged (the row window drops an old one).
+                    .onChange(of: pinKey) { _, _ in if stick { proxy.scrollTo(Self.bottomID, anchor: .bottom) } else { unseen = true } }
+                    .overlay(alignment: .bottom) {
+                        if unseen && !stick {
+                            Button {
+                                stick = true; unseen = false
+                                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                            } label: {
+                                Text("↓ New messages").font(OT.F.meta).foregroundStyle(OT.C.text2)
+                                    .padding(.vertical, 3).padding(.horizontal, 9)
+                                    .background(Capsule().fill(OT.C.raised))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.bottom, 4)
+                            .transition(.opacity)
+                        }
+                    }
                     // A level change reflows the rows (width and height); the ScrollView keeps its offset, which
                     // would scroll the newest row out of view when the content shrinks. Stay on the newest row.
                     .onChange(of: g.size) { _, _ in
                         // Next turn: the content has not been laid out at the new size yet when this fires.
+                        guard stick else { return }
                         Task { @MainActor in
                             for ms in [0, 80] {
                                 try? await Task.sleep(for: .milliseconds(ms))
@@ -252,6 +274,7 @@ struct OrchestratorChatView: View {
                     }
                 }
             }
+            .coordinateSpace(name: "orchChatScroll")
             .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             .contentShape(Rectangle())
             .onTapGesture { expandChat() }
@@ -343,6 +366,24 @@ struct OrchestratorChatView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: expanded ? .trailing : .leading)
+    }
+
+    @State private var stick = true
+    @State private var unseen = false
+    @State private var contentHeight: CGFloat = 0
+
+    private func chatGeometry(_ f: CGRect, viewport: CGFloat, proxy: ScrollViewProxy) {
+        let r = chatScrollStep(stick: stick, oldHeight: contentHeight, newHeight: f.height, contentMinY: f.minY, viewport: viewport)
+        contentHeight = f.height
+        if r.stick != stick { stick = r.stick }
+        if r.stick && unseen { unseen = false }
+        if r.newContent { unseen = true }
+        if r.scrollToBottom {
+            Task { @MainActor in
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+            }
+        }
     }
 
     private static let bottomID = "bottom"
@@ -622,6 +663,7 @@ struct OrchestratorChatView: View {
             store.draftFromTerminal = true
             return
         }
+        stick = true; unseen = false
         store.enqueue(t, images: store.takeAttachments())
         store.draft = ""
         store.draftFromTerminal = false

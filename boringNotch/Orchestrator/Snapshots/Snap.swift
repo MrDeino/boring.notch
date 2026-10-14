@@ -459,6 +459,56 @@ struct Snap {
                 try? await Task.sleep(for: .milliseconds(200))
             }
             let label = expanded ? "expanded" : "open"
+            if !expanded {
+                // Smart auto-scroll: scrolled up keeps its position on new content (pill shown), the pill jumps
+                // to the bottom, at the bottom a new row is followed.
+                func scrollViews(_ v: NSView) -> [NSScrollView] { (v as? NSScrollView).map { [$0] } ?? [] + v.subviews.flatMap(scrollViews) }
+                func extra(_ id: String) -> [ChatBlock] {
+                    blocks(#"{"running":true,"blocks":[{"id":"\#(id)","kind":"prose","text":"A new message arrived while reading back."}]}"#)
+                }
+                try? await Task.sleep(for: .milliseconds(1000))
+                if let sv = scrollViews(host).first(where: { $0.documentView != nil && $0.bounds.height > 40 && $0.bounds.height < host.bounds.height }) {
+                    let clip = sv.contentView
+                    func offY() -> CGFloat { clip.documentVisibleRect.origin.y }
+                    func bottomY() -> CGFloat { (sv.documentView?.frame.height ?? 0) - clip.bounds.height }
+                    func atBottom() -> Bool { abs(offY() - bottomY()) < 14 || (sv.documentView?.isFlipped == false && offY() < 4) }
+                    let flipped = sv.documentView?.isFlipped ?? true
+                    let start = offY()
+                    var how = "scroll wheel"
+                    if let cg = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: 300, wheel2: 0, wheel3: 0),
+                       let ev = NSEvent(cgEvent: cg) { window.sendEvent(ev) }
+                    try? await Task.sleep(for: .milliseconds(300))
+                    if abs(offY() - start) < 2 {
+                        how = "clip scroll(to:)"
+                        clip.scroll(to: NSPoint(x: 0, y: flipped ? max(0, start - 300) : start + 300))
+                        sv.reflectScrolledClipView(clip)
+                        try? await Task.sleep(for: .milliseconds(300))
+                    }
+                    let up = offY()
+                    print("scroll view \(type(of: sv)), scrolled up via \(how): \(Int(start)) -> \(Int(up)), flipped \(flipped)")
+                    OrchestratorTranscriptStore.shared.snapshotSet(blocks: longBlocks + extra("extra1"))
+                    try? await Task.sleep(for: .milliseconds(500))
+                    let kept = abs(offY() - up) < 2 && !atBottom()
+                    try? window.contentView?.bitmapImageRepForCachingDisplay(in: host.bounds).flatMap { rep -> Data? in
+                        host.cacheDisplay(in: host.bounds, to: rep); return rep.representation(using: .png, properties: [:])
+                    }?.write(to: URL(fileURLWithPath: "/tmp/notch-snapshots/hittest-new-messages.png"))
+                    print("scrolled-up position kept: \(kept)")
+                    await click(vm.notchSize.height - 60, x: 320) // pill: just above the composer
+                    try? await Task.sleep(for: .milliseconds(400))
+                    let jumped = atBottom()
+                    print("pill jumps to bottom: \(jumped) off \(offY()) bottom \(bottomY()) doc \(sv.documentView?.frame.height ?? 0) clip \(clip.bounds.height)")
+                    OrchestratorTranscriptStore.shared.snapshotSet(blocks: longBlocks + extra("extra1") + extra("extra2"))
+                    try? await Task.sleep(for: .milliseconds(500))
+                    let follows = atBottom()
+                    print("at bottom follows new row: \(follows)")
+                    ok = ok && kept && jumped && follows
+                } else {
+                    print("FAIL: no NSScrollView found for the transcript")
+                    ok = false
+                }
+                OrchestratorTranscriptStore.shared.snapshotSet(blocks: longBlocks)
+                try? await Task.sleep(for: .milliseconds(300))
+            }
             var line: [String] = []
 
             // The regression: an AppKit platform view (the TextField) under the composer took the click.

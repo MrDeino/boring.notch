@@ -83,6 +83,14 @@ func liveStatusFor(screen: String, live: Bool?) -> LiveStatus? {
     }
 }
 
+/// Chat auto-scroll rule. Geometry alone can't tell growth from scrolling, but growth changes the content height and scrolling doesn't.
+func chatScrollStep(stick: Bool, oldHeight: CGFloat, newHeight: CGFloat, contentMinY: CGFloat, viewport: CGFloat, threshold: CGFloat = 20) -> (stick: Bool, scrollToBottom: Bool, newContent: Bool) {
+    if abs(newHeight - oldHeight) > 0.5 {
+        return (stick, stick, !stick && newHeight > oldHeight)
+    }
+    return ((contentMinY + newHeight) - viewport <= threshold, false, false)
+}
+
 func formatElapsed(_ seconds: TimeInterval) -> String {
     let t = max(0, Int(seconds))
     let h = t / 3600, m = t % 3600 / 60, s = t % 60
