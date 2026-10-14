@@ -19,6 +19,8 @@ final class OrchestratorManager: ObservableObject {
     /// Chat | Runs segment state.
     @Published var showRunsBoard = false
     @Published var statusMenuOpen = false
+    /// Notes drop-down; mutually exclusive with the status menu.
+    @Published var notesOpen = false
     @Published private(set) var prompt: PromptCard? = nil
     @Published private(set) var liveStatus: LiveStatus? = nil
     var capsuleStatus: CapsuleState {
@@ -30,7 +32,7 @@ final class OrchestratorManager: ObservableObject {
         didSet {
             // Typing teardown is owned by OrchestratorView (close() is blocked while typing).
             if notchOpen && !oldValue { Task { await refresh() } }
-            if !notchOpen { OrchestratorExpand.shared.reset(); statusMenuOpen = false }
+            if !notchOpen { OrchestratorExpand.shared.reset(); statusMenuOpen = false; notesOpen = false }
         }
     }
 
@@ -105,7 +107,7 @@ final class OrchestratorManager: ObservableObject {
         return true
     }
 
-    private let session: URLSession = {
+    let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
         c.timeoutIntervalForRequest = 3
         c.timeoutIntervalForResource = 5
@@ -187,6 +189,7 @@ final class OrchestratorManager: ObservableObject {
         if prompt != nil { prompt = nil }
         if liveStatus != nil { liveStatus = nil }
         statusMenuOpen = false
+        notesOpen = false
     }
 }
 

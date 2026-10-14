@@ -41,7 +41,15 @@ struct OrchestratorView: View {
     @EnvironmentObject var vm: BoringViewModel
     @State private var anchor = NSView()
 
-    private func close() { withAnimation(.easeOut(duration: 0.15)) { manager.statusMenuOpen = false } }
+    @State private var notesGrew = false
+    @State private var bodyHeight: CGFloat = 999
+
+    private func close() {
+        withAnimation(.easeOut(duration: 0.15)) {
+            if manager.notesOpen { OrchestratorNotesStore.shared.flush() }
+            manager.statusMenuOpen = false; manager.notesOpen = false
+        }
+    }
 
     var body: some View {
         Group {
@@ -55,10 +63,17 @@ struct OrchestratorView: View {
         // notch's fixed-height frame centre it, pushing the header and the composer out of the notch.
         .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         .clipped()
-        .opacity(manager.statusMenuOpen ? 0.35 : 1)
-        .allowsHitTesting(!manager.statusMenuOpen)
+        .background(GeometryReader { g in Color.clear.onAppear { bodyHeight = g.size.height }.onChange(of: g.size.height) { _, h in bodyHeight = h } })
+        .opacity(manager.statusMenuOpen || manager.notesOpen ? 0.35 : 1)
+        .allowsHitTesting(!manager.statusMenuOpen && !manager.notesOpen)
         .overlay(alignment: .topTrailing) {
-            if manager.statusMenuOpen {
+            if manager.notesOpen {
+                ZStack(alignment: .topTrailing) {
+                    Color.clear.contentShape(Rectangle()).onTapGesture { close() }
+                    OrchestratorNotesPanel(close: close)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
+                }
+            } else if manager.statusMenuOpen {
                 ZStack(alignment: .topTrailing) {
                     Color.clear.contentShape(Rectangle()).onTapGesture { close() }
                     OrchestratorStatusMenu(openTerminal: {
@@ -69,6 +84,14 @@ struct OrchestratorView: View {
             }
         }
         .background(WindowAnchor(view: anchor))
-        .onDisappear { manager.statusMenuOpen = false }
+        .onChange(of: manager.notesOpen) { _, open in
+            // Grow only when the open level lacks room for a usable editor; undo only what we grew.
+            if open, expand.level(for: vm) == .open, bodyHeight < 130 {
+                expand.setLevel(.expanded, vm: vm, window: anchor.window); notesGrew = true
+            } else if !open, notesGrew {
+                notesGrew = false; expand.setLevel(.open, vm: vm, window: anchor.window)
+            }
+        }
+        .onDisappear { OrchestratorNotesStore.shared.flush(); manager.statusMenuOpen = false; manager.notesOpen = false }
     }
 }

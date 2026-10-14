@@ -233,6 +233,7 @@ struct OrchestratorChatView: View {
         .onChange(of: manager.promptOptions) { _, o in if !o.isEmpty { stopTyping() } }
         // Phase 4
         .onChange(of: manager.statusMenuOpen) { _, open in if open { stopTyping() } }
+        .onChange(of: manager.notesOpen) { _, open in if open { stopTyping() } }
     }
 
     private var rows: some View {

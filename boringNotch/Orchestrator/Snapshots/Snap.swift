@@ -124,6 +124,9 @@ private let editBlocks = blocks(#"""
 ]}
 """#)
 
+private let shortNote = "Remember to ask about the Railway migration.\n\n- notch: back-nav for question chips\n- notes drop-down autosaves after 1s\n- check usage ring colour at 90%"
+private let longNote = (1...30).map { "Note line \($0): a longer scratch line that wraps when the panel is narrow enough to need it." }.joined(separator: "\n")
+
 struct Scene {
     let name: String
     var loaded = true
@@ -136,6 +139,7 @@ struct Scene {
     var note: String?
     var pending: [Int: Bool] = [:]
     var sends: [PendingMessage] = []
+    var notes: (String, NotesStatus)?
 }
 
 @MainActor
@@ -183,6 +187,9 @@ struct Snap {
             Scene(name: "27-expanded-pending", chat: chat(""), blocks: editBlocks, expanded: true, sends: [
                 PendingMessage(id: 1, text: "ok", state: .sending, sentAt: nil),
                 PendingMessage(id: 2, text: "Please also go through every remaining file in the Orchestrator folder and tidy the comments so they match the new naming, then summarise", state: .failed, sentAt: nil)]),
+            Scene(name: "28-notes-open", chat: chat(""), blocks: markerBlocks, notes: (shortNote, .saved)),
+            Scene(name: "29-notes-couldnt-save", chat: chat(""), blocks: markerBlocks, notes: (shortNote, .failed)),
+            Scene(name: "30-notes-expanded", chat: chat(""), blocks: markerBlocks, expanded: true, notes: (longNote, .idle)),
             Scene(name: "17-question-multiselect", chat: chat(fixture("multiselect-1.txt")), expanded: true),
             Scene(name: "18-question-multiselect-toggled", chat: chat(fixture("multiselect-1.txt")), expanded: true, pending: [1: true, 2: true]),
             Scene(name: "19-question-multiq-tabs", chat: chat(fixture("multiq-tab2.txt")), expanded: true),
@@ -200,6 +207,7 @@ struct Snap {
             OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
             PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending)
+            if let n = s.notes { OrchestratorNotesStore.shared.snapshotSet(text: n.0, status: n.1); m.notesOpen = true }
 
             let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 480),
                                   styleMask: .borderless, backing: .buffered, defer: false)
@@ -227,6 +235,7 @@ struct Snap {
                 window.contentView = nil
             }
             OrchestratorExpand.shared.reset()
+            m.notesOpen = false
             PromptCardController.shared.snapshotSet()
             if let png { try? png.write(to: url); print("wrote", url.path) } else { print("FAILED", s.name) }
         }
@@ -366,6 +375,11 @@ struct Snap {
                 line.append("capsule opens menu: \(m.statusMenuOpen)")
                 ok = ok && m.statusMenuOpen
                 m.statusMenuOpen = false
+                m.notesOpen = false
+                await click(17, x: 590) // notes button, right of the capsule
+                line.append("notes button opens panel: \(m.notesOpen)")
+                ok = ok && m.notesOpen
+                m.notesOpen = false
             }
             // Below the visible notch (only exists while the window is taller than the notch).
             if H > vm.notchSize.height + 30 {
@@ -377,7 +391,7 @@ struct Snap {
             window.contentView = nil
             window.orderOut(nil)
         }
-        print(ok ? "OK: composer, segment and capsule respond to clicks" : "FAIL: a click target did not respond")
+        print(ok ? "OK: composer, segment, capsule and notes button respond to clicks" : "FAIL: a click target did not respond")
     }
 }
 
