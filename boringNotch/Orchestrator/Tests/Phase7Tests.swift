@@ -93,6 +93,10 @@ func runPhase7Tests() {
     precondition(shortcut(keyCode: 125, chars: nil, commandOnly: false) == nil && shortcut(keyCode: 17, chars: "t", commandOnly: false) == nil)
     precondition(shortcut(keyCode: 36, chars: "\r", commandOnly: true) == nil && shortcut(keyCode: 53, chars: nil, commandOnly: true) == nil)
 
+    // isCommandOnly: ⌘↓ carries numericPad (1<<21) and function (1<<23); caps lock (1<<16) is ignored
+    precondition(isCommandOnly(1 << 20 | 1 << 21 | 1 << 23) && isCommandOnly(1 << 20 | 1 << 16) && isCommandOnly(1 << 20))
+    precondition(!isCommandOnly(1 << 20 | 1 << 17) && !isCommandOnly(1 << 20 | 1 << 19) && !isCommandOnly(1 << 18 | 1 << 20) && !isCommandOnly(1 << 21))
+
     // transitions
     precondition(runStates([mk("a", "running"), try! d.decode(OrchestratorRun.self, from: Data("{}".utf8))]) == ["a": "running"])
     precondition(!newlyWaiting(old: nil, new: [mk("a", "waiting")]))

@@ -138,6 +138,12 @@ func expandedHeight(screenHeight: CGFloat) -> CGFloat { max(300, min(440, 0.45 *
 
 enum OrchShortcut: Equatable { case deeper, back, terminal, toggleRail }
 
+/// Raw NSEvent.ModifierFlags: command alone, ignoring caps lock, numericPad and function (arrow keys carry the last two).
+func isCommandOnly(_ raw: UInt) -> Bool {
+    let command: UInt = 1 << 20, shift: UInt = 1 << 17, control: UInt = 1 << 18, option: UInt = 1 << 19
+    return raw & (command | shift | control | option) == command
+}
+
 /// T and backslash match on characters (other layouts); esc is never handled (R-06).
 func shortcut(keyCode: UInt16, chars: String?, commandOnly: Bool) -> OrchShortcut? {
     guard commandOnly else { return nil }

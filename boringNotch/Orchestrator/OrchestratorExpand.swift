@@ -63,7 +63,7 @@ final class OrchestratorExpand: ObservableObject {
     private init() {
         // ⌘↓/⌘↑/⌘T/⌘\ only while the notch panel is key (typing or terminal); a level change remounts the chat and ends typing (Phase 4 shell swap).
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
-            let cmd = e.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+            let cmd = isCommandOnly(e.modifierFlags.rawValue)
             guard let sc = shortcut(keyCode: e.keyCode, chars: e.charactersIgnoringModifiers, commandOnly: cmd) else { return e }
             let handled = MainActor.assumeIsolated { self?.handle(sc, window: e.window) ?? false }
             return handled ? nil : e
