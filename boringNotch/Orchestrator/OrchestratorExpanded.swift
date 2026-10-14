@@ -120,7 +120,7 @@ struct OrchestratorRunsStrip: View {
                 .overlay(alignment: .topTrailing) {
                     if hovered == run.stableID {
                         OrchestratorRunCard(run: run, compact: true)
-                            .frame(width: 178).offset(x: -(178 + 10))
+                            .frame(width: 178).offset(x: -(22 + 10))
                             .allowsHitTesting(false).transition(.opacity)
                     }
                 }
