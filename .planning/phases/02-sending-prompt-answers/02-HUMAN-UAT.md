@@ -16,23 +16,23 @@ updated: 2026-10-14
 ## Tests
 
 ### 1. Typing focus
-expected: Click in another app and type: the notch never takes keystrokes. Click the message box: typing goes into it; the app in front stays in front (no app switch).
+expected: Click in another app and type: the notch never takes keystrokes. Click the message box: typing goes into it; the app in front stays in front (no app switch). If clicking the box does nothing at all, the panel refused to become key (typing is rolled back on purpose) — report it. With two displays, clicking the other display's notch while typing must not swallow keystrokes.
 result: pending
 
 ### 2. Send
-expected: Type a line, press Enter: it appears in the chat tail within ~2s, the box clears, and typing afterwards goes back to the app you were in.
+expected: Type a line, press Enter: it appears in the chat tail within ~2s, the box clears, and typing afterwards goes straight back to the app you were in without clicking it. Same after Esc in the box (review WR-02: keyboard handback is unverified).
 result: pending
 
 ### 3. Keep-open
-expected: While typing, move the pointer off the notch: it stays open. After Enter, Esc or clicking outside, it closes normally again (never stuck open).
+expected: While typing, the notch stays open while the pointer is over it. Moving the pointer off the Orchestrator area (or the field losing focus) ends typing and the notch closes normally; keystrokes then go to your app, never into the box. After Enter, Esc or clicking outside, it closes normally again (never stuck open).
 result: pending
 
 ### 4. Prompt buttons
-expected: Get the orchestrator to ask a question or permission prompt: numbered buttons appear; tap one: exactly that one digit is sent once (double-tap does not answer the next prompt).
+expected: Get the orchestrator to ask a question or permission prompt: numbered buttons appear ("Type something." is deliberately not offered); tap one: exactly that one digit is sent once (double-tap does not answer the next prompt). Typing a numbered list ("1. x" / "2. y") in the terminal's input box must not show buttons.
 result: pending
 
 ### 5. Esc
-expected: With a prompt up, tap esc: the prompt is cancelled.
+expected: With a prompt up, tap esc: the prompt is cancelled. Double-tapping esc sends only one Escape (no rewind picker).
 result: pending
 
 ### 6. End
