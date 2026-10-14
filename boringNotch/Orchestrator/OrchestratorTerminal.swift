@@ -25,8 +25,10 @@ struct OrchestratorTerminalView: NSViewRepresentable {
 
     static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
         coordinator.poll?.cancel()
+        nsView.navigationDelegate = nil
         nsView.stopLoading()
-        nsView.load(URLRequest(url: URL(string: "about:blank")!)) // releases ttyd's single client slot
+        // Best effort; ttyd's single client slot is really freed when WebKit closes the page on dealloc.
+        nsView.load(URLRequest(url: URL(string: "about:blank")!))
         OrchestratorExpand.shared.releaseKey(nsView.window)
     }
 
