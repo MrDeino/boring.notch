@@ -1,9 +1,10 @@
 // Phase 7 owns after Phase 4: run elapsed / sorting helpers.
 import Foundation
+import CoreGraphics
 
-/// Poll cadence in seconds. Phase 7 makes closed + chatRunning 3.
+/// Poll cadence in seconds: 2 open, 3 closed while the chat runs, else 10.
 func pollInterval(notchOpen: Bool, chatRunning: Bool, offline: Bool = false) -> TimeInterval {
-    offline ? 10 : (notchOpen ? 2 : 10)
+    offline ? 10 : notchOpen ? 2 : chatRunning ? 3 : 10
 }
 
 // MARK: - Run card helpers (RUN-01)
@@ -119,4 +120,72 @@ func boardStatusLine(runs: [OrchestratorRun], promptActive: Bool, liveText: Stri
     if promptActive { return "Orchestrator: needs you" }
     if let t = liveText { return "Orchestrator: \(t)" }
     return chatRunning ? "Orchestrator: idle" : "Orchestrator: stopped"
+}
+
+// MARK: - Levels, shortcuts, transitions, wings (RUN-02, RUN-04, RUN-05)
+
+enum LevelEvent { case deeper, back, terminal }
+
+func nextLevel(_ l: ExpandLevel, _ e: LevelEvent) -> ExpandLevel {
+    switch e {
+    case .terminal: return .terminal
+    case .deeper: return l == .open ? .expanded : l
+    case .back: return l == .terminal ? .expanded : .open
+    }
+}
+
+func expandedHeight(screenHeight: CGFloat) -> CGFloat { max(300, min(440, 0.45 * screenHeight)) }
+
+enum OrchShortcut: Equatable { case deeper, back, terminal, toggleRail }
+
+/// T and backslash match on characters (other layouts); esc is never handled (R-06).
+func shortcut(keyCode: UInt16, chars: String?, commandOnly: Bool) -> OrchShortcut? {
+    guard commandOnly else { return nil }
+    if keyCode == 125 { return .deeper }
+    if keyCode == 126 { return .back }
+    if chars?.lowercased() == "t" { return .terminal }
+    if chars == "\\" { return .toggleRail }
+    return nil
+}
+
+func runStates(_ runs: [OrchestratorRun]) -> [String: String] {
+    var m = [String: String]()
+    for r in runs { if let id = r.id, let s = r.state { m[id] = s } }
+    return m
+}
+
+func newlyWaiting(old: [String: String]?, new: [OrchestratorRun]) -> Bool {
+    guard let old else { return false }
+    return new.contains { $0.state == "waiting" && old[$0.id ?? ""] != "waiting" }
+}
+
+func finishedTransition(old: [String: String]?, new: [OrchestratorRun]) -> OrchestratorRun? {
+    guard let old else { return nil }
+    let hits = new.filter { $0.state == "done" && ["running", "stuck"].contains(old[$0.id ?? ""] ?? "") }
+    return hits.max { (parseRunDate($0.startedAt) ?? .distantPast) < (parseRunDate($1.startedAt) ?? .distantPast) }
+}
+
+enum WingKind: Equatable { case working, needsYou(String), finished(String) }
+
+func wingKind(needsYou: Bool, needsLabel: String, finishedProject: String?, working: Bool) -> WingKind? {
+    if needsYou { return .needsYou(needsLabel) }
+    if let p = finishedProject { return .finished(p) }
+    return working ? .working : nil
+}
+
+func wingLabel(promptTitle: String?, waitingDenials: [String]?) -> String {
+    if let w = promptTitle?.split(separator: " ").first.map({ $0.trimmingCharacters(in: CharacterSet(charactersIn: "?")) }), !w.isEmpty { return w + "?" }
+    if let d = waitingDenials?.first, !d.isEmpty { return d + "?" }
+    return "Needs you"
+}
+
+// ponytail: character-count width estimate for 11pt text, upgrade = measure with NSFont if UAT shows clipping.
+func wingSideWidth(_ kind: WingKind, notchWidth: CGFloat) -> CGFloat {
+    let outer: CGFloat, est: CGFloat
+    switch kind {
+    case .working: outer = 285; est = 0
+    case .needsYou(let l): outer = 305; est = CGFloat(l.count) * 6.5 + 8
+    case .finished(let p): outer = 285; est = CGFloat(p.count) * 6.2
+    }
+    return max(((outer - 28 - notchWidth) / 2), est).rounded(.up)
 }
