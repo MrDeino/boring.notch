@@ -100,6 +100,18 @@ user is in the middle of reading an older reply?
 Enter to select · Tab/Arrow keys to navigate · Esc to cancel
 """
 
+/// Every marker state: user ❯, wrapping prose ⏺, tool done (green), error (red), running (grey).
+private let markerBlocks = blocks(#"""
+{"running":true,"blocks":[
+ {"id":"m1","kind":"user","text":"Why is the notch filling from the middle?"},
+ {"id":"m2","kind":"tool","name":"Read","target":"/Users/x/proj/ContentView.swift","result":"import SwiftUI (+690 lines)"},
+ {"id":"m3","kind":"tool","name":"Bash","target":"xcodebuild -scheme boringNotch build","result":"error: exit 65"},
+ {"id":"m4","kind":"prose","text":"The root frame caps its height at the animating notch height, so NSHostingView resizes the window with its bottom edge fixed and the top edge slides down — wrapped lines should hang after the marker."},
+ {"id":"m5","kind":"tool","name":"Edit","target":"/Users/x/proj/OrchestratorExpand.swift","result":"updated","added":11,"removed":1},
+ {"id":"m6","kind":"tool","name":"Bash","target":"run.sh --transition","result":null}
+]}
+"""#)
+
 struct Scene {
     let name: String
     var loaded = true
@@ -142,6 +154,8 @@ struct Snap {
             Scene(name: "12-expanded-question-long", chat: chat(longQuestion), expanded: true),
             Scene(name: "13-expanded-permission", chat: chat(fixture("phase6-edit.txt")), expanded: true),
             Scene(name: "14-chat-idle-suggestion", chat: chat(fixture("idle-suggestion.txt")), blocks: shortBlocks),
+            Scene(name: "15-chat-markers", chat: chat(""), blocks: markerBlocks),
+            Scene(name: "16-expanded-markers", chat: chat(""), blocks: markerBlocks, expanded: true),
         ]
 
         let savedRail = Defaults[.orchRunsRailCollapsed]

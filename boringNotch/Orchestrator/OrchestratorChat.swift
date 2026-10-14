@@ -407,11 +407,37 @@ private struct ChatBlockRow: View {
     let block: ChatBlock
     let proseLineLimit: Int?
 
+    /// Leading marker column like Claude Code's terminal (❯ user, ⏺ prose/tool); wrapped text hangs after it.
     var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            marker.frame(width: 10, alignment: .center)
+            content.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder private var marker: some View {
+        switch block.kind {
+        case .user: Text(verbatim: "❯").font(OT.F.ui).foregroundStyle(OT.C.text5)
+        case .prose: dot(OT.C.text)
+        case .tool:
+            switch toolMarker(result: block.result) {
+            case .running: dot(OT.C.text6)
+            case .done: dot(OT.C.green)
+            case .error: dot(OT.C.red)
+            }
+        }
+    }
+
+    /// U+FE0E keeps ⏺ a text glyph (not the emoji button).
+    private func dot(_ c: Color) -> some View {
+        Text(verbatim: "\u{23FA}\u{FE0E}").font(.system(size: 10)).foregroundStyle(c)
+    }
+
+    @ViewBuilder private var content: some View {
         switch block.kind {
         case .user:
             let first = (block.text ?? "").split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-            Text(verbatim: "❯ " + first)
+            Text(verbatim: first)
                 .font(OT.F.ui).foregroundStyle(OT.C.text5)
                 .lineLimit(1).truncationMode(.tail)
         case .tool:

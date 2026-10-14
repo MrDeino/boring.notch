@@ -151,6 +151,13 @@ func toolResultDisplay(name: String?, result: String?, added: Int?) -> String? {
 
 func toolResultIsError(_ s: String?) -> Bool { s?.hasPrefix("error:") ?? false }
 
+/// Colour of a tool row's ⏺ marker: no result yet = running, "error:" = error, anything else = done.
+enum ToolMarker: Equatable { case running, done, error }
+func toolMarker(result: String?) -> ToolMarker {
+    guard let result else { return .running }
+    return toolResultIsError(result) ? .error : .done
+}
+
 /// Transcript text is untrusted: truncated, inline markdown only, links stripped (T-05-01/02).
 func proseAttributed(_ s: String) -> AttributedString {
     let plain = String(s.prefix(2000))

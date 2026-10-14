@@ -68,6 +68,10 @@ func runPhase5Tests() {
     precondition(parseInputLine(screen: fixture("permission")) == nil)
     precondition(parseInputLine(screen: fixture("question")) == nil)
     precondition(parseInputLine(screen: "") == nil)
+    precondition(toolMarker(result: nil) == .running)
+    precondition(toolMarker(result: "import SwiftUI (+286 lines)") == .done)
+    precondition(toolMarker(result: "") == .done)
+    precondition(toolMarker(result: "error: no such file") == .error)
     // Real capture: Claude's dim suggested prompt reads as box text (C-u can't clear it), so sends never wait for an empty box.
     precondition(parseInputLine(screen: fixture("idle-suggestion")) == "Try \"fix typecheck errors\"")
     precondition(parseInputLine(screen: p5Box("❯\u{a0}hello there" + String(repeating: " ", count: 150))) == "hello there")
