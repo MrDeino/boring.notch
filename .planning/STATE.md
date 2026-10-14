@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 Phase: 05–07 (2a) — merged
 Plan: all plans complete
 Status: Phases 05–07 merged, awaiting human UAT; Phases 8–9 planned, ready to execute
-Last activity: 2026-10-14 - Phase 8–9 planning complete; quick task 261014-r8w (notepad drop-down, question back-navigation)
+Last activity: 2026-10-14 - Completed quick task 261014-rm9: hairline pin, image paste
 
 Progress: [██████████] 100%
 
@@ -102,4 +102,5 @@ Resume file: None
 | 261014-pug | Multi-select/tabbed questions, optimistic prompt answers with retry note, expanded bubbles + Edit diff card, no swipe-close on Orchestrator tab, heavier marker dot | 2026-10-14 | .planning/quick/261014-pug-question-prompts-optimistic-polish |
 | 261014-qei | Optimistic message sending: instant composer clear, ordered send queue, dimmed pending rows reconciled from blocks, Not sent with Retry/Edit | 2026-10-14 | .planning/quick/261014-qei-optimistic-message-sending |
 | 261014-r8w | Notepad drop-down in header (GET/POST /api/notes, 1s autosave, Saved/Couldn't save), question back-navigation via BTab | 2026-10-14 | .planning/quick/261014-r8w-notepad-dropdown-and-question-back-navig |
+| 261014-rm9 | Closed-notch hairline pinned to the visible notch bottom at any height; image paste/drop chips uploaded via /api/chat/image through the send queue | 2026-10-14 | .planning/quick/261014-rm9-hairline-pin-and-image-paste |
 | 261014-q90 | Wings: runs + chat working (elapsed, count), queued done/failed, paused music yields, music-playing ✻/✓ | 2026-10-14 | .planning/quick/261014-q90-live-activity-wings |
