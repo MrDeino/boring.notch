@@ -29,6 +29,15 @@ final class PromptCardController: ObservableObject {
     @Published var focusField = false
     @Published var freeText = ""
     @Published private(set) var submitting = false
+    /// Optimistic answer: the card with this identity is hidden at once; restored if the screen never moved on.
+    @Published private(set) var dismissed: PromptIdentity?
+    @Published private(set) var note: String?
+    /// In-flight checkbox toggles, shown before the next screen read confirms them.
+    @Published private(set) var pending: [Int: Bool] = [:]
+    private var busy = false
+    private var lastId: PromptIdentity?
+    private var noteGen = 0
+    private let spring = Animation.spring(response: 0.3, dampingFraction: 0.85)
 
     private init() {
         OrchestratorManager.shared.$prompt.sink { [weak self] card in
@@ -38,7 +47,8 @@ final class PromptCardController: ObservableObject {
     }
 
     private func promptChanged(_ card: PromptCard?) {
-        pressed = nil
+        let id = card.map(promptIdentity)
+        if id != lastId { lastId = id; pressed = nil; dismissed = nil; note = nil; pending = [:]; busy = false }
         if card == nil { release() } else if hovering, let w = hoverWindow { hover(true, window: w) }
         guard card?.kind != .question else { return }
         for r in raised {
@@ -53,7 +63,6 @@ final class PromptCardController: ObservableObject {
         if card != shown {
             shown = card
             highlighted = card?.highlighted ?? card?.items.first?.number
-            pressed = nil
         }
         if card?.kind == .question, OrchestratorExpand.shared.level(for: vm) == .open {
             OrchestratorExpand.shared.setLevel(.expanded, vm: vm, window: window)
@@ -65,7 +74,7 @@ final class PromptCardController: ObservableObject {
     private func stillCurrent(_ displayed: PromptCard) async -> Bool {
         await OrchestratorManager.shared.refresh(fresh: true)
         let m = OrchestratorManager.shared
-        guard let cur = m.prompt, promptIdentity(cur) == promptIdentity(displayed), true else {
+        guard let cur = m.prompt, promptIdentity(cur) == promptIdentity(displayed) else {
             await flashStale()
             return false
         }
@@ -78,14 +87,63 @@ final class PromptCardController: ObservableObject {
         flash = false
     }
 
-    func choose(_ n: Int, displayed: PromptCard) {
-        if displayed.items.first(where: { $0.number == n })?.role == .freeText { focusField = true; return }
+    /// Hide the card now, send `keys`, and bring the card back with a note if ~2s later the same prompt is still up.
+    /// Never re-sends by itself: the user taps again.
+    private func answer(_ keys: [String], pressed n: Int?, displayed: PromptCard) {
+        guard !busy, dismissed == nil else { return }
+        busy = true
+        let id = promptIdentity(displayed)
+        let t0 = Date()
+        note = nil
+        pressed = n
         Task {
-            guard await stillCurrent(displayed) else { return }
-            pressed = n
-            _ = await OrchestratorManager.shared.pressKeys([String(n)])
+            let m = OrchestratorManager.shared
+            try? await Task.sleep(for: .milliseconds(120))
+            withAnimation(spring) { dismissed = id }
+            guard await stillCurrent(displayed) else { restore(note: nil); return }
+            let ok = await m.pressKeys(keys)
+            guard ok else { restore(note: "Didn't go through"); return }
+            try? await Task.sleep(for: .seconds(max(0, 2 - Date().timeIntervalSince(t0))))
+            await m.refresh(fresh: true)
+            if !m.offline, let cur = m.prompt, promptIdentity(cur) == id { restore(note: "Didn't go through"); return }
             release()
         }
+    }
+
+    private func restore(note text: String?) {
+        withAnimation(spring) { dismissed = nil }
+        pressed = nil
+        busy = false
+        note = text
+        noteGen += 1
+        let g = noteGen
+        if text != nil { Task { try? await Task.sleep(for: .seconds(3)); if noteGen == g { note = nil } } }
+    }
+
+    func choose(_ n: Int, displayed: PromptCard) {
+        guard let item = displayed.items.first(where: { $0.number == n }) else { return }
+        if item.role == .freeText { focusField = true; return }
+        if item.checked != nil { toggle(n, displayed: displayed); return }
+        answer([String(n)], pressed: n, displayed: displayed)
+    }
+
+    func toggle(_ n: Int, displayed: PromptCard) {
+        guard !busy, let item = displayed.items.first(where: { $0.number == n }), let was = item.checked else { return }
+        let to = !(pending[n] ?? was)
+        pending[n] = to
+        Task {
+            if await stillCurrent(displayed) { _ = await OrchestratorManager.shared.pressKeys([String(n)]) }
+            pending[n] = nil // the screen read inside pressKeys is the truth now
+        }
+    }
+
+    /// Multi-select has no Submit key: Tab is "done, next" (and from the last question lands on the review step).
+    func next(displayed: PromptCard) { answer(["Tab"], pressed: -1, displayed: displayed) }
+
+    /// Forward chips only: Left/Shift-Tab are not allowed keys. d chips ahead = d x Tab.
+    func goTab(_ k: Int, displayed: PromptCard) {
+        guard let cur = displayed.currentTab, k > cur, !displayed.review else { return }
+        answer(Array(repeating: "Tab", count: k - cur), pressed: nil, displayed: displayed)
     }
 
     func escape(displayed: PromptCard) {
@@ -196,12 +254,16 @@ final class PromptCardController: ObservableObject {
     func submitFreeText(displayed: PromptCard) {
         let t = freeText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty, !submitting, let ft = displayed.items.first(where: { $0.role == .freeText }) else { return }
+        guard !busy, dismissed == nil else { return }
         submitting = true
+        busy = true
+        let id = promptIdentity(displayed)
+        withAnimation(spring) { dismissed = id }
         Task {
             defer { submitting = false }
             let m = OrchestratorManager.shared
-            guard await stillCurrent(displayed) else { return }
-            // ponytail: number-then-text acceptance is UAT A1; upgrade = awaitable pressOption in the manager.
+            guard await stillCurrent(displayed) else { restore(note: nil); return }
+            // ponytail: number-then-text acceptance is UAT A1.
             _ = await m.pressKeys([String(ft.number)])
             try? await Task.sleep(for: .milliseconds(350))
             // Only type once the select list has left the screen; if the press was dropped, digits and
@@ -216,7 +278,7 @@ final class PromptCardController: ObservableObject {
                 try? await Task.sleep(for: .milliseconds(200))
             }
             // One POST only: a timeout may still have typed the text, and 409 means chat is gone.
-            guard landed, !m.sending, await m.sendText(t) else { await flashStale(); return }
+            guard landed, !m.sending, await m.sendText(t) else { restore(note: "Didn't go through"); return }
             freeText = ""
             release()
         }
@@ -232,11 +294,14 @@ struct OrchestratorPromptCard: View {
 
     var body: some View {
         Group {
-            if let card = manager.prompt {
-                switch card.kind {
-                case .permission: PermissionCard(card: card)
-                case .question: QuestionCard(card: card)
+            if let card = manager.prompt, promptIdentity(card) != ctl.dismissed {
+                Group {
+                    switch card.kind {
+                    case .permission: PermissionCard(card: card)
+                    case .question: QuestionCard(card: card)
+                    }
                 }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 EmptyView()
             }
@@ -257,6 +322,7 @@ struct OrchestratorPromptCard: View {
         .onHover { ctl.hover($0, window: anchor.window) }
         .environment(\.promptWindow, anchor)
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: manager.prompt)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: ctl.dismissed)
     }
 }
 
@@ -281,10 +347,11 @@ private struct PromptKeycap: View {
     }
 }
 
-/// Locked-state feedback shared by pills and rows.
-@MainActor private func pressState(_ n: Int, _ m: OrchestratorManager, _ c: PromptCardController) -> (pressed: Bool, dim: Bool) {
-    let on = false && c.pressed != nil
-    return (on && c.pressed == n, on && c.pressed != n)
+private struct PromptNote: View {
+    @ObservedObject private var ctl = PromptCardController.shared
+    var body: some View {
+        if let n = ctl.note { Text(n).font(OT.F.meta).foregroundStyle(OT.C.redText) }
+    }
 }
 
 // MARK: - Permission (frame 03)
@@ -296,6 +363,7 @@ private struct PermissionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            PromptNote()
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(card.title ?? card.question ?? "Permission").font(OT.F.title).foregroundStyle(OT.C.text)
                 if let p = card.purpose {
@@ -324,10 +392,9 @@ private struct PermissionCard: View {
     }
 
     private func pill(_ item: PromptCardOption) -> some View {
-        let st = pressState(item.number, manager, ctl)
         let first = item.number == 1
         let deny = item.role == .deny
-        let light = first || st.pressed
+        let light = first || ctl.pressed == item.number
         return Button { ctl.choose(item.number, displayed: card) } label: {
             HStack(spacing: 8) {
                 Text(shortLabel(item.label)).lineLimit(1).truncationMode(.tail)
@@ -341,7 +408,6 @@ private struct PermissionCard: View {
             .background(light ? OT.C.text : OT.C.raised, in: Capsule())
         }
         .buttonStyle(.plain)
-        .opacity(st.dim ? 0.4 : 1)
         .disabled(manager.sending)
         .help(item.label)
     }
@@ -358,7 +424,10 @@ private struct QuestionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if card.header != nil || card.progress != nil {
+            PromptNote()
+            if card.tabs.count > 1 {
+                tabRow
+            } else if card.header != nil || card.progress != nil {
                 HStack(spacing: 8) {
                     if let h = card.header {
                         Text(h).font(OT.F.meta).foregroundStyle(OT.C.text5)
@@ -373,6 +442,10 @@ private struct QuestionCard: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(card.question ?? "").font(OT.F.title).foregroundStyle(OT.C.text)
                             .lineSpacing(14 * 0.35).fixedSize(horizontal: false, vertical: true)
+                        if card.review, let b = card.body {
+                            Text(b).font(OT.F.meta).foregroundStyle(OT.C.text5).lineLimit(6)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         ForEach(card.items.filter { $0.role == .normal }, id: \.number) { row($0) }
                     }
                 }
@@ -385,11 +458,34 @@ private struct QuestionCard: View {
         }
     }
 
+    private var tabRow: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(card.tabs.enumerated()), id: \.offset) { k, tab in
+                let current = k == card.currentTab
+                let reachable = !card.review && k > (card.currentTab ?? k)
+                Button { ctl.goTab(k, displayed: card) } label: {
+                    Text((tab.done ? "\u{2713} " : "") + tab.label).font(OT.F.meta)
+                        .foregroundStyle(current ? OT.C.text : OT.C.text5)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8).padding(.vertical, 1)
+                        .background(current ? OT.C.selected2 : OT.C.raised, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .allowsHitTesting(reachable && !manager.sending) // not .disabled: that would dim the current chip
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
     private func row(_ item: PromptCardOption) -> some View {
-        let st = pressState(item.number, manager, ctl)
-        let hi = ctl.highlighted == item.number || st.pressed
+        let hi = ctl.highlighted == item.number || ctl.pressed == item.number
+        let box = item.checked.map { ctl.pending[item.number] ?? $0 }
         return Button { ctl.choose(item.number, displayed: card) } label: {
-            HStack(alignment: .top) {
+            HStack(alignment: .top, spacing: 8) {
+                if let box {
+                    Image(systemName: box ? "checkmark.square.fill" : "square").font(.system(size: 13))
+                        .foregroundStyle(hi ? Color.black : box ? OT.C.text : OT.C.text5)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.label).font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(hi ? Color.black : OT.C.text)
@@ -408,7 +504,6 @@ private struct QuestionCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .opacity(st.dim ? 0.4 : 1)
         .disabled(manager.sending)
         .id(item.number)
     }
@@ -416,6 +511,15 @@ private struct QuestionCard: View {
     private var footer: some View {
         HStack(spacing: 6) {
             if let ft = card.items.first(where: { $0.role == .freeText }) { freeField(ft) } else { Spacer(minLength: 0) }
+            if card.multiSelect {
+                let last = (card.currentTab ?? 0) + 1 >= card.tabs.filter { $0.label != "Submit" }.count
+                Button { ctl.next(displayed: card) } label: {
+                    Text(last ? "Submit" : "Next").font(OT.F.uiMedium).foregroundStyle(Color.black)
+                        .padding(.horizontal, 14).frame(height: 28)
+                        .background(OT.C.text, in: Capsule())
+                }
+                .buttonStyle(.plain).disabled(manager.sending)
+            }
             if let chat = card.items.first(where: { $0.role == .chat }) {
                 footPill("Chat about this", key: "\(chat.number)") { ctl.choose(chat.number, displayed: card) }
                     .disabled(manager.sending)
@@ -465,3 +569,12 @@ private struct QuestionCard: View {
         .buttonStyle(.plain)
     }
 }
+
+#if ORCH_SNAPSHOT
+extension PromptCardController {
+    /// Snapshot harness only: force the optimistic state a scene wants to show.
+    func snapshotSet(pressed: Int? = nil, note: String? = nil, pending: [Int: Bool] = [:]) {
+        self.pressed = pressed; self.note = note; self.pending = pending; dismissed = nil; busy = false
+    }
+}
+#endif

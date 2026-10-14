@@ -120,6 +120,9 @@ struct Scene {
     var runsBoard = false
     var expanded = false
     var railCollapsed = false
+    var pressed: Int?
+    var note: String?
+    var pending: [Int: Bool] = [:]
 }
 
 @MainActor
@@ -157,6 +160,12 @@ struct Snap {
             Scene(name: "14-chat-idle-suggestion", chat: chat(fixture("idle-suggestion.txt")), blocks: shortBlocks),
             Scene(name: "15-chat-markers", chat: chat(""), blocks: markerBlocks),
             Scene(name: "16-expanded-markers", chat: chat(""), blocks: markerBlocks, expanded: true),
+            Scene(name: "17-question-multiselect", chat: chat(fixture("multiselect-1.txt")), expanded: true),
+            Scene(name: "18-question-multiselect-toggled", chat: chat(fixture("multiselect-1.txt")), expanded: true, pending: [1: true, 2: true]),
+            Scene(name: "19-question-multiq-tabs", chat: chat(fixture("multiq-tab2.txt")), expanded: true),
+            Scene(name: "20-question-review-submit", chat: chat(fixture("review-submit.txt")), expanded: true),
+            Scene(name: "21-permission-pressed", chat: chat(fixture("phase6-edit.txt")), pressed: 1),
+            Scene(name: "22-permission-retry-note", chat: chat(fixture("phase6-edit.txt")), note: "Didn't go through"),
         ]
 
         let savedRail = Defaults[.orchRunsRailCollapsed]
@@ -167,6 +176,7 @@ struct Snap {
             await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: state, runsBoard: s.runsBoard)
             OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
+            PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending)
 
             let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 480),
                                   styleMask: .borderless, backing: .buffered, defer: false)
@@ -194,6 +204,7 @@ struct Snap {
                 window.contentView = nil
             }
             OrchestratorExpand.shared.reset()
+            PromptCardController.shared.snapshotSet()
             if let png { try? png.write(to: url); print("wrote", url.path) } else { print("FAILED", s.name) }
         }
     }
