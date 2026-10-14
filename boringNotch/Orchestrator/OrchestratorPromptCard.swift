@@ -573,8 +573,10 @@ private struct QuestionCard: View {
 #if ORCH_SNAPSHOT
 extension PromptCardController {
     /// Snapshot harness only: force the optimistic state a scene wants to show.
-    func snapshotSet(pressed: Int? = nil, note: String? = nil, pending: [Int: Bool] = [:]) {
-        self.pressed = pressed; self.note = note; self.pending = pending; dismissed = nil; busy = false
+    func snapshotSet(pressed: Int? = nil, note: String? = nil, pending: [Int: Bool] = [:], dismissCurrent: Bool = false) {
+        self.pressed = pressed; self.note = note; self.pending = pending; busy = false
+        lastId = OrchestratorManager.shared.prompt.map(promptIdentity) // the async $prompt hop must not see a change and clear the state
+        dismissed = dismissCurrent ? OrchestratorManager.shared.prompt.map(promptIdentity) : nil
     }
 }
 #endif

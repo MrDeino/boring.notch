@@ -7,34 +7,6 @@ struct WindowAnchor: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// The state switch. Runs board is checked before stopped so "see Runs" works while the chat is stopped.
-struct OrchestratorTabContent: View {
-    @ObservedObject var manager = OrchestratorManager.shared
-
-    var body: some View {
-        Group {
-            if !manager.hasLoaded {
-                OrchestratorConnectingView()
-            } else if manager.offline {
-                OrchestratorOfflineView()
-            } else if manager.showRunsBoard {
-                OrchestratorRunsBoard()
-            } else if !manager.chatRunning {
-                OrchestratorStoppedView()
-            } else if manager.prompt != nil {
-                OrchestratorPromptCard()
-            } else {
-                OrchestratorChatView()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 8)
-        // The sticky Runs board must not hide a live prompt or outlive a disconnect.
-        .onChange(of: manager.prompt != nil) { _, has in if has { manager.showRunsBoard = false } }
-        .onChange(of: manager.offline) { _, off in if off { manager.showRunsBoard = false } }
-    }
-}
-
 struct OrchestratorView: View {
     @ObservedObject var expand = OrchestratorExpand.shared
     @ObservedObject var manager = OrchestratorManager.shared
@@ -52,13 +24,7 @@ struct OrchestratorView: View {
     }
 
     var body: some View {
-        Group {
-            if expand.level(for: vm) != .open {
-                OrchestratorExpandedView()
-            } else {
-                OrchestratorTabContent()
-            }
-        }
+        OrchestratorExpandedView()
         // minHeight 0: take exactly the space under the header. A taller body would otherwise make the
         // notch's fixed-height frame centre it, pushing the header and the composer out of the notch.
         .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)

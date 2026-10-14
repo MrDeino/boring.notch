@@ -141,6 +141,7 @@ struct Scene {
     var sends: [PendingMessage] = []
     var notes: (String, NotesStatus)?
     var attachments: [Data] = []
+    var dismissed = false
 }
 
 /// Two-colour test PNG through the real orchestratorPNG path.
@@ -216,6 +217,9 @@ struct Snap {
             Scene(name: "20-question-review-submit", chat: chat(fixture("review-submit.txt")), expanded: true),
             Scene(name: "21-permission-pressed", chat: chat(fixture("phase6-edit.txt")), pressed: 1),
             Scene(name: "22-permission-retry-note", chat: chat(fixture("phase6-edit.txt")), note: "Didn't go through"),
+            Scene(name: "34-expanded-question-transcript", chat: chat(longQuestion), blocks: longBlocks, expanded: true),
+            Scene(name: "35-expanded-question-dismissed", chat: chat(longQuestion), blocks: longBlocks, expanded: true, dismissed: true),
+            Scene(name: "36-permission-dismissed-open", chat: chat(fixture("phase6-edit.txt")), blocks: markerBlocks, dismissed: true),
         ]
 
         let savedRail = Defaults[.orchRunsRailCollapsed]
@@ -226,7 +230,7 @@ struct Snap {
             await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: state, runsBoard: s.runsBoard)
             OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends, attachments: s.attachments)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
-            PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending)
+            PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending, dismissCurrent: s.dismissed)
             if let n = s.notes { OrchestratorNotesStore.shared.snapshotSet(text: n.0, status: n.1); m.notesOpen = true }
 
             let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 480),
@@ -251,6 +255,14 @@ struct Snap {
                 if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
                     host.cacheDisplay(in: host.bounds, to: rep)
                     png = rep.representation(using: .png, properties: [:])
+                    if s.expanded {
+                        // Runs rail header: leftmost column / topmost row of lit pixels in the right 190pt below the header row.
+                        let k = CGFloat(rep.pixelsWide) / host.bounds.width
+                        var minX = Int.max, minY = Int.max
+                        for y in Int(44 * k)..<rep.pixelsHigh { for x in Int((host.bounds.width - 190) * k)..<rep.pixelsWide
+                            where (rep.colorAt(x: x, y: y)?.brightnessComponent ?? 0) > 0.3 { minX = min(minX, x); minY = min(minY, y) } }
+                        print("rail \(s.name): x=\(Int(CGFloat(minX) / k)) y=\(Int(CGFloat(minY) / k))")
+                    }
                 }
                 window.contentView = nil
             }
@@ -316,6 +328,54 @@ struct Snap {
             }
         }
         print(moved ? "FAIL: top edge moved with the new root frame" : "OK: top edge pinned at y=0 in every step (new root frame)")
+        await livePass(out)
+    }
+
+    private struct LiveRoot: View {
+        @ObservedObject var vm: BoringViewModel
+        var body: some View { NotchReplica(vm: vm).core.environmentObject(vm).notchRootFrame(notchSize: vm.notchSize) }
+    }
+
+    /// One hosted window, real setLevel animation: the transcript must be on screen in every frame of
+    /// expand and collapse (it used to be hidden for ~120ms and faded back in).
+    static func livePass(_ out: URL) async {
+        let vm = BoringViewModel()
+        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: windowSize.width, height: windowSize.height),
+                              styleMask: .borderless, backing: .buffered, defer: false)
+        window.backgroundColor = NSColor(white: 0.35, alpha: 1)
+        let host = NSHostingView(rootView: LiveRoot(vm: vm))
+        window.contentView = host
+        window.orderFrontRegardless()
+        try? await Task.sleep(for: .milliseconds(700))
+        func measure() -> (Int, NSBitmapImageRep?) {
+            host.layoutSubtreeIfNeeded()
+            guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return (0, nil) }
+            host.cacheDisplay(in: host.bounds, to: rep)
+            let k = CGFloat(rep.pixelsWide) / host.bounds.width
+            let x0 = Int(40 * k), x1 = min(rep.pixelsWide, Int(440 * k))
+            let y0 = Int(44 * k), y1 = min(rep.pixelsHigh, Int((vm.notchSize.height - 12) * k))
+            var n = 0
+            if y1 > y0 { for y in y0..<y1 { for x in x0..<x1 where (rep.colorAt(x: x, y: y)?.brightnessComponent ?? 0) > 0.6 { n += 1 } } }
+            return (n, rep)
+        }
+        let baseline = measure().0
+        print("live baseline open text=\(baseline)")
+        var bad: [String] = []
+        for (phase, level) in [("grow", ExpandLevel.expanded), ("collapse", .open)] {
+            OrchestratorExpand.shared.setLevel(level, vm: vm, window: window)
+            var prev = 0
+            for t in [0, 30, 60, 100, 150, 250, 400, 700] {
+                try? await Task.sleep(for: .milliseconds(t - prev)); prev = t
+                let (n, rep) = measure()
+                print("live \(phase) t=\(t)ms text=\(n)")
+                if n * 2 < baseline { bad.append("\(phase) \(t)ms") }
+                if t == 60 { try? rep?.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("transition-live-\(phase)-60.png")) }
+            }
+        }
+        OrchestratorExpand.shared.reset()
+        window.contentView = nil
+        window.orderOut(nil)
+        print(bad.isEmpty ? "OK: content present in every live frame" : "FAIL: content missing at " + bad.joined(separator: ", "))
     }
 
     /// Clicks into the real tab inside a copy of ContentView's root chain (mainLayout tap/hover, ZStack,

@@ -133,44 +133,66 @@ struct OrchestratorRunsStrip: View {
     }
 }
 
+/// The Orchestrator tab body at every level: one view tree, so expanding and collapsing only reflows it
+/// (the chat keeps its identity and scroll position); just the runs rail and the terminal panel come and go.
 struct OrchestratorExpandedView: View {
     @ObservedObject var manager = OrchestratorManager.shared
     @ObservedObject var expand = OrchestratorExpand.shared
     @ObservedObject var rail = OrchestratorRailState.shared
+    @ObservedObject var cards = PromptCardController.shared
     @Default(.orchRunsRailCollapsed) var persisted
     @EnvironmentObject var vm: BoringViewModel
-    @State private var shown = false
 
     var body: some View {
         let level = expand.level(for: vm)
         let collapsed = persisted && !rail.autoOpened
-        HStack(alignment: .top, spacing: 12) {
-            conversation(level).frame(maxWidth: .infinity, maxHeight: .infinity)
-            VStack(spacing: 8) {
-                if collapsed { OrchestratorRunsStrip() } else { OrchestratorRunsRail() }
-                terminalPill(level, collapsed: collapsed)
+        let open = level == .open
+        HStack(alignment: .top, spacing: open ? 0 : 12) {
+            column(level).frame(maxWidth: .infinity, maxHeight: .infinity)
+            if !open {
+                // Pinned top/trailing by its own frame, so nothing in the column (a card leaving) can move it.
+                VStack(spacing: 8) {
+                    if collapsed { OrchestratorRunsStrip() } else { OrchestratorRunsRail() }
+                    terminalPill(level, collapsed: collapsed)
+                }
+                .padding(.leading, collapsed ? 0 : 12)
+                .overlay(alignment: .leading) { if !collapsed { Rectangle().fill(OT.C.divider).frame(width: 1) } }
+                .frame(width: collapsed ? 30 : 178)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
             }
-            .padding(.leading, collapsed ? 0 : 12)
-            .overlay(alignment: .leading) { if !collapsed { Rectangle().fill(OT.C.divider).frame(width: 1) } }
-            .frame(width: collapsed ? 30 : 178)
         }
-        .padding(.top, 6).padding(.bottom, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, open ? 8 : 0)
+        .padding(.top, open ? 0 : 6).padding(.bottom, open ? 0 : 10)
+        .animation(.spring(response: 0.4, dampingFraction: 0.82), value: level)
         .animation(railSpring, value: collapsed)
-        .opacity(shown ? 1 : 0)
-        .task(id: level) {
-            shown = false
-            try? await Task.sleep(for: .milliseconds(120))
-            withAnimation(.easeOut(duration: 0.18)) { shown = true }
-        }
+        // The sticky Runs board must not hide a live prompt or outlive a disconnect.
+        .onChange(of: manager.prompt != nil) { _, has in if has { manager.showRunsBoard = false } }
+        .onChange(of: manager.offline) { _, off in if off { manager.showRunsBoard = false } }
         .onDisappear { expand.reset() }
     }
 
-    @ViewBuilder private func conversation(_ level: ExpandLevel) -> some View {
-        if level == .terminal { OrchestratorTerminalPanel() }
+    /// The state switch. Runs board is checked before stopped so "see Runs" works while the chat is stopped.
+    @ViewBuilder private func column(_ level: ExpandLevel) -> some View {
+        let open = level == .open
+        // An answered card is dismissed at once; the transcript shows meanwhile instead of an empty column.
+        let promptVisible = manager.prompt.map { promptIdentity($0) != cards.dismissed } ?? false
+        if !manager.hasLoaded { OrchestratorConnectingView() }
         else if manager.offline { OrchestratorOfflineView() }
+        else if level == .terminal { OrchestratorTerminalPanel().transition(.opacity) }
+        else if open && manager.showRunsBoard { OrchestratorRunsBoard() }
         else if !manager.chatRunning { OrchestratorStoppedView() }
-        else if manager.prompt != nil { OrchestratorPromptCard() }
-        else { OrchestratorChatView(showComposer: true, proseLineLimit: nil, maxRows: 60, expanded: true) }
+        else {
+            VStack(spacing: 6) {
+                // Open: the card takes the whole column. Expanded: the transcript stays above it.
+                if !(open && promptVisible) {
+                    OrchestratorChatView(showComposer: !promptVisible, proseLineLimit: open ? 4 : nil, maxRows: open ? 12 : 60, expanded: !open)
+                        .frame(minHeight: promptVisible ? 72 : 0)
+                }
+                if promptVisible { OrchestratorPromptCard() }
+            }
+        }
     }
 
     private func terminalPill(_ level: ExpandLevel, collapsed: Bool) -> some View {
