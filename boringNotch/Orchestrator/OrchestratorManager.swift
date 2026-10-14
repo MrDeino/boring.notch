@@ -20,7 +20,60 @@ final class OrchestratorManager: ObservableObject {
 
     /// Fed by notch open/close hooks; opening triggers an immediate refresh.
     var notchOpen = false {
-        didSet { if notchOpen && !oldValue { Task { await refresh() } } }
+        didSet {
+            if notchOpen && !oldValue { Task { await refresh() } }
+            if !notchOpen { endTyping() }
+        }
+    }
+
+    @Published private(set) var wantsKeyboard = false
+    @Published private(set) var sending = false
+    @Published private(set) var optionsLocked = false
+    private var typing = false
+    private var lockGen = 0
+
+    /// Idempotent so begin/end can never unbalance the shared interaction count.
+    func beginTyping() {
+        guard !typing else { return }
+        typing = true
+        SharingStateManager.shared.beginInteraction()
+        wantsKeyboard = true
+    }
+
+    func endTyping() {
+        guard typing else { return }
+        typing = false
+        wantsKeyboard = false
+        SharingStateManager.shared.endInteraction()
+    }
+
+    /// 200 -> refresh, true. 409 (chat not running) -> refresh, false. Anything else -> false.
+    @discardableResult
+    private func post(_ p: OrchestratorPost) async -> Bool {
+        guard !sending else { return false }
+        sending = true
+        defer { sending = false }
+        let code = (try? await sendOrchestratorPost(p, base: Self.baseURL, session: session)) ?? nil
+        if code == 200 { await refresh(); return true }
+        if code == 409 { await refresh() }
+        return false
+    }
+
+    func sendText(_ s: String) async -> Bool { await post(.text(s)) }
+    func pressEscape() async { await post(.key("Escape")) }
+    func startChat() async { await post(.start) }
+    func stopChat() async { await post(.stop) }
+
+    func pressOption(_ n: Int) {
+        guard !optionsLocked, (1...9).contains(n) else { return }
+        optionsLocked = true
+        lockGen += 1
+        let gen = lockGen
+        Task {
+            await post(.key(String(n)))
+            try? await Task.sleep(for: .seconds(3))
+            if lockGen == gen { optionsLocked = false }
+        }
     }
 
     private let session: URLSession = {
@@ -71,7 +124,7 @@ final class OrchestratorManager: ObservableObject {
             if runs != rs { runs = rs }
             if usage != st.usage { usage = st.usage }
             let po = running ? detectPrompt(screen: s) : []
-            if promptOptions != po { promptOptions = po }
+            if promptOptions != po { promptOptions = po; optionsLocked = false }
         } catch {
             if !offline { offline = true }
             if !runs.isEmpty { runs = [] }
