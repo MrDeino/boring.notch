@@ -21,11 +21,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-14)
 
 **Core value:** Answer and steer the Claude Code orchestrator from the notch without switching to a terminal — and never break the music player doing it.
-**Current focus:** Phase 1 — Read-only Orchestrator Tab
+**Current focus:** Phase 2 — Sending & Prompt Answers (awaiting UAT)
 
 ## Current Position
 
-Phase: 1 (Read-only Orchestrator Tab) — EXECUTING
+Phase: 2 (Sending & Prompt Answers) — EXECUTED
 Plan: 2 of 2
 Status: Ready to execute
 Last activity: 2026-10-14 -- Phase 2 planning complete
@@ -66,8 +66,8 @@ None yet.
 
 ### Blockers/Concerns
 
-- Key-window behaviour on macOS 26 unverified (Phase 2 spike)
-- Only idle prompt screen captured so far; need real question/permission captures (Phase 2)
+- Key-window behaviour on macOS 26 implemented (gated canBecomeKey); runtime check pending in 02-HUMAN-UAT.md
+- Real question/permission screens captured 2026-10-14 (Tests/fixtures)
 - Tabs only render when Shelf is enabled (`BoringHeader.swift:19`) — document or add one hook (Phase 1)
 - Ad-hoc rebuilds may reset TCC (looks like broken music); Sparkle auto-update could overwrite the fork
 
