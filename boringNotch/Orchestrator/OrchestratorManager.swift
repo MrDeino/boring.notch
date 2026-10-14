@@ -42,6 +42,41 @@ final class OrchestratorManager: ObservableObject {
         c.waitsForConnectivity = false
         return URLSession(configuration: c)
     }
+    // Phase 9
+    /// Pending tool approval from serve (hook-driven), minus the one we just answered. Never inferred from screen text.
+    @Published private(set) var approval: OrchestratorApproval? = nil
+    private var rawApproval: OrchestratorApproval?
+    private var ignoredApprovalId: String?
+    private var ignoredUntil = Date.distantPast
+
+    func applyApproval(_ a: OrchestratorApproval?) {
+        rawApproval = a
+        recomputeApproval()
+    }
+
+    private func recomputeApproval() {
+        let v = chatRunning ? visibleApproval(rawApproval, ignoredId: ignoredApprovalId, until: ignoredUntil, now: Date()) : nil
+        if approval != v { approval = v }
+    }
+
+    /// Re-reads the screen, then answers only if the same approval is still pending (see approvalAnswer).
+    /// Hides the panel before posting so the post's own refresh cannot flash it back.
+    @discardableResult
+    func answerApproval(allow: Bool) async -> ApprovalAnswer {
+        guard let a = approval, !sending else { return .skip }
+        await refresh(fresh: true)
+        let ans = approvalAnswer(allow: allow, pendingId: approval?.id, answeringId: a.id, options: promptOptions)
+        guard case .send(let k) = ans else { return ans }
+        ignoredApprovalId = a.id
+        ignoredUntil = Date() + 3
+        approval = nil
+        if !(await post(.key(k))) {
+            ignoredApprovalId = nil
+            await refresh()
+        }
+        return ans
+    }
+
     var capsuleStatus: CapsuleState {
         capsuleState(hasLoaded: hasLoaded, offline: offline, chatRunning: chatRunning, needsAttention: needsAttention, working: liveStatus != nil)
     }
@@ -191,6 +226,7 @@ final class OrchestratorManager: ObservableObject {
                             // First blocks event of a connection replaces; pending rows survive (store keeps them).
                             OrchestratorTranscriptStore.shared.ingestBlocks(running: running, blocks: blocks, reset: first || reset)
                             first = false
+                        case .approval(let a): self.applyApproval(a)
                         }
                         if !self.hasLoaded { self.hasLoaded = true }
                     }
@@ -257,6 +293,7 @@ final class OrchestratorManager: ObservableObject {
         if offline { offline = false }
         let running = r.running ?? false
         if chatRunning != running { chatRunning = running }
+        if r.hasApproval { applyApproval(r.approval) } else if !running { applyApproval(nil) } else { recomputeApproval() }
         let s = r.screen ?? ""
         if screen != s { screen = s }
         let cp = running ? r.context?.percent.flatMap { $0 >= 0 ? $0 : nil } : nil
@@ -282,6 +319,7 @@ final class OrchestratorManager: ObservableObject {
     private func applyOffline() {
         if !offline { offline = true }
         if !runs.isEmpty { runs = [] }
+        if rawApproval != nil || approval != nil { applyApproval(nil) }
         if !promptOptions.isEmpty { promptOptions = [] }
         if prompt != nil { prompt = nil }
         if liveStatus != nil { liveStatus = nil }
