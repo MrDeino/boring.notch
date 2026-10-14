@@ -135,6 +135,7 @@ struct Scene {
     var pressed: Int?
     var note: String?
     var pending: [Int: Bool] = [:]
+    var sends: [PendingMessage] = []
 }
 
 @MainActor
@@ -174,6 +175,14 @@ struct Snap {
             Scene(name: "16-expanded-markers", chat: chat(""), blocks: markerBlocks, expanded: true),
             Scene(name: "23-expanded-bubbles-edit", chat: chat(""), blocks: editBlocks, expanded: true),
             Scene(name: "24-chat-edit-compact", chat: chat(""), blocks: editBlocks),
+            Scene(name: "25-chat-pending", chat: chat(""), blocks: markerBlocks, sends: [
+                PendingMessage(id: 1, text: "Thanks — now fix the build error", state: .sent, sentAt: Date()),
+                PendingMessage(id: 2, text: "and then run the tests", state: .queued, sentAt: nil)]),
+            Scene(name: "26-chat-not-sent", chat: chat(""), blocks: markerBlocks, sends: [
+                PendingMessage(id: 1, text: "Please also go through every remaining file in the Orchestrator folder and tidy the comments so they match the new naming, then summarise", state: .failed, sentAt: nil)]),
+            Scene(name: "27-expanded-pending", chat: chat(""), blocks: editBlocks, expanded: true, sends: [
+                PendingMessage(id: 1, text: "ok", state: .sending, sentAt: nil),
+                PendingMessage(id: 2, text: "Please also go through every remaining file in the Orchestrator folder and tidy the comments so they match the new naming, then summarise", state: .failed, sentAt: nil)]),
             Scene(name: "17-question-multiselect", chat: chat(fixture("multiselect-1.txt")), expanded: true),
             Scene(name: "18-question-multiselect-toggled", chat: chat(fixture("multiselect-1.txt")), expanded: true, pending: [1: true, 2: true]),
             Scene(name: "19-question-multiq-tabs", chat: chat(fixture("multiq-tab2.txt")), expanded: true),
@@ -188,7 +197,7 @@ struct Snap {
             let vm = BoringViewModel()
             let m = OrchestratorManager.shared
             await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: state, runsBoard: s.runsBoard)
-            OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks)
+            OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
             PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending)
 

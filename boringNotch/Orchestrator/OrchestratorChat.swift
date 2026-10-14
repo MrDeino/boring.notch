@@ -16,6 +16,10 @@ final class OrchestratorTranscriptStore: ObservableObject {
     @Published private(set) var inputLine: String? = nil
     @Published private(set) var boxIsDraft = false
     @Published private(set) var idleStatus: String? = nil
+    @Published private(set) var pending: [PendingMessage] = []
+    private var knownUserIDs: Set<String> = []
+    private var nextPendingID = 0
+    private var draining = false
 
     private var base: URL?
     private var session: URLSession?
@@ -76,6 +80,60 @@ final class OrchestratorTranscriptStore: ObservableObject {
         if fallback { fallback = false }
         needsFull = false
         failures = 0
+        reconcile()
+    }
+
+    private func reconcile() {
+        guard !pending.isEmpty else { return }
+        let r = reconcilePending(pending, blocks: blocks, known: knownUserIDs, now: Date())
+        if r.known != knownUserIDs { knownUserIDs = r.known }
+        if r.pending != pending {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { pending = r.pending }
+        }
+    }
+
+    func enqueue(_ text: String) {
+        // Older identical messages must not claim the new row.
+        for b in blocks where b.kind == .user { knownUserIDs.insert(b.id) }
+        nextPendingID += 1
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            pending.append(PendingMessage(id: nextPendingID, text: text, state: .queued, sentAt: nil))
+        }
+        drain()
+    }
+
+    private func setPending(_ id: Int, _ state: PendingMessage.State, sentAt: Date? = nil) {
+        guard let i = pending.firstIndex(where: { $0.id == id }) else { return }
+        pending[i].state = state
+        pending[i].sentAt = sentAt
+    }
+
+    // ponytail: a failed send marks only its own row and the queue moves on, so nothing sticks behind a dead row.
+    private func drain() {
+        guard !draining else { return }
+        draining = true
+        Task { @MainActor in
+            let manager = OrchestratorManager.shared
+            while let p = pending.first(where: { $0.state == .queued }) {
+                // Never type queued text into a permission/question prompt.
+                while manager.sending || !manager.promptOptions.isEmpty { try? await Task.sleep(for: .milliseconds(50)) }
+                guard pending.contains(where: { $0.id == p.id && $0.state == .queued }) else { continue }
+                setPending(p.id, .sending)
+                let ok = await manager.sendText(p.text) { await self.clearRealLine() }
+                setPending(p.id, ok ? .sent : .failed, sentAt: ok ? Date() : nil)
+            }
+            draining = false
+        }
+    }
+
+    func retry(_ id: Int) {
+        setPending(id, .queued)
+        drain()
+    }
+
+    func restore(_ id: Int) -> String? {
+        guard let i = pending.firstIndex(where: { $0.id == id }) else { return nil }
+        return withAnimation { pending.remove(at: i) }.text
     }
 
     /// D-03 fallback, but one transient failure keeps the rows we hold (no flicker to chatTail and back).
@@ -100,18 +158,14 @@ final class OrchestratorTranscriptStore: ObservableObject {
         guard let base, let session else { return false }
         return (try? await sendOrchestratorPost(.key("C-u"), base: base, session: session)) == 200
     }
-
-    /// Clear + send as one manager operation: no other POST can land between C-u and the text.
-    func submit(_ text: String) async -> Bool {
-        await OrchestratorManager.shared.sendText(text) { await self.clearRealLine() }
-    }
 }
 
 #if ORCH_SNAPSHOT
 extension OrchestratorTranscriptStore {
     /// Snapshot harness only: fixture blocks instead of /api/chat/blocks.
-    func snapshotSet(blocks: [ChatBlock]) {
+    func snapshotSet(blocks: [ChatBlock], pending: [PendingMessage] = []) {
         self.blocks = blocks
+        self.pending = pending
         fallback = blocks.isEmpty
     }
 }
@@ -197,6 +251,10 @@ struct OrchestratorChatView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            ForEach(store.pending) { p in
+                pendingRow(p)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             if let ls = manager.liveStatus {
                 OrchestratorLiveStatusRow(status: ls)
             } else if !store.fallback, let idle = store.idleStatus {
@@ -206,10 +264,34 @@ struct OrchestratorChatView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func pendingRow(_ p: PendingMessage) -> some View {
+        VStack(alignment: expanded ? .trailing : .leading, spacing: 2) {
+            ChatBlockRow(block: ChatBlock(pendingID: "pending-\(p.id)", text: p.text), proseLineLimit: proseLineLimit, expanded: expanded)
+                .opacity(0.5)
+            if p.state == .failed {
+                HStack(spacing: 8) {
+                    Text("Not sent").foregroundStyle(OT.C.redText)
+                    Button("Retry") { store.retry(p.id) }.buttonStyle(.plain)
+                    Button("Edit") {
+                        if let t = store.restore(p.id) {
+                            draft = draft.isEmpty ? t : t + " " + draft
+                            fromTerminal = false
+                            if showComposer { startTyping() }
+                        }
+                    }.buttonStyle(.plain)
+                }
+                .font(OT.F.meta)
+                .foregroundStyle(OT.C.text5)
+                .padding(.leading, expanded ? 0 : 16)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: expanded ? .trailing : .leading)
+    }
+
     private static let bottomID = "bottom"
     /// Changes whenever a row is added or the status row appears/disappears.
     private var pinKey: String {
-        "\(store.fallback ? fallbackLines.count : store.blocks.count)|\(store.blocks.last?.id ?? "")|\(manager.liveStatus != nil)|\(store.idleStatus ?? "")"
+        "\(store.fallback ? fallbackLines.count : store.blocks.count)|\(store.blocks.last?.id ?? "")|\(manager.liveStatus != nil)|\(store.pending.count)|\(store.idleStatus ?? "")"
     }
 
     /// chatTail lines minus spinner lines (the status row shows those).
@@ -304,7 +386,7 @@ struct OrchestratorChatView: View {
             .frame(width: 20, height: 20)
         }
         .buttonStyle(.plain)
-        .disabled(blank || manager.sending)
+        .disabled(blank)
     }
 
     /// Terminal draft -> field on focus; key monitor lifecycle.
@@ -395,18 +477,15 @@ struct OrchestratorChatView: View {
     private func submit() {
         let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { stopTyping(); return }
-        guard !manager.sending else { return } // Enter is ignored like the disabled send button
         // A terminal draft not pulled in on focus would be C-u'd unseen: pull it in front and wait for a second Enter.
         if !fromTerminal, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
             draft = l + " " + draft
             fromTerminal = true
             return
         }
-        stopTyping()
-        Task {
-            if await store.submit(t) { draft = ""; fromTerminal = false }
-            else { flashTag("Couldn't send", error: true, ms: 2000) } // draft is kept
-        }
+        store.enqueue(t)
+        draft = ""
+        fromTerminal = false
     }
 }
 
