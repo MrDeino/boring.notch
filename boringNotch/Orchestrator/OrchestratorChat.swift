@@ -745,7 +745,9 @@ private struct ChatBlockRow: View {
             : r.kind == .added ? Color(red: 48 / 255, green: 209 / 255, blue: 88 / 255).opacity(0.12) : Color.clear
         return HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(verbatim: sign + num).frame(minWidth: 34, alignment: .leading)
-            Text(verbatim: r.text).lineLimit(1).truncationMode(.tail)
+            OrchestratorSelectableText(r.text, font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular), color: NSColor(fg), maxLines: 1,
+                                       lineBreak: .byTruncatingTail, onClick: onClick, onCopied: onCopied)
+                .baselineAligned()
             Spacer(minLength: 0)
         }
         .font(OT.F.monoChip)
@@ -826,17 +828,17 @@ private struct ChatBlockRow: View {
                 .font(OT.F.monoChip.weight(.medium)).foregroundStyle(OT.C.text3)
                 .padding(.vertical, 2).padding(.horizontal, 6)
                 .background(OT.C.raised, in: RoundedRectangle(cornerRadius: 5))
-            Text(verbatim: target)
-                .font(OT.F.monoPath).foregroundStyle(OT.C.text2)
-                .lineLimit(1).truncationMode(isPath ? .middle : .tail)
+            OrchestratorSelectableText(target, font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular), color: NSColor(OT.C.text2), maxLines: 1,
+                                       lineBreak: isPath ? .byTruncatingMiddle : .byTruncatingTail, onClick: onClick, onCopied: onCopied)
+                .baselineAligned()
             if let add = block.added {
                 Text(verbatim: "+\(add)").font(OT.F.monoChip).foregroundStyle(OT.C.green)
                 Text(verbatim: "\u{2212}\(block.removed ?? 0)").font(OT.F.monoChip).foregroundStyle(OT.C.redText)
                 Text(verbatim: "▸ diff").font(OT.F.meta).foregroundStyle(OT.C.text6)
             } else if let r = toolResultDisplay(name: block.name, result: block.result, added: block.added) {
-                Text(verbatim: r).font(OT.F.meta)
-                    .foregroundStyle(toolResultIsError(block.result) ? OT.C.redText : OT.C.text6)
-                    .lineLimit(1)
+                OrchestratorSelectableText(r, font: NSFont.systemFont(ofSize: 11), color: NSColor(toolResultIsError(block.result) ? OT.C.redText : OT.C.text6),
+                                           maxLines: 1, lineBreak: .byTruncatingTail, onClick: onClick, onCopied: onCopied)
+                    .baselineAligned()
             }
         }
     }

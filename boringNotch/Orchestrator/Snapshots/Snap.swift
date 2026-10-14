@@ -560,6 +560,40 @@ struct Snap {
                     let plain = OrchestratorExpand.shared.level(for: vm) == .expanded
                     print("plain click expands: \(plain)")
                     ok = ok && copies && noExpand && plain
+                    OrchestratorExpand.shared.setLevel(.open, vm: vm, window: window)
+                    try? await Task.sleep(for: .milliseconds(600))
+                    OrchestratorExpand.shared.reset()
+                    // Tool target (m6 Bash ... run.sh --transition, visible at the bottom): drag copies a prefix of it.
+                    if let tt = textViews(host).first(where: { $0.string.hasSuffix("--transition") }) {
+                        OrchestratorSelectableText.pasteboard.clearContents()
+                        await gesture(tt, dx: 100)
+                        let g2 = pbString()
+                        let tcopies = !g2.isEmpty && tt.string.contains(g2)
+                        let tNoExpand = OrchestratorExpand.shared.level(for: vm) == .open
+                        print("tool target drag copies: \(tcopies && tNoExpand) [\(g2)]")
+                        ok = ok && tcopies && tNoExpand
+                    } else {
+                        print("tool target drag copies: false (text view not found)")
+                        ok = false
+                    }
+                    // Scrolling over a text view: a wheel event sent into the window does not move any scroll view in this
+                    // harness, so check the forwarding itself: the text view hands the wheel to its enclosing scroll view.
+                    final class SpyScroll: NSScrollView {
+                        var got = false
+                        override func scrollWheel(with event: NSEvent) { got = true }
+                    }
+                    let spy = SpyScroll(frame: NSRect(x: 0, y: 0, width: 200, height: 40))
+                    let stv = OrchestratorSelectableTextView()
+                    stv.frame = NSRect(x: 0, y: 0, width: 200, height: 100)
+                    spy.documentView = stv
+                    if let cg = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: 80, wheel2: 0, wheel3: 0),
+                       let e0 = NSEvent(cgEvent: cg) {
+                        stv.scrollWheel(with: e0)
+                        print("scroll over text works: \(spy.got)")
+                        ok = ok && spy.got
+                    }
+                    OrchestratorTranscriptStore.shared.snapshotSet(blocks: markerBlocks)
+                    try? await Task.sleep(for: .milliseconds(600))
                     OrchestratorExpand.shared.releaseKey(window)
                     window.makeFirstResponder(nil)
                     OrchestratorExpand.shared.setLevel(.open, vm: vm, window: window)
