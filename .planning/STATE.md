@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 Phase: 3 of 3 — Phases 2 (Sending & Prompt Answers) and 3 (Compact Indicators & Expand-Down) EXECUTED
 Plan: 2 of 2
 Status: Phases 2 and 3 executed and verified at code level; on-screen UAT pending (02-HUMAN-UAT.md, 03-HUMAN-UAT.md). Phase 1 UAT passed 2026-10-14.
-Last activity: 2026-10-14 -- Phase 3 (orch/261014005921-f245) merged into phase 2 branch
+Last activity: 2026-10-14 -- Completed quick task 261014-gkq: chat chrome strip, typing activation, header Start/End, tap to expand
 
 Progress: [██████████] 100%
 
@@ -89,3 +89,4 @@ Resume file: None
 |---|---|---|---|
 | 261014-f03 | Orchestrator tab default, usage in header, roomier chat/runs | 2026-10-14 | .planning/quick/261014-f03-orch-tab-default-usage-topbar |
 | 261014-f4d | Orchestrator chat-only body, runs panel behind header button (replaces gear) | 2026-10-14 | .planning/quick/261014-f4d-orchestrator-runs-toggle |
+| 261014-gkq | Chat: strip TUI input box, app activation for typing, Start/End in header, tap chat to expand | 2026-10-14 | .planning/quick/261014-gkq-orch-chat-chrome-keyboard-layout |
