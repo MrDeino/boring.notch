@@ -6,7 +6,7 @@ Three phases along the dependency chain build → manager → input → indicato
 
 ## Phases
 
-- [ ] **Phase 1: Read-only Orchestrator Tab** - Fork builds from CLI; tab shows chat tail, runs, usage, offline state, with polling (built and verified 2026-10-14; awaiting human UAT)
+- [x] **Phase 1: Read-only Orchestrator Tab** - Fork builds from CLI; tab shows chat tail, runs, usage, offline state, with polling (verified; human UAT passed 2026-10-14)
 - [ ] **Phase 2: Sending & Prompt Answers** - Type messages, answer numbered prompts, Esc, start/end the chat from the notch
 - [ ] **Phase 3: Compact Indicators & Expand-Down** - Closed-notch usage + attention dot; notch grows down for larger chat and live terminal
 

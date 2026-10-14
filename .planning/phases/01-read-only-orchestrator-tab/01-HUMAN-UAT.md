@@ -1,5 +1,5 @@
 ---
-status: partial
+status: passed
 phase: 01-read-only-orchestrator-tab
 source: [01-VERIFICATION.md]
 started: 2026-10-14
@@ -17,24 +17,24 @@ updated: 2026-10-14
 
 ### 1. Orchestrator tab layout
 expected: The opened notch shows an Orchestrator tab (terminal icon). It shows the chat tail on the left, 5h/7d usage bars with reset times on the right, and up to 3 runs underneath, all fitting the 640x190 notch.
-result: [pending]
+result: passed (user checked the running build 2026-10-14)
 
 ### 2. Offline and recovery
 expected: With `orch.js serve` stopped, the tab shows "orchestrator offline" with the 127.0.0.1:4777 hint within a few seconds. It recovers on its own when serve returns.
-result: [pending]
+result: passed (user checked the running build 2026-10-14)
 
 ### 3. Polling cadence
 expected: About a 2s refresh while the notch is open and about 10s while closed.
-result: [pending]
+result: passed (user checked the running build 2026-10-14)
 
 ### 4. Music and Shelf unchanged
 expected: Playback controls, artwork and closed-notch music activity work as before. With Shelf disabled, the tab bar shows Home and Orchestrator (when "always show tabs" is on, the default) and no Shelf tab.
-result: [pending]
+result: passed (user checked the running build 2026-10-14)
 
 ## Summary
 total: 4
-passed: 0
+passed: 4
 issues: 0
-pending: 4
+pending: 0
 
 ## Gaps
