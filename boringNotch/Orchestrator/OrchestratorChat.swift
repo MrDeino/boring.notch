@@ -47,7 +47,7 @@ struct OrchestratorChatView: View {
         .onChange(of: manager.offline) { _, off in if off { stopTyping() } }
         .onChange(of: manager.promptOptions) { _, o in if !o.isEmpty { stopTyping() } }
         // Phase 4
-        .onChange(of: manager.statusMenuOpen) { _, open in if open { stopTyping(handBack: false) } }
+        .onChange(of: manager.statusMenuOpen) { _, open in if open { stopTyping() } }
     }
 
     private var composer: some View {
