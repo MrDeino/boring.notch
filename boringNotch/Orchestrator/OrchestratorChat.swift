@@ -77,8 +77,18 @@ final class OrchestratorTranscriptStore: ObservableObject {
         _ = try? await sendOrchestratorPost(.key(key), base: base, session: session)
     }
 
-    func clearRealLineIfNeeded() async {
-        if let l = inputLine, !l.isEmpty { await postKey("C-u") }
+    /// R-05: C-u the real box when it holds text, then confirm from a fresh screen that it is empty.
+    /// C-u only kills to line start, so a multi-line box or a mid-line cursor leaves text: false = don't send.
+    func clearRealLineIfNeeded() async -> Bool {
+        guard let base, let session else { return false }
+        for attempt in 0..<6 {
+            guard let (d, _) = try? await session.data(from: base.appendingPathComponent("api/chat")),
+                  let r = try? JSONDecoder().decode(ChatResponse.self, from: d) else { return false }
+            guard let box = parseInputLine(screen: r.screen ?? ""), !box.isEmpty else { return true }
+            if attempt == 0 { await postKey("C-u") }
+            try? await Task.sleep(for: .milliseconds(150))
+        }
+        return false
     }
 }
 
@@ -333,7 +343,7 @@ struct OrchestratorChatView: View {
         let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { stopTyping(); return }
         stopTyping()
-        Task { await store.clearRealLineIfNeeded(); if await manager.sendText(t) { draft = ""; fromTerminal = false } }
+        Task { if await store.clearRealLineIfNeeded(), await manager.sendText(t) { draft = ""; fromTerminal = false } }
     }
 }
 
