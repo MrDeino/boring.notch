@@ -10,6 +10,31 @@ struct ChatResponse: Decodable {
     var context: ChatContext? = nil
     /// True when serve sent the `input` key at all (null = no box on screen; absent = old serve, use the heuristic).
     var hasInputKey = false
+    // Phase 9
+    var approval: OrchestratorApproval? = nil
+    /// True when serve sent the `approval` key (null = none pending; absent = old serve, leave the current value alone).
+    var hasApproval = false
+}
+
+/// Pending tool approval from serve (hook-driven, never screen-inferred). `at` stays the raw ISO string.
+struct OrchestratorApproval: Decodable, Equatable {
+    let id: String
+    let tool: String?
+    let command: String?
+    let description: String?
+    let at: String?
+    private enum CodingKeys: String, CodingKey { case id, tool, command, description, at }
+    init(id: String, tool: String?, command: String?, description: String?, at: String?) {
+        self.id = id; self.tool = tool; self.command = command; self.description = description; self.at = at
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        tool = try? c.decodeIfPresent(String.self, forKey: .tool)
+        command = try? c.decodeIfPresent(String.self, forKey: .command)
+        description = try? c.decodeIfPresent(String.self, forKey: .description)
+        at = try? c.decodeIfPresent(String.self, forKey: .at)
+    }
 }
 
 /// Serve's exact input-box state (Phase 8).
@@ -39,7 +64,7 @@ struct ChatContext: Decodable, Equatable {
 }
 
 extension ChatResponse {
-    private enum CodingKeys: String, CodingKey { case running, screen, live, input, context }
+    private enum CodingKeys: String, CodingKey { case running, screen, live, input, context, approval }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         running = try c.decodeIfPresent(Bool.self, forKey: .running)
@@ -49,6 +74,8 @@ extension ChatResponse {
         input = try? c.decodeIfPresent(ChatInput.self, forKey: .input)
         context = try? c.decodeIfPresent(ChatContext.self, forKey: .context)
         hasInputKey = c.contains(.input)
+        hasApproval = c.contains(.approval)
+        approval = (try? c.decodeIfPresent(OrchestratorApproval.self, forKey: .approval)) ?? nil // malformed -> nil, never fails the chat decode
     }
 }
 

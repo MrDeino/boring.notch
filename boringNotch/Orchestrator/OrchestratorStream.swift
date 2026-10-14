@@ -21,6 +21,8 @@ enum OrchestratorStreamEvent {
     case state(StateResponse)
     case chat(ChatResponse)
     case blocks(running: Bool?, blocks: [ChatBlock], reset: Bool)
+    /// nil = serve says none pending.
+    case approval(OrchestratorApproval?)
 }
 
 /// `URLSession.bytes.lines` drops blank lines, so events are dispatched on each `data:` line using the last `event:` name.
@@ -48,6 +50,9 @@ struct SSELineParser {
         case "blocks":
             guard let b = decodeChatBlocks(data) else { return nil }
             return .blocks(running: b.running, blocks: b.blocks, reset: (try? dec.decode(ResetFlag.self, from: data))?.reset ?? false)
+        case "approval":
+            if v.trimmingCharacters(in: .whitespaces) == "null" { return .approval(nil) }
+            return (try? dec.decode(OrchestratorApproval.self, from: data)).map { .approval($0) } // malformed: keep current
         default: return nil
         }
     }

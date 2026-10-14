@@ -117,3 +117,31 @@ func fiveHourFraction(_ u: OrchestratorUsage?) -> Double? {
 }
 
 func usageIsHigh(_ percent: Double?) -> Bool { (percent ?? 0) >= 80 }
+
+// MARK: - Approvals (Phase 9)
+
+enum ApprovalAnswer: Equatable { case send(String), openCard, skip }
+
+/// Allow/Deny gate: only act when the approval is still the pending one and a real prompt is on screen.
+/// Allow sends "1" only when option 1 is a plain "Yes"; anything else goes to the card.
+func approvalAnswer(allow: Bool, pendingId: String?, answeringId: String, options: [PromptOption]) -> ApprovalAnswer {
+    guard pendingId == answeringId, !options.isEmpty else { return .skip }
+    guard allow else { return .send("Escape") }
+    let plain = options.first { $0.number == 1 }.map { $0.label.trimmingCharacters(in: .whitespaces).lowercased() == "yes" } ?? false
+    return plain ? .send("1") : .openCard
+}
+
+/// Hides the approval we just answered for the ignore window.
+func visibleApproval(_ incoming: OrchestratorApproval?, ignoredId: String?, until: Date, now: Date) -> OrchestratorApproval? {
+    guard let a = incoming else { return nil }
+    return a.id == ignoredId && now < until ? nil : a
+}
+
+/// One display line: whitespace runs collapsed, 300 chars max; falls back to the description.
+func approvalCommandLine(_ a: OrchestratorApproval) -> String {
+    func clean(_ s: String?) -> String {
+        String((s ?? "").split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").prefix(300))
+    }
+    let c = clean(a.command)
+    return c.isEmpty ? clean(a.description) : c
+}
