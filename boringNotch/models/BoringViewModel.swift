@@ -190,8 +190,9 @@ class BoringViewModel: NSObject, ObservableObject {
     }
 
     func open() {
-        self.notchSize = openNotchSize
+        self.notchSize = OrchestratorExpand.shared.openSize(for: self)
         self.notchState = .open
+        OrchestratorManager.shared.notchOpen = true
         
         // Force music information update when notch is opened
         MusicManager.shared.forceUpdate()
@@ -205,6 +206,7 @@ class BoringViewModel: NSObject, ObservableObject {
         self.notchSize = getClosedNotchSize(screenUUID: self.screenUUID)
         self.closedNotchSize = self.notchSize
         self.notchState = .closed
+        OrchestratorManager.shared.notchOpen = false
         self.isBatteryPopoverActive = false
         self.coordinator.sneakPeek.show = false
         self.edgeAutoOpenActive = false
@@ -214,7 +216,7 @@ class BoringViewModel: NSObject, ObservableObject {
     if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
             coordinator.currentView = .shelf
         } else if !coordinator.openLastTabByDefault {
-            coordinator.currentView = .home
+            coordinator.currentView = coordinator.alwaysShowTabs ? .orchestrator : .home
         }
     }
 

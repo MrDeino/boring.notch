@@ -108,6 +108,7 @@ struct ContentView: View {
                             .frame(height: 1)
                             .padding(.horizontal, topCornerRadius)
                     }
+                    .overlay { OrchestratorClosedIndicators() }
                     .shadow(
                         color: ((vm.notchState == .open || isHovering) && Defaults[.enableShadow])
                             ? .black.opacity(0.7) : .clear, radius: Defaults[.cornerRadiusScaling] ? 6 : 4
@@ -203,7 +204,7 @@ struct ContentView: View {
             }
         }
         .padding(.bottom, 8)
-        .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
+        .frame(maxWidth: windowSize.width, maxHeight: windowSize.height + max(0, vm.notchSize.height - openNotchSize.height), alignment: .top)
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,
@@ -349,6 +350,8 @@ struct ContentView: View {
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
                     case .shelf:
                         ShelfView()
+                    case .orchestrator:
+                        OrchestratorView()
                     }
                 }
                 .transition(
