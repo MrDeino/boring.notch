@@ -59,8 +59,6 @@ struct OrchestratorWingsView: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var model = OrchestratorWingsModel.shared
     @ObservedObject var manager = OrchestratorManager.shared
-    @State private var spin: Double = 0
-    @State private var glow = false
     @State private var anchor: (elapsed: TimeInterval, at: Date) = (0, .now)
 
     var body: some View {
@@ -79,13 +77,9 @@ struct OrchestratorWingsView: View {
     @ViewBuilder private func left(_ k: WingKind) -> some View {
         switch k {
         case .working:
-            Text("✻").font(.system(size: 15)).foregroundStyle(OT.C.claude)
-                .rotationEffect(.degrees(spin))
-                .onAppear { withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) { spin = 360 } }
+            WingSpinner()
         case .needsYou:
-            Circle().fill(OT.C.orange).frame(width: 8, height: 8)
-                .shadow(color: OT.C.orange, radius: glow ? 8 : 2)
-                .onAppear { withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { glow = true } }
+            WingGlowDot()
         case .finished:
             Image(systemName: "checkmark").font(.system(size: 13)).foregroundStyle(OT.C.green)
         }
@@ -109,6 +103,25 @@ struct OrchestratorWingsView: View {
         case .finished(let project):
             Text(verbatim: project).font(.system(size: 11)).foregroundStyle(OT.C.text4).lineLimit(1)
         }
+    }
+}
+
+// Own subviews so their @State resets each time the wing kind re-inserts them (WR-03).
+private struct WingSpinner: View {
+    @State private var spin: Double = 0
+    var body: some View {
+        Text("✻").font(.system(size: 15)).foregroundStyle(OT.C.claude)
+            .rotationEffect(.degrees(spin))
+            .onAppear { withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) { spin = 360 } }
+    }
+}
+
+private struct WingGlowDot: View {
+    @State private var glow = false
+    var body: some View {
+        Circle().fill(OT.C.orange).frame(width: 8, height: 8)
+            .shadow(color: OT.C.orange, radius: glow ? 8 : 2)
+            .onAppear { withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { glow = true } }
     }
 }
 
