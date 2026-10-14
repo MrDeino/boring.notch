@@ -5,9 +5,11 @@ import SwiftUI
 struct OrchestratorHeaderSegment: View {
     @ObservedObject var manager = OrchestratorManager.shared
     @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @EnvironmentObject var vm: BoringViewModel
+    @ObservedObject var expand = OrchestratorExpand.shared
 
     var body: some View {
-        if coordinator.currentView == .orchestrator && !manager.offline {
+        if coordinator.currentView == .orchestrator && !manager.offline && expand.level(for: vm) == .open {
             let n = liveRunCount(manager.runs)
             let waiting = manager.runs.contains { $0.state == "waiting" }
             HStack(spacing: 0) {
