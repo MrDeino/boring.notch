@@ -69,7 +69,7 @@
 
 - [x] **RUN-01**: The Runs segment shows frame 05 run cards; a waiting card shows the run's question and a button that sends that context into the orchestrator chat (no direct Allow/Deny/resume)
 - [x] **RUN-02**: The notch steps open → expanded → terminal and back with the specified triggers and motion, keeping the existing outside-click/monitor/key-release logic
-- [ ] **RUN-03**: Expanded (12) shows the conversation column, runs rail with usage bars and a Terminal ⌘T pill; the terminal (10) has the framed toolbar and in use / unavailable + Retry
+- [x] **RUN-03**: Expanded (12) shows the conversation column, runs rail with usage bars and a Terminal ⌘T pill; the terminal (10) has the framed toolbar and in use / unavailable + Retry
 - [x] **RUN-04**: The runs rail collapses to a 30px strip (12b), persisted in `Defaults` `orchRunsRailCollapsed`, and auto re-opens on a newly waiting run unless collapsed this session
 - [x] **RUN-05**: The closed notch shows Working / Needs you / Run finished wings and the usage hairline; music's live activity is unchanged apart from a 7px orange needs-you dot; closed polling is 3s while the chat runs
 
@@ -150,7 +150,7 @@
 | PRM-05 | Phase 6 | Pending |
 | RUN-01 | Phase 7 | Complete |
 | RUN-02 | Phase 7 | Complete |
-| RUN-03 | Phase 7 | Pending |
+| RUN-03 | Phase 7 | Complete |
 | RUN-04 | Phase 7 | Complete |
 | RUN-05 | Phase 7 | Complete |
 | LIVE-01 | Phase 8 | Pending |
