@@ -55,7 +55,7 @@
 - [x] **CHAT-02**: A live "✻ Working · elapsed · esc to interrupt" status row, read from the screen, shows while Claude works
 - [ ] **CHAT-03**: The composer matches frame 02 (pill, focus ring, send button, hint row) using the existing key-gate typing logic
 - [x] **CHAT-04**: The message box mirrors Claude Code's input box: suggestion ghost text with Tab/→ accept (POST Tab), ⌃U clear with POST `{key:"C-u"}` and a "line cleared" tag, terminal draft pulled in on focus
-- [ ] **CHAT-05**: New transcript rows animate in from the bottom; clicking the transcript opens the terminal
+- [x] **CHAT-05**: New transcript rows animate in from the bottom; clicking the transcript opens the terminal
 
 ### Prompt cards (Phase 6)
 
@@ -142,7 +142,7 @@
 | CHAT-02 | Phase 5 | Complete |
 | CHAT-03 | Phase 5 | Pending |
 | CHAT-04 | Phase 5 | Complete |
-| CHAT-05 | Phase 5 | Pending |
+| CHAT-05 | Phase 5 | Complete |
 | PRM-01 | Phase 6 | Pending |
 | PRM-02 | Phase 6 | Pending |
 | PRM-03 | Phase 6 | Pending |
