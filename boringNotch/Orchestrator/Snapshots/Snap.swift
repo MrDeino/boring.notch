@@ -172,6 +172,8 @@ struct Scene {
     var draft = ""
     var diffOpen = false
     var calm = false // no runs: capsule shows Running (+ ctx)
+    var logRun: String? // run log overlay over the content
+    var logLines = true // false: empty log
 }
 
 /// Two-colour test PNG through the real orchestratorPNG path.
@@ -276,6 +278,11 @@ struct Snap {
             Scene(name: "50-caret-live", chat: ChatResponse(running: true, screen: "", live: true), blocks: editBlocks),
             Scene(name: "51-open-diff-collapsed", chat: chat(""), blocks: editBlocks),
             Scene(name: "52-open-diff-expanded", chat: chat(""), blocks: editBlocks, diffOpen: true),
+            Scene(name: "53-runlog-from-board", chat: chat(""), runsBoard: true, expanded: true, logRun: "261014024541-r002"),
+            Scene(name: "54-runlog-expanded", chat: chat(""), blocks: longBlocks, expanded: true, logRun: "261014024541-r002"),
+            Scene(name: "55-runlog-finished", chat: chat(""), blocks: longBlocks, expanded: true, logRun: "261014024541-d004"),
+            Scene(name: "56-runlog-empty", chat: chat(""), blocks: longBlocks, expanded: true, logRun: "261014024541-s003", logLines: false),
+            Scene(name: "57-runlog-open", chat: chat(""), blocks: longBlocks, logRun: "261014024541-r002"),
         ]
 
         var gapBad: [String] = [], gapOK = 0
@@ -290,6 +297,8 @@ struct Snap {
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
             PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending, dismissCurrent: s.dismissed)
             if let n = s.notes { OrchestratorNotesStore.shared.snapshotSet(text: n.0, status: n.1); m.notesOpen = true }
+            let logLines = (try? JSONDecoder().decode([String].self, from: Data(fixture("x18-log.json").utf8))) ?? []
+            OrchestratorRunLog.shared.snapshotSet(runID: s.logRun, lines: s.logLines ? logLines : [])
 
             let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 480),
                                   styleMask: .borderless, backing: .buffered, defer: false)
@@ -341,6 +350,7 @@ struct Snap {
                 window.contentView = nil
             }
             OrchestratorExpand.shared.reset()
+            OrchestratorRunLog.shared.snapshotSet(runID: nil, lines: [])
             m.notesOpen = false
             PromptCardController.shared.snapshotSet()
             if let png { try? png.write(to: url); print("wrote", url.path) } else { print("FAILED", s.name) }
@@ -842,7 +852,101 @@ struct Snap {
             window.orderOut(nil)
         }
         ok = await gapPass() && ok
+        ok = await runLogPass() && ok
         print(ok ? "OK: composer, segment, capsule and notes button respond to clicks" : "FAIL: a click target did not respond")
+    }
+}
+
+extension Snap {
+    /// Run log overlay: a rail card and a collapsed-strip dot open it, the X closes it and restores the level, Esc closes it.
+    static func runLogPass() async -> Bool {
+        let m = OrchestratorManager.shared
+        let state = (try? JSONDecoder().decode(StateResponse.self, from: Data(fixture("phase7-state.txt").utf8)))
+            ?? StateResponse(runs: [], usage: nil)
+        await m.snapshotApply(loaded: true, chat: ChatResponse(running: true, screen: ""), state: state)
+        OrchestratorTranscriptStore.shared.snapshotSet(blocks: longBlocks)
+        let log = OrchestratorRunLog.shared
+        let savedRail = Defaults[.orchRunsRailCollapsed]
+        defer { Defaults[.orchRunsRailCollapsed] = savedRail }
+        var ok = true
+        for collapsed in [false, true] {
+            Defaults[.orchRunsRailCollapsed] = collapsed
+            for startOpen in [false, true] {
+                // Collapsed strip only exists expanded; start-open is covered by the card pass.
+                if collapsed && startOpen { continue }
+                let vm = BoringViewModel()
+                let window = KeyablePanel(contentRect: NSRect(x: -20000, y: -20000, width: windowSize.width, height: windowSize.height),
+                                          styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+                window.isOpaque = false; window.backgroundColor = .clear
+                OrchestratorExpand.shared.setLevel(startOpen ? .open : .expanded, vm: vm, window: window)
+                let mainLayout = NotchReplica(vm: vm).core.environmentObject(vm).contentShape(Rectangle()).onHover { _ in }.onTapGesture { }
+                let root = ZStack(alignment: .top) { VStack(spacing: 0) { mainLayout } }
+                    .padding(.bottom, 8).notchRootFrame(notchSize: vm.notchSize).compositingGroup()
+                let host = NSHostingView(rootView: root)
+                window.contentView = host
+                window.orderFrontRegardless()
+                m.showRunsBoard = startOpen
+                try? await Task.sleep(for: .milliseconds(900))
+                host.layoutSubtreeIfNeeded()
+                func click(_ fromTop: CGFloat, x: CGFloat) async {
+                    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                        if let e = NSEvent.mouseEvent(with: type, location: NSPoint(x: x, y: host.bounds.height - fromTop), modifierFlags: [],
+                                                      timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                                      context: nil, eventNumber: 0, clickCount: 1, pressure: 1) { window.sendEvent(e) }
+                        try? await Task.sleep(for: .milliseconds(30))
+                    }
+                    try? await Task.sleep(for: .milliseconds(400))
+                }
+                var W: CGFloat { host.bounds.width }
+                try? await Task.sleep(for: .milliseconds(300))
+                if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) { host.cacheDisplay(in: host.bounds, to: rep); try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/notch-snapshots/hittest-runlog-pre-\(collapsed)-\(startOpen).png")) }
+                print("run log host \(host.bounds.size)")
+                let label = collapsed ? "strip dot" : startOpen ? "board card" : "rail card"
+                // Board card: first (waiting) card; rail card: second row; strip dot: second dot.
+                var right: CGFloat { W / 2 + vm.notchSize.width / 2 }
+                let (x, y): (CGFloat, CGFloat) = collapsed ? (right - 46, 117)
+                    : startOpen ? (right - 640 + 120, 90)
+                    : (right - 114, 165)
+                func esc() async {
+                    if let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                windowNumber: window.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+                                                isARepeat: false, keyCode: 53) { NSApp.sendEvent(e) }
+                    try? await Task.sleep(for: .milliseconds(600))
+                }
+                let want: ExpandLevel = startOpen ? .open : .expanded
+                for closer in ["x", "esc"] {
+                    if startOpen && closer == "esc" { continue } // the host stays stale after the offscreen grow; Esc is covered expanded
+                    await click(y, x: x)
+                    let opened = log.runID != nil
+                    let level = OrchestratorExpand.shared.level(for: vm)
+                    print("run log \(label)/\(closer): opened \(opened), level \(level)")
+                    if closer == "x", let png = host.bitmapImageRepForCachingDisplay(in: host.bounds).flatMap({ rep -> Data? in
+                        host.cacheDisplay(in: host.bounds, to: rep); return rep.representation(using: .png, properties: [:]) }) {
+                        try? png.write(to: URL(fileURLWithPath: "/tmp/notch-snapshots/hittest-runlog-\(label.replacingOccurrences(of: " ", with: "-")).png"))
+                    }
+                    ok = ok && opened && level == .expanded
+                    guard opened else { continue }
+                    switch closer {
+                    // At the open level the offscreen spring never grows the host, so the X is not where it will be: close directly.
+                    case "x" where startOpen: log.close()
+                    case "x": await click(62, x: right - 53)
+                    case "esc": await esc()
+                    default: break
+                    }
+                    try? await Task.sleep(for: .milliseconds(600))
+                    let closed = log.runID == nil, back = OrchestratorExpand.shared.level(for: vm)
+                    print("run log \(label)/\(closer): closed \(closed), level \(back)")
+                    ok = ok && closed && back == want
+                    if !closed { log.close() }
+                }
+                OrchestratorExpand.shared.reset()
+                window.contentView = nil
+                window.orderOut(nil)
+                log.snapshotSet(runID: nil, lines: [])
+            }
+        }
+        print(ok ? "OK: run log opens from card and dot, close restores level" : "FAIL: run log open/close")
+        return ok
     }
 }
 

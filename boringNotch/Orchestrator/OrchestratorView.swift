@@ -11,7 +11,30 @@ struct OrchestratorView: View {
     @ObservedObject var expand = OrchestratorExpand.shared
     @ObservedObject var manager = OrchestratorManager.shared
     @EnvironmentObject var vm: BoringViewModel
+    @ObservedObject var runLog = OrchestratorRunLog.shared
     @State private var anchor = NSView()
+    @State private var restoreLevel: ExpandLevel?
+    @State private var escMonitor: Any?
+
+    /// The log opens over the content: the open level grows to expanded first and returns on close.
+    private func logChanged(_ id: String?) {
+        if id != nil {
+            guard restoreLevel == nil else { return }
+            restoreLevel = expand.level(for: vm)
+            if restoreLevel == .open { expand.setLevel(.expanded, vm: vm, window: anchor.window) }
+            if escMonitor == nil {
+                escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                    guard event.keyCode == 53, event.window === anchor.window else { return event }
+                    runLog.close()
+                    return nil
+                }
+            }
+        } else {
+            if let m = escMonitor { NSEvent.removeMonitor(m); escMonitor = nil }
+            if let r = restoreLevel, r != expand.level(for: vm) { expand.setLevel(r, vm: vm, window: anchor.window) }
+            restoreLevel = nil
+        }
+    }
 
     private func close() {
         withAnimation(.easeOut(duration: 0.15)) {
@@ -27,9 +50,14 @@ struct OrchestratorView: View {
         .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         .clipped()
         .opacity(manager.statusMenuOpen || manager.notesOpen ? 0.35 : 1)
-        .allowsHitTesting(!manager.statusMenuOpen && !manager.notesOpen)
+        .allowsHitTesting(!manager.statusMenuOpen && !manager.notesOpen && runLog.runID == nil)
         .overlay(alignment: .topTrailing) {
-            if manager.notesOpen {
+            if runLog.runID != nil {
+                ZStack {
+                    Color.clear.contentShape(Rectangle()).onTapGesture { runLog.close() }
+                    OrchestratorRunLogOverlay().transition(.opacity)
+                }
+            } else if manager.notesOpen {
                 ZStack(alignment: .topTrailing) {
                     Color.clear.contentShape(Rectangle()).onTapGesture { close() }
                     OrchestratorNotesPanel(close: close)
@@ -46,6 +74,12 @@ struct OrchestratorView: View {
             }
         }
         .background(WindowAnchor(view: anchor))
-        .onDisappear { OrchestratorNotesStore.shared.flush(); manager.statusMenuOpen = false; manager.notesOpen = false }
+        .onChange(of: runLog.runID) { _, id in logChanged(id) }
+        .onDisappear {
+            OrchestratorNotesStore.shared.flush(); manager.statusMenuOpen = false; manager.notesOpen = false
+            runLog.close()
+            if let m = escMonitor { NSEvent.removeMonitor(m); escMonitor = nil }
+            restoreLevel = nil
+        }
     }
 }

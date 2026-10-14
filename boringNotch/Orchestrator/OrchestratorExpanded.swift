@@ -45,7 +45,7 @@ final class OrchestratorRailState: ObservableObject {
     }
 }
 
-private func runDotColor(_ state: String?) -> Color {
+func runDotColor(_ state: String?) -> Color {
     switch state {
     case "running": return OT.C.green
     case "waiting": return OT.C.orange
@@ -118,6 +118,8 @@ struct OrchestratorRunsStrip: View {
                     Circle().fill(runDotColor(run.state)).frame(width: 7, height: 7)
                 }
                 .overlay { if run.state == "waiting" { Circle().strokeBorder(OT.C.orange, lineWidth: 1) } }
+                .contentShape(Circle())
+                .onTapGesture { OrchestratorRunLog.shared.open(run) }
                 .onHover { hovered = $0 ? run.stableID : (hovered == run.stableID ? nil : hovered) }
                 .overlay(alignment: .topTrailing) {
                     if hovered == run.stableID {
