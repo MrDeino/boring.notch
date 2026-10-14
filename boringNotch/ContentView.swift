@@ -209,6 +209,7 @@ struct ContentView: View {
         .padding(.bottom, 8)
         .notchRootFrame(notchSize: vm.notchSize)
         .onChange(of: vm.notchSize) { _, _ in OrchestratorExpand.shared.syncWindow(vm: vm) }
+        .onChange(of: approvals.cardRequest) { _, _ in OrchestratorManager.shared.showRunsBoard = false; coordinator.currentView = .orchestrator; if vm.notchState == .closed { doOpen() } }
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,

@@ -82,7 +82,6 @@ struct OrchestratorApprovalPanel: View {
             }
             .padding(.top, 30).padding(.horizontal, 2).padding(.bottom, 14)
             .frame(width: 432)
-            .onChange(of: center.cardRequest) { _, _ in onMore() }
             .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
