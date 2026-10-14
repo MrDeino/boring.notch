@@ -50,7 +50,12 @@ final class OrchestratorManager: ObservableObject {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    private var refreshing = false
+
     func refresh() async {
+        guard !refreshing else { return }
+        refreshing = true
+        defer { refreshing = false }
         do {
             async let chat: ChatResponse = get("api/chat")
             async let state: StateResponse = get("api/state")
