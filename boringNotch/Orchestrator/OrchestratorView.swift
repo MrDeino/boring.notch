@@ -91,7 +91,8 @@ struct OrchestratorView: View {
                 .frame(height: 22)
                 .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 5))
             } else {
-                ForEach(manager.promptOptions, id: \.number) { o in
+                // Free-text answers aren't supported from the notch yet, so don't offer a dead-end button.
+                ForEach(manager.promptOptions.filter { $0.label != "Type something." }, id: \.number) { o in
                     Button { manager.pressOption(o.number) } label: {
                         Text(verbatim: "\(o.number) \(o.label)").lineLimit(1).truncationMode(.tail)
                             .frame(maxWidth: 120)
