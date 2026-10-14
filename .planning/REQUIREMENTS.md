@@ -59,7 +59,7 @@
 
 ### Prompt cards (Phase 6)
 
-- [ ] **PRM-01**: `detectPrompt` returns title, purpose/body, kind, header tag and progress as well as options, tested on the captured fixtures
+- [x] **PRM-01**: `detectPrompt` returns title, purpose/body, kind, header tag and progress as well as options, tested on the captured fixtures
 - [ ] **PRM-02**: Permission prompts show the frame 03 decision card with shortened option labels, tooltips, esc deny and the 3s press lock
 - [ ] **PRM-03**: Question prompts show the frame 04 vertical list with the ❯ default highlighted, ↑/↓/⏎, growing via expand-down and scrolling on overflow
 - [ ] **PRM-04**: 1–9 and esc answer the prompt while the pointer is over the notch
@@ -143,7 +143,7 @@
 | CHAT-03 | Phase 5 | Pending |
 | CHAT-04 | Phase 5 | Pending |
 | CHAT-05 | Phase 5 | Pending |
-| PRM-01 | Phase 6 | Pending |
+| PRM-01 | Phase 6 | Complete |
 | PRM-02 | Phase 6 | Pending |
 | PRM-03 | Phase 6 | Pending |
 | PRM-04 | Phase 6 | Pending |
