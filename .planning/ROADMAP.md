@@ -16,7 +16,7 @@ Phases 4–9 rebuild the tab to the high-fidelity design handoff (option 2a, `.p
 - [x] **Phase 6: 2a Prompt Cards** - Permission decision card, vertical question list, richer detectPrompt, 1–9/esc while hovered, 'Something else…' and 'Chat about this' (parallel with 5, 7) (completed 2026-10-14)
 - [x] **Phase 7: 2a Runs Board, Expand Levels & Wings** - Runs board, open→expanded→terminal levels with runs rail, closed-notch live-activity wings (parallel with 5, 6) (completed 2026-10-14)
 - [x] **Phase 8: Phase B Live Data** - SSE push from serve, streaming caret, ▸ diff expansion, suggested flag, context % (completed 2026-10-14)
-- [ ] **Phase 9: Phase B Approvals** - Closed-notch approval drop-down, global ⌥⏎/⌥⎋, Claude Code hook posting to serve, panel frame sized to content
+- [x] **Phase 9: Phase B Approvals** - Closed-notch approval drop-down, global ⌥⏎/⌥⎋, Claude Code hook posting to serve, panel frame sized to content (completed 2026-10-14)
 
 ## Phase Details
 
@@ -244,7 +244,7 @@ Plans:
   3. ⌥⏎ and ⌥⎋ answer the pending approval globally, without the notch being focused, using a sandbox-safe hotkey API
   4. The panel frame follows content size instead of the fixed `windowSize` plus a separate expand step; music unaffected
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -254,7 +254,7 @@ Plans:
 - [x] 09-02-PLAN.md — Global ⌥⏎/⌥⎋ via KeyboardShortcuts, registered only while pending; 15.0/15.1 ⌃⌥ fallback (APR-03)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 09-03-PLAN.md — One sizer: panel window height from vm.notchSize.height (`panelHeight` + `OrchestratorExpand.fit`), top edge pinned, music unchanged (APR-04)
+- [x] 09-03-PLAN.md — One sizer: panel window height from vm.notchSize.height (`panelHeight` + `OrchestratorExpand.fit`), top edge pinned, music unchanged (APR-04)
 
 **UI hint**: yes
 
@@ -270,4 +270,4 @@ Plans:
 | 6. 2a Prompt Cards | 3/3 | Complete   | 2026-10-14 |
 | 7. 2a Runs Board, Expand Levels & Wings | 5/5 | Complete   | 2026-10-14 |
 | 8. Phase B Live Data | 3/3 | Complete    | 2026-10-14 |
-| 9. Phase B Approvals | 2/3 | In Progress|  |
+| 9. Phase B Approvals | 3/3 | Complete   | 2026-10-14 |

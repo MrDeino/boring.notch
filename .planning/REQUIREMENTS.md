@@ -86,7 +86,7 @@
 - [x] **APR-01**: A Claude Code PreToolUse/Notification hook posts pending approvals to serve
 - [x] **APR-02**: The closed notch drops down the approval panel (Allow ⌥⏎ / Deny ⌥⎋ / More…)
 - [x] **APR-03**: ⌥⏎ / ⌥⎋ answer the pending approval globally via a sandbox-safe hotkey API
-- [ ] **APR-04**: The panel frame is sized to its content instead of the fixed `windowSize` plus an expand step
+- [x] **APR-04**: The panel frame is sized to its content instead of the fixed `windowSize` plus an expand step
 
 ## v2 Requirements
 
@@ -161,7 +161,7 @@
 | APR-01 | Phase 9 | Complete |
 | APR-02 | Phase 9 | Complete |
 | APR-03 | Phase 9 | Complete |
-| APR-04 | Phase 9 | Pending |
+| APR-04 | Phase 9 | Complete |
 
 **Coverage:** 20/20 v1 and 31/31 v1.1 requirements mapped, no orphans. BLD-02 and BLD-03 are cross-cutting: mapped to Phase 1, re-checked by a music criterion in every phase.
 
