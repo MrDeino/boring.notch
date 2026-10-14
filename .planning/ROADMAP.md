@@ -26,11 +26,11 @@ Three phases along the dependency chain build → manager → input → indicato
   4. Data visibly refreshes about every 2s while the notch is open and polls more slowly while closed
   5. `detectPrompt(screen)` is a pure function with an assert-based check covering the idle input box (no prompt) and a numbered-options prompt; music playback controls, artwork and closed-notch music activity still work as before
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Walking skeleton: tab hooks + polling manager (GET /api/chat) + chat tail, offline state, 2s/10s cadence, CLI build
+- [x] 01-01-PLAN.md — Walking skeleton: tab hooks + polling manager (GET /api/chat) + chat tail, offline state, 2s/10s cadence, CLI build
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -76,6 +76,6 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Read-only Orchestrator Tab | 0/TBD | Not started | - |
+| 1. Read-only Orchestrator Tab | 1/2 | In Progress|  |
 | 2. Sending & Prompt Answers | 0/TBD | Not started | - |
 | 3. Compact Indicators & Expand-Down | 0/TBD | Not started | - |

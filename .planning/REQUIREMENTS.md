@@ -7,18 +7,18 @@
 
 ### Build & Integrity
 
-- [ ] **BLD-01**: The fork builds from the command line with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild` (ad-hoc signed, entitlements intact)
+- [x] **BLD-01**: The fork builds from the command line with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild` (ad-hoc signed, entitlements intact)
 - [ ] **BLD-02**: Music / now-playing (playback controls, artwork, closed-notch music activity) works exactly as before after every phase
-- [ ] **BLD-03**: Orchestrator code lives in new files under one folder; upstream files get only small, isolated hooks; no new third-party dependencies
+- [x] **BLD-03**: Orchestrator code lives in new files under one folder; upstream files get only small, isolated hooks; no new third-party dependencies
 
 ### Orchestrator Tab (read-only)
 
-- [ ] **TAB-01**: User can open an "Orchestrator" tab beside the existing tabs in the opened notch
-- [ ] **TAB-02**: User sees the tail of the orchestrator chat screen (from `GET /api/chat`), trimmed to fit
+- [x] **TAB-01**: User can open an "Orchestrator" tab beside the existing tabs in the opened notch
+- [x] **TAB-02**: User sees the tail of the orchestrator chat screen (from `GET /api/chat`), trimmed to fit
 - [ ] **TAB-03**: User sees a compact runs strip: project, state, short prompt per run (from `GET /api/state`)
 - [ ] **TAB-04**: User sees usage bars for the 5-hour and 7-day windows with their reset times
-- [ ] **TAB-05**: User sees "orchestrator offline" with a hint (serve on 127.0.0.1:4777) when serve is unreachable
-- [ ] **TAB-06**: Data refreshes about every 2s while the notch is open and more slowly while closed
+- [x] **TAB-05**: User sees "orchestrator offline" with a hint (serve on 127.0.0.1:4777) when serve is unreachable
+- [x] **TAB-06**: Data refreshes about every 2s while the notch is open and more slowly while closed
 
 ### Interaction
 
@@ -60,15 +60,15 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BLD-01 | Phase 1 | Pending |
+| BLD-01 | Phase 1 | Complete |
 | BLD-02 | Phase 1 | Pending |
-| BLD-03 | Phase 1 | Pending |
-| TAB-01 | Phase 1 | Pending |
-| TAB-02 | Phase 1 | Pending |
+| BLD-03 | Phase 1 | Complete |
+| TAB-01 | Phase 1 | Complete |
+| TAB-02 | Phase 1 | Complete |
 | TAB-03 | Phase 1 | Pending |
 | TAB-04 | Phase 1 | Pending |
-| TAB-05 | Phase 1 | Pending |
-| TAB-06 | Phase 1 | Pending |
+| TAB-05 | Phase 1 | Complete |
+| TAB-06 | Phase 1 | Complete |
 | INT-01 | Phase 2 | Pending |
 | INT-02 | Phase 2 | Pending |
 | INT-03 | Phase 2 | Pending |
