@@ -75,7 +75,7 @@
 
 ### Phase B live data (Phase 8)
 
-- [ ] **LIVE-01**: The manager consumes serve's SSE stream for blocks and state, falling back to polling
+- [x] **LIVE-01**: The manager consumes serve's SSE stream for blocks and state, falling back to polling
 - [ ] **LIVE-02**: Streaming assistant text shows the caret
 - [ ] **LIVE-03**: ▸ diff expands an Edit row into the diff card
 - [x] **LIVE-04**: Input-box ghost text uses serve's `suggested` flag (`capture-pane -e`)
@@ -153,7 +153,7 @@
 | RUN-03 | Phase 7 | Complete |
 | RUN-04 | Phase 7 | Complete |
 | RUN-05 | Phase 7 | Complete |
-| LIVE-01 | Phase 8 | Pending |
+| LIVE-01 | Phase 8 | Complete |
 | LIVE-02 | Phase 8 | Pending |
 | LIVE-03 | Phase 8 | Pending |
 | LIVE-04 | Phase 8 | Complete |
