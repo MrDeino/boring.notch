@@ -162,14 +162,14 @@ final class PromptCardController: ObservableObject {
         let k = promptKey(keyCode: e.keyCode, characters: e.charactersIgnoringModifiers, commandLike: combo,
                           editingText: fieldEditing || NSApp.keyWindow?.firstResponder is NSText,
                           kind: card.kind, numbers: Set(card.items.map(\.number)))
-        let nums = card.items.map(\.number)
+        let nums = card.items.filter { $0.role == .normal }.map(\.number) // only rows that draw a highlight
         switch k {
         case .pass: return e
         case .answer(let n): choose(n, displayed: card)
         case .escape: escape(displayed: card)
         case .up: highlighted = moveHighlight(highlighted, by: -1, in: nums)
         case .down: highlighted = moveHighlight(highlighted, by: 1, in: nums)
-        case .select: if let h = highlighted { choose(h, displayed: card) }
+        case .select: if let h = highlighted, nums.contains(h) { choose(h, displayed: card) }
         }
         return nil
     }
