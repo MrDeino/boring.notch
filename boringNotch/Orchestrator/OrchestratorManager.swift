@@ -35,13 +35,13 @@ final class OrchestratorManager: ObservableObject {
     @Published private(set) var streaming = false
     private var streamTask: Task<Void, Never>?
     private var lastStreamLine = Date.distantPast
-    private let streamSession: URLSession = {
+    private func makeStreamSession() -> URLSession {
         let c = URLSessionConfiguration.ephemeral
         c.timeoutIntervalForRequest = 45
         c.timeoutIntervalForResource = .greatestFiniteMagnitude
         c.waitsForConnectivity = false
         return URLSession(configuration: c)
-    }()
+    }
     var capsuleStatus: CapsuleState {
         capsuleState(hasLoaded: hasLoaded, offline: offline, chatRunning: chatRunning, needsAttention: needsAttention, working: liveStatus != nil)
     }
@@ -166,10 +166,13 @@ final class OrchestratorManager: ObservableObject {
     private func runStream() async {
         var req = URLRequest(url: Self.baseURL.appendingPathComponent("api/events"))
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        let streamSession = makeStreamSession() // per stream: invalidateAndCancel() on watchdog trip guarantees the iterator ends
+        defer { streamSession.finishTasksAndInvalidate() }
         guard let (bytes, resp) = try? await streamSession.bytes(for: req), (resp as? HTTPURLResponse)?.statusCode == 200 else { return }
         lastStreamLine = Date()
         streaming = true
         defer { streaming = false }
+        let watchdogTripped = { [weak self] in self?.streaming = false; streamSession.invalidateAndCancel() }
         await withTaskGroup(of: Void.self) { group in
             group.addTask { @MainActor [weak self] in
                 var parser = SSELineParser()
@@ -196,7 +199,7 @@ final class OrchestratorManager: ObservableObject {
             group.addTask { @MainActor [weak self] in
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(5))
-                    guard let self, streamHealthy(lastLineAt: self.lastStreamLine, now: Date()) else { return }
+                    guard let self, streamHealthy(lastLineAt: self.lastStreamLine, now: Date()) else { watchdogTripped(); return }
                 }
             }
             await group.next()
