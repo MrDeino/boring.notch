@@ -4,8 +4,9 @@ import Foundation
 //  - Multi-select rows read "N. [ ] label" / "N. [✔] label". The digit N toggles row N (cursor stays put);
 //    Enter toggles the highlighted row. "Type something" is a checkbox row too (digit focuses its text input).
 //  - Tab moves to the NEXT question chip (selections kept) and, from the last question, to the review step.
-//    Tab on the review step does nothing (no wrap). Left/Right/Shift-Tab are not allowed keys, so
-//    only forward chips can be reached: distance d = d x Tab.
+//    Tab on the review step does nothing (no wrap). Shift-Tab (BTab) and Left both go to the
+//    PREVIOUS chip with ticks kept (also from the review step; Right = Tab). The notch uses BTab:
+//    d chips ahead = d x Tab, d chips back = d x BTab.
 //  - There is no Submit key on a multi-select question: Tab is "done, next". A chip turns ☒ as soon as
 //    one box is ticked, so ☒ does not mean "left this question".
 //  - Review step: no "Esc to cancel" footer; "Review your answers", answer summary, "Ready to submit your

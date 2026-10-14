@@ -46,6 +46,16 @@ private func scanPrompt(_ screen: String, window: Int) -> (lines: [String], opti
     return (lines, best, bestIdx, bestMarked)
 }
 
+/// Observed in Claude Code 2.1.299: Shift-Tab (BTab) moves to the previous question chip, ticks kept,
+/// and also leaves the review step. Left does the same; BTab chosen since it never moves a cursor.
+let promptBackKey = "BTab"
+
+/// Keys to move from chip `cur` to chip `k` (Tab forward, BTab back); nil when equal or forward from review.
+func tabKeys(from cur: Int, to k: Int, review: Bool) -> [String]? {
+    if k > cur { return review ? nil : Array(repeating: "Tab", count: k - cur) }
+    return k < cur ? Array(repeating: promptBackKey, count: cur - k) : nil
+}
+
 struct PromptCardOption: Equatable {
     enum Role: Equatable { case normal, deny, freeText, chat }
     let number: Int

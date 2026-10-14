@@ -140,10 +140,10 @@ final class PromptCardController: ObservableObject {
     /// Multi-select has no Submit key: Tab is "done, next" (and from the last question lands on the review step).
     func next(displayed: PromptCard) { answer(["Tab"], pressed: -1, displayed: displayed) }
 
-    /// Forward chips only: Left/Shift-Tab are not allowed keys. d chips ahead = d x Tab.
+    /// d chips ahead = d x Tab, d chips back = d x BTab (see tabKeys).
     func goTab(_ k: Int, displayed: PromptCard) {
-        guard let cur = displayed.currentTab, k > cur, !displayed.review else { return }
-        answer(Array(repeating: "Tab", count: k - cur), pressed: nil, displayed: displayed)
+        guard let cur = displayed.currentTab, let keys = tabKeys(from: cur, to: k, review: displayed.review) else { return }
+        answer(keys, pressed: nil, displayed: displayed)
     }
 
     func escape(displayed: PromptCard) {
@@ -462,7 +462,7 @@ private struct QuestionCard: View {
         HStack(spacing: 6) {
             ForEach(Array(card.tabs.enumerated()), id: \.offset) { k, tab in
                 let current = k == card.currentTab
-                let reachable = !card.review && k > (card.currentTab ?? k)
+                let reachable = k != card.currentTab && tabKeys(from: card.currentTab ?? k, to: k, review: card.review) != nil
                 Button { ctl.goTab(k, displayed: card) } label: {
                     Text((tab.done ? "\u{2713} " : "") + tab.label).font(OT.F.meta)
                         .foregroundStyle(current ? OT.C.text : OT.C.text5)

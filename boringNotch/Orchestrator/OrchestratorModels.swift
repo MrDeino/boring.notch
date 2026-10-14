@@ -94,12 +94,24 @@ func stripRuns(_ runs: [OrchestratorRun], limit: Int) -> [OrchestratorRun] {
 
 enum OrchestratorPost: Equatable {
     case text(String), key(String), start, stop
+    /// POST /api/notes: raw full text (not JSON).
+    case notes(String)
 
-    static let allowedKeys: Set<String> = ["Enter", "Escape", "Up", "Down", "Tab", "C-u", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+    static let allowedKeys: Set<String> = ["Enter", "Escape", "Up", "Down", "Left", "Right", "Tab", "BTab", "C-u", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
     /// nil when the input would be rejected by the server (empty text, unknown key).
     func request(base: URL) -> URLRequest? {
         let path: String, body: [String: String]
+        if case .notes(let s) = self {
+            let data = Data(s.utf8)
+            guard data.count <= 1_000_000 else { return nil } // serve destroys larger bodies
+            var r = URLRequest(url: base.appendingPathComponent("api/notes"))
+            r.httpMethod = "POST"
+            r.setValue("1", forHTTPHeaderField: "x-orch")
+            r.setValue("text/plain; charset=utf-8", forHTTPHeaderField: "Content-Type")
+            r.httpBody = data
+            return r
+        }
         switch self {
         case .text(let s):
             guard !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
@@ -109,6 +121,7 @@ enum OrchestratorPost: Equatable {
             path = "api/chat"; body = ["key": k]
         case .start: path = "api/chat/start"; body = [:]
         case .stop: path = "api/chat/stop"; body = [:]
+        case .notes: return nil
         }
         var r = URLRequest(url: base.appendingPathComponent(path))
         r.httpMethod = "POST"
@@ -125,4 +138,11 @@ func sendOrchestratorPost(_ post: OrchestratorPost, base: URL, session: URLSessi
     let (_, resp) = try await session.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
     return http.statusCode
+}
+
+/// GET /api/notes (text/plain). Throws unless HTTP 200 so a failed load is never mistaken for empty notes.
+func fetchOrchestratorNotes(base: URL, session: URLSession) async throws -> String {
+    let (data, resp) = try await session.data(for: URLRequest(url: base.appendingPathComponent("api/notes")))
+    guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
+    return String(decoding: data, as: UTF8.self)
 }

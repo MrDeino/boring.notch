@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.299
+▝▜██████▀  Opus 5.5 (1M context) · Claude Max
+ ▝▝   ▝▝   /private/var/folders/fb/mb8cnk7s78zb5zxh_d3qjqvc0000gn/T/tmp.HyZsrNd9LI
+
+
+❯ Use the AskUserQuestion tool once with exactly 3 questions: Q1 header Fruit, multiSelect true, options apple banana cherry; Q2 header Color, options red blue; Q3 header Size, options small large.   
+  Do nothing else.                                                                                                                                                                                      
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Fruit  ☐ Color  ☐ Size  ✔ Submit  →                                                                                                                                                                
+
+Which fruits do you want?
+
+❯ 1. [✔] apple
+         Apple                       
+  2. [ ] banana
+         Banana             
+  3. [ ] cherry     
+         Cherry                                                                                                                                                                                         
+  4. [ ] Type something      
+     Next
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                        
+
+
+
+                                        
+                                                     
