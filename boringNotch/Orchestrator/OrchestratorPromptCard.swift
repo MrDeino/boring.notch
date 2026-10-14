@@ -66,12 +66,16 @@ final class PromptCardController: ObservableObject {
         await OrchestratorManager.shared.refresh()
         let m = OrchestratorManager.shared
         guard let cur = m.prompt, promptIdentity(cur) == promptIdentity(displayed), !m.optionsLocked else {
-            flash = true
-            try? await Task.sleep(for: .milliseconds(250))
-            flash = false
+            await flashStale()
             return false
         }
         return true
+    }
+
+    private func flashStale() async {
+        flash = true
+        try? await Task.sleep(for: .milliseconds(250))
+        flash = false
     }
 
     func choose(_ n: Int, displayed: PromptCard) {
@@ -188,16 +192,25 @@ final class PromptCardController: ObservableObject {
         Task {
             defer { submitting = false }
             let m = OrchestratorManager.shared
-            await m.refresh()
-            guard m.prompt == displayed else { return } // R-04 guard, before the number press only
+            guard await stillCurrent(displayed) else { return }
             // ponytail: number-then-text acceptance is UAT A1; upgrade = awaitable pressOption in the manager.
             m.pressOption(ft.number)
             try? await Task.sleep(for: .milliseconds(350))
-            for _ in 0..<40 where m.sending { try? await Task.sleep(for: .milliseconds(50)) }
-            for _ in 0..<4 {
-                if await m.sendText(t) { freeText = ""; release(); return }
-                try? await Task.sleep(for: .milliseconds(250))
+            // Only type once the select list has left the screen; if the press was dropped, digits and
+            // Enter would answer the list. refresh() can return early mid-poll, so re-check a few times.
+            var landed = false
+            for _ in 0..<6 {
+                var i = 0
+                while m.sending && i < 40 { try? await Task.sleep(for: .milliseconds(50)); i += 1 }
+                if !m.sending { await m.refresh() }
+                // A failed GET also nils the prompt, so offline never counts as landed.
+                if !m.offline, m.prompt.map(promptIdentity) != promptIdentity(displayed) { landed = true; break }
+                try? await Task.sleep(for: .milliseconds(200))
             }
+            // One POST only: a timeout may still have typed the text, and 409 means chat is gone.
+            guard landed, !m.sending, await m.sendText(t) else { await flashStale(); return }
+            freeText = ""
+            release()
         }
     }
 }
