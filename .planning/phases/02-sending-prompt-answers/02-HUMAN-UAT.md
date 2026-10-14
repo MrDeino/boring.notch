@@ -24,7 +24,7 @@ expected: Type a line, press Enter: it appears in the chat tail within ~2s, the 
 result: pending
 
 ### 3. Keep-open
-expected: While typing, the notch stays open while the pointer is over it. Moving the pointer off the Orchestrator area (or the field losing focus) ends typing and the notch closes normally; keystrokes then go to your app, never into the box. After Enter, Esc or clicking outside, it closes normally again (never stuck open).
+expected: While typing, the notch stays open even if the pointer moves off it. Enter, Esc in the box, or clicking anywhere outside the notch ends typing; the notch then closes normally (never stuck open) and keystrokes go back to your app, never into the box.
 result: pending
 
 ### 4. Prompt buttons

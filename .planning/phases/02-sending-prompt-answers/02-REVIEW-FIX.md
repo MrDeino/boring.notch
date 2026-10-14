@@ -34,6 +34,7 @@ The manager holds a `weak keyboardWindow`. It is set by `beginTyping(in:)` and c
 **Files:** `boringNotch/Orchestrator/OrchestratorView.swift`
 **Commit:** a8cbf77
 Typing now ends when the field loses focus, and when the pointer leaves the Orchestrator view (`onHover(false)`). When typing ends, the interaction ends, which posts `sharingDidFinish`, so the notch closes normally once the pointer has left. There is no longer a "keep open while the pointer is away" window in which stray keystrokes or Enter could reach the chat. Logic fix: requires human verification (UAT 3).
+**Orchestrator amendment:** the `onHover(false)` part was removed afterwards. It broke INT-06 (the notch must stay open while typing even if the pointer moves away). Clicking outside already makes the panel resign key, which ends typing, and so does focus loss.
 
 ### WR-04: `detectPrompt` can match a numbered draft in the input box
 **Files:** `boringNotch/Orchestrator/OrchestratorModels.swift`, `boringNotch/Orchestrator/Tests/main.swift`
