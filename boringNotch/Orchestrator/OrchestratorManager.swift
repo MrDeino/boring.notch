@@ -124,7 +124,7 @@ final class OrchestratorManager: ObservableObject {
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.refresh()
-                let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning, offline: self.offline)
+                let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning || self.runs.contains { $0.state == "running" }, offline: self.offline)
                 try? await Task.sleep(for: .seconds(secs))
             }
         }

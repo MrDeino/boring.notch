@@ -2,7 +2,7 @@
 import Foundation
 import CoreGraphics
 
-/// Poll cadence in seconds: 2 open, 3 closed while the chat runs, else 10.
+/// Poll cadence in seconds: 2 open, 3 closed while the chat or a run is going, else 10.
 func pollInterval(notchOpen: Bool, chatRunning: Bool, offline: Bool = false) -> TimeInterval {
     offline ? 10 : notchOpen ? 2 : chatRunning ? 3 : 10
 }
@@ -180,18 +180,30 @@ struct RunsBaseline {
     }
 }
 
-func finishedTransition(old: [String: String]?, new: [OrchestratorRun]) -> OrchestratorRun? {
-    guard let old else { return nil }
-    let hits = new.filter { $0.state == "done" && ["running", "stuck"].contains(old[$0.id ?? ""] ?? "") }
-    return hits.max { (parseRunDate($0.startedAt) ?? .distantPast) < (parseRunDate($1.startedAt) ?? .distantPast) }
+/// Every run that went running/stuck -> done/failed since the baseline, oldest start first, so each gets its own wing in turn.
+func finishedTransitions(old: [String: String]?, new: [OrchestratorRun]) -> [OrchestratorRun] {
+    guard let old else { return [] }
+    return new.filter { ["done", "failed"].contains($0.state ?? "") && ["running", "stuck"].contains(old[$0.id ?? ""] ?? "") }
+        .sorted { (parseRunDate($0.startedAt) ?? .distantPast) < (parseRunDate($1.startedAt) ?? .distantPast) }
 }
 
-enum WingKind: Equatable { case working, needsYou(String), finished(String) }
+/// working = agents at work (chat + running runs).
+enum WingKind: Equatable { case working(Int), needsYou(String), finished(String, failed: Bool) }
 
-func wingKind(needsYou: Bool, needsLabel: String, finishedProject: String?, working: Bool) -> WingKind? {
+func wingKind(needsYou: Bool, needsLabel: String, finished: (project: String, failed: Bool)?, workingCount: Int) -> WingKind? {
     if needsYou { return .needsYou(needsLabel) }
-    if let p = finishedProject { return .finished(p) }
-    return working ? .working : nil
+    if let f = finished { return .finished(f.project, failed: f.failed) }
+    return workingCount > 0 ? .working(workingCount) : nil
+}
+
+func workingCount(chatWorking: Bool, runs: [OrchestratorRun]) -> Int {
+    (chatWorking ? 1 : 0) + runs.filter { $0.state == "running" }.count
+}
+
+/// Elapsed of the longest-working agent: the chat's own timer or a running run's startedAt.
+func longestWorking(chatElapsed: TimeInterval?, runs: [OrchestratorRun], now: Date) -> TimeInterval? {
+    let r = runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt).map { now.timeIntervalSince($0) } }
+    return (r + [chatElapsed].compactMap { $0 }).max()
 }
 
 func wingLabel(promptTitle: String?, waitingDenials: [String]?) -> String {
@@ -201,12 +213,12 @@ func wingLabel(promptTitle: String?, waitingDenials: [String]?) -> String {
 }
 
 // ponytail: character-count width estimate for 11pt text, upgrade = measure with NSFont if UAT shows clipping.
-func wingSideWidth(_ kind: WingKind, notchWidth: CGFloat) -> CGFloat {
+func wingSideWidth(_ kind: WingKind, notchWidth: CGFloat, elapsed: String = "") -> CGFloat {
     let outer: CGFloat, est: CGFloat
     switch kind {
-    case .working: outer = 285; est = 0
+    case .working(let n): outer = 285; est = CGFloat(elapsed.count) * 6.7 + (n > 1 ? 18 : 0)
     case .needsYou(let l): outer = 305; est = CGFloat(l.count) * 6.5 + 8
-    case .finished(let p): outer = 285; est = CGFloat(p.count) * 6.2
+    case .finished(let p, _): outer = 285; est = CGFloat(p.count) * 6.2
     }
     return max(((outer - 28 - notchWidth) / 2), est).rounded(.up)
 }

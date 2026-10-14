@@ -102,3 +102,4 @@ Resume file: None
 | 261014-pug | Multi-select/tabbed questions, optimistic prompt answers with retry note, expanded bubbles + Edit diff card, no swipe-close on Orchestrator tab, heavier marker dot | 2026-10-14 | .planning/quick/261014-pug-question-prompts-optimistic-polish |
 | 261014-qei | Optimistic message sending: instant composer clear, ordered send queue, dimmed pending rows reconciled from blocks, Not sent with Retry/Edit | 2026-10-14 | .planning/quick/261014-qei-optimistic-message-sending |
 | 261014-r8w | Notepad drop-down in header (GET/POST /api/notes, 1s autosave, Saved/Couldn't save), question back-navigation via BTab | 2026-10-14 | .planning/quick/261014-r8w-notepad-dropdown-and-question-back-navig |
+| 261014-q90 | Wings: runs + chat working (elapsed, count), queued done/failed, paused music yields, music-playing ✻/✓ | 2026-10-14 | .planning/quick/261014-q90-live-activity-wings |

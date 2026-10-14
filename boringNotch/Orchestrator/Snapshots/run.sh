@@ -3,6 +3,7 @@
 # Needs one app build first (for the Defaults module): xcodebuild ... -derivedDataPath "${DD:-/tmp/notch-dd}" build
 # Usage: boringNotch/Orchestrator/Snapshots/run.sh [--image-renderer]   ->  /tmp/notch-snapshots/*.png
 #        boringNotch/Orchestrator/Snapshots/run.sh --transition   ->  top-edge check over grow/collapse/stock-open steps
+#        boringNotch/Orchestrator/Snapshots/run.sh --closed       ->  closed-notch wings + music indicator (closed-*.png)
 #        boringNotch/Orchestrator/Snapshots/run.sh --hittest      ->  clicks composer/segment/capsule in the real tab (no POSTs)
 #        Redirect output to a file (> log) rather than piping: --hittest can leave a pipe open after it exits.
 set -e

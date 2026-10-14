@@ -148,6 +148,7 @@ struct Snap {
     static func main() async {
         if CommandLine.arguments.contains("--transition") { await transition(); return }
         if CommandLine.arguments.contains("--hittest") { await hitTest(); return }
+        if CommandLine.arguments.contains("--closed") { await closed(); return }
         let useImageRenderer = CommandLine.arguments.contains("--image-renderer")
         let out = URL(fileURLWithPath: "/tmp/notch-snapshots")
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
