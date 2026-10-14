@@ -216,7 +216,7 @@ class BoringViewModel: NSObject, ObservableObject {
     if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
             coordinator.currentView = .shelf
         } else if !coordinator.openLastTabByDefault {
-            coordinator.currentView = .home
+            coordinator.currentView = coordinator.alwaysShowTabs ? .orchestrator : .home
         }
     }
 

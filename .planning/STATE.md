@@ -82,3 +82,9 @@ None yet.
 Last session: 2026-10-14T00:41:00.354Z
 Stopped at: Roadmap created; next `/gsd-plan-phase 1`
 Resume file: None
+
+### Quick Tasks Completed
+
+| # | Description | Date | Directory |
+|---|---|---|---|
+| 261014-f03 | Orchestrator tab default, usage in header, roomier chat/runs | 2026-10-14 | .planning/quick/261014-f03-orch-tab-default-usage-topbar |

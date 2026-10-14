@@ -16,11 +16,8 @@ struct OrchestratorView: View {
             } else {
                 HStack(alignment: .top, spacing: 12) {
                     chat
-                    VStack(alignment: .leading, spacing: 10) {
-                        usageBars
-                        runsStrip
-                    }
-                    .frame(width: 200, alignment: .topLeading)
+                    runsStrip
+                        .frame(width: 200, alignment: .topLeading)
                 }
             }
         }
@@ -34,7 +31,7 @@ struct OrchestratorView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(alignment: .leading, spacing: 1) {
-                ForEach(Array(chatTail(screen: manager.screen, maxLines: 8).enumerated()), id: \.offset) { _, line in
+                ForEach(Array(chatTail(screen: manager.screen, maxLines: 10).enumerated()), id: \.offset) { _, line in
                     Text(verbatim: line)
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.85))
@@ -46,37 +43,9 @@ struct OrchestratorView: View {
         }
     }
 
-    private var usageBars: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            usageRow("5h", manager.usage?.fiveHour) { $0.formatted(date: .omitted, time: .shortened) }
-            usageRow("7d", manager.usage?.sevenDay) { $0.formatted(.dateTime.weekday(.abbreviated).hour().minute()) }
-        }
-    }
-
-    private func usageRow(_ title: String, _ w: UsageWindow?, reset: (Date) -> String) -> some View {
-        let pct = w?.usedPercentage
-        let frac = min(max((pct ?? 0) / 100, 0), 1)
-        return VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(verbatim: title).foregroundStyle(.white)
-                Text(verbatim: pct.map { "\(Int($0.rounded()))%" } ?? "—").foregroundStyle(.gray)
-                Spacer()
-                Text(verbatim: "resets " + (w?.resetsDate.map(reset) ?? "—")).foregroundStyle(.gray)
-            }
-            .font(.system(size: 10))
-            Capsule().fill(Color(nsColor: .secondarySystemFill)).frame(height: 4)
-                .overlay(alignment: .leading) {
-                    GeometryReader { g in
-                        Capsule().fill(frac >= 0.8 ? Color.orange : Color.white.opacity(0.8))
-                            .frame(width: g.size.width * frac)
-                    }
-                }
-        }
-    }
-
     private var runsStrip: some View {
         VStack(alignment: .leading, spacing: 3) {
-            let runs = stripRuns(manager.runs, limit: 3)
+            let runs = stripRuns(manager.runs, limit: 6)
             if runs.isEmpty {
                 Text("no runs").font(.system(size: 10)).foregroundStyle(.gray)
             }
@@ -99,6 +68,36 @@ struct OrchestratorView: View {
         case "waiting": return .orange
         case "failed", "stuck": return .red
         default: return .gray
+        }
+    }
+}
+
+/// Tiny 5h/7d usage in the open-notch header; hover swaps in reset times.
+struct OrchestratorUsageBadge: View {
+    @ObservedObject var manager = OrchestratorManager.shared
+    @State private var hovering = false
+
+    var body: some View {
+        if let u = manager.usage {
+            VStack(alignment: .trailing, spacing: 0) {
+                row("5h", u.fiveHour) { $0.formatted(date: .omitted, time: .shortened) }
+                row("7d", u.sevenDay) { $0.formatted(.dateTime.weekday(.abbreviated).hour().minute()) }
+            }
+            .font(.system(size: 9, weight: .medium, design: .rounded))
+            .monospacedDigit()
+            .padding(.trailing, 4)
+            .onHover { hovering = $0 }
+        }
+    }
+
+    private func row(_ title: String, _ w: UsageWindow?, reset: (Date) -> String) -> some View {
+        let pct = w?.usedPercentage
+        let text = hovering
+            ? (w?.resetsDate.map(reset) ?? "—")
+            : (pct.map { "\(Int($0.rounded()))%" } ?? "—")
+        return HStack(spacing: 3) {
+            Text(verbatim: title).foregroundStyle(.gray)
+            Text(verbatim: text).foregroundStyle((pct ?? 0) >= 80 ? Color.orange : Color.white)
         }
     }
 }
