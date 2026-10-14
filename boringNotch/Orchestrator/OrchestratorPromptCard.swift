@@ -17,6 +17,16 @@ final class PromptCardController: ObservableObject {
     private weak var vm: BoringViewModel?
     private weak var window: NSWindow?
     private var bag = Set<AnyCancellable>()
+    private weak var keyWindow: NSWindow?
+    private var monitor: Any?
+    private var resignObserver: NSObjectProtocol?
+    private var dwell: Task<Void, Never>?
+    private var hovering = false
+    private var mounted = 0
+    @Published var fieldEditing = false
+    @Published var focusField = false
+    @Published var freeText = ""
+    @Published private(set) var submitting = false
 
     private init() {
         OrchestratorManager.shared.$prompt.sink { [weak self] card in
@@ -27,6 +37,7 @@ final class PromptCardController: ObservableObject {
 
     private func promptChanged(_ card: PromptCard?) {
         pressed = nil
+        if card == nil { release() } else if hovering, let w = window { hover(true, window: w) }
         guard card?.kind != .question else { return }
         if raisedByCard, let vm, let window, OrchestratorExpand.shared.level(for: vm) == .expanded {
             OrchestratorExpand.shared.setLevel(.open, vm: vm, window: window)
@@ -64,10 +75,12 @@ final class PromptCardController: ObservableObject {
     }
 
     func choose(_ n: Int, displayed: PromptCard) {
+        if displayed.items.first(where: { $0.number == n })?.role == .freeText { focusField = true; return }
         Task {
             guard await stillCurrent(displayed) else { return }
             pressed = n
             OrchestratorManager.shared.pressOption(n)
+            release()
         }
     }
 
@@ -75,6 +88,116 @@ final class PromptCardController: ObservableObject {
         Task {
             guard await stillCurrent(displayed) else { return }
             await OrchestratorManager.shared.pressEscape()
+            release()
+        }
+    }
+
+    // MARK: Hover key-take (PRM-04)
+
+    func hover(_ inside: Bool, window w: NSWindow?) {
+        hovering = inside
+        dwell?.cancel()
+        if inside {
+            dwell = Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled, hovering, let w else { return }
+                takeKey(w)
+            }
+        } else {
+            dwell = Task {
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled, !hovering, !fieldEditing else { return }
+                release()
+            }
+        }
+    }
+
+    func takeKey(_ w: NSWindow) {
+        // ponytail: hover-dwell focus take steals keystrokes from the frontmost app while the pointer rests
+        // on the notch; upgrade path is Phase 9's global option-return / option-escape.
+        let m = OrchestratorManager.shared
+        guard keyWindow == nil, m.prompt != nil, !m.wantsKeyboard else { return }
+        m.beginTyping(in: w)
+        keyWindow = w
+        OrchestratorKeyGate.activate()
+        w.makeKey()
+        DispatchQueue.main.async { if self.keyWindow === w { w.makeKey() } }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            self?.handle(e) ?? e
+        }
+        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: w, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.release(refocus: false) }
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            if keyWindow === w, !w.isKeyWindow { release() }
+        }
+    }
+
+    func release(refocus: Bool = true) {
+        guard let w = keyWindow else { return }
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = nil
+        fieldEditing = false
+        let wasKey = w.isKeyWindow
+        w.makeFirstResponder(nil)
+        OrchestratorManager.shared.endTyping()
+        keyWindow = nil
+        OrchestratorKeyGate.restore(refocus: refocus && wasKey)
+    }
+
+    private func handle(_ e: NSEvent) -> NSEvent? {
+        guard let card = shown else { return e }
+        let combo = !e.modifierFlags.intersection([.command, .control, .option]).isEmpty
+        let k = promptKey(keyCode: e.keyCode, characters: e.charactersIgnoringModifiers, commandLike: combo,
+                          editingText: fieldEditing || NSApp.keyWindow?.firstResponder is NSText,
+                          kind: card.kind, numbers: Set(card.items.map(\.number)))
+        let nums = card.items.map(\.number)
+        switch k {
+        case .pass: return e
+        case .answer(let n): choose(n, displayed: card)
+        case .escape: escape(displayed: card)
+        case .up: highlighted = moveHighlight(highlighted, by: -1, in: nums)
+        case .down: highlighted = moveHighlight(highlighted, by: 1, in: nums)
+        case .select: if let h = highlighted { choose(h, displayed: card) }
+        }
+        return nil
+    }
+
+    func appeared() { mounted += 1 }
+    func disappeared() {
+        mounted -= 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if self.mounted == 0 { self.hovering = false; self.dwell?.cancel(); self.release() }
+        }
+    }
+
+    // MARK: Free text (PRM-05)
+
+    func requestField(window w: NSWindow?) {
+        if keyWindow == nil, let w { takeKey(w) }
+        focusField = true
+    }
+
+    func submitFreeText(displayed: PromptCard) {
+        let t = freeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, !submitting, let ft = displayed.items.first(where: { $0.role == .freeText }) else { return }
+        submitting = true
+        Task {
+            defer { submitting = false }
+            let m = OrchestratorManager.shared
+            await m.refresh()
+            guard m.prompt == displayed else { return } // R-04 guard, before the number press only
+            // ponytail: number-then-text acceptance is UAT A1; upgrade = awaitable pressOption in the manager.
+            m.pressOption(ft.number)
+            try? await Task.sleep(for: .milliseconds(350))
+            for _ in 0..<40 where m.sending { try? await Task.sleep(for: .milliseconds(50)) }
+            for _ in 0..<4 {
+                if await m.sendText(t) { freeText = ""; release(); return }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
         }
     }
 }
@@ -108,12 +231,20 @@ struct OrchestratorPromptCard: View {
         }
         .offset(y: shownIn ? 0 : 12)
         .opacity(shownIn ? 1 : 0)
-        .onAppear { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { shownIn = true } }
+        .onAppear { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { shownIn = true }; ctl.appeared() }
+        .onDisappear { ctl.disappeared() }
+        .onHover { ctl.hover($0, window: anchor.window) }
+        .environment(\.promptWindow, anchor)
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: manager.prompt)
     }
 }
 
 // MARK: - Shared pieces
+
+private struct PromptWindowKey: EnvironmentKey { static let defaultValue = NSView() }
+private extension EnvironmentValues {
+    var promptWindow: NSView { get { self[PromptWindowKey.self] } set { self[PromptWindowKey.self] = newValue } }
+}
 
 private let darkDesc = Color(red: 0x48 / 255, green: 0x48 / 255, blue: 0x4A / 255) // #48484A, not an OT token
 
@@ -201,6 +332,8 @@ private struct QuestionCard: View {
     let card: PromptCard
     @ObservedObject private var manager = OrchestratorManager.shared
     @ObservedObject private var ctl = PromptCardController.shared
+    @Environment(\.promptWindow) private var anchor
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -261,7 +394,7 @@ private struct QuestionCard: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
-            Spacer(minLength: 0) // 06-03 puts "Something else…" here
+            if let ft = card.items.first(where: { $0.role == .freeText }) { freeField(ft) } else { Spacer(minLength: 0) }
             if let chat = card.items.first(where: { $0.role == .chat }) {
                 footPill("Chat about this", key: "\(chat.number)") { ctl.choose(chat.number, displayed: card) }
                     .disabled(manager.optionsLocked || manager.sending)
@@ -269,6 +402,32 @@ private struct QuestionCard: View {
             footPill(nil, key: "esc") { ctl.escape(displayed: card) }
                 .disabled(manager.sending)
         }
+    }
+
+    private func freeField(_ ft: PromptCardOption) -> some View {
+        HStack(spacing: 8) {
+            ZStack {
+                TextField("Something else…", text: $ctl.freeText,
+                          prompt: Text("Something else…").foregroundColor(OT.C.text6))
+                    .textFieldStyle(.plain).font(OT.F.ui).foregroundStyle(.white)
+                    .focused($fieldFocused)
+                    .onSubmit { ctl.submitFreeText(displayed: card) }
+                    .onExitCommand { fieldFocused = false }
+                    .allowsHitTesting(ctl.fieldEditing)
+                if !ctl.fieldEditing {
+                    Color.clear.contentShape(Rectangle()).onTapGesture { ctl.requestField(window: anchor.window) }
+                }
+            }
+            PromptKeycap(text: "\(ft.number)", light: false)
+        }
+        .padding(.leading, 12).padding(.trailing, 7)
+        .frame(maxWidth: .infinity).frame(height: 28)
+        .background(OT.C.raised, in: Capsule())
+        .disabled(manager.optionsLocked && !ctl.submitting)
+        .onChange(of: ctl.focusField) { _, f in
+            if f { DispatchQueue.main.async { fieldFocused = true }; ctl.focusField = false }
+        }
+        .onChange(of: fieldFocused) { _, f in ctl.fieldEditing = f }
     }
 
     private func footPill(_ title: String?, key: String, _ action: @escaping () -> Void) -> some View {
