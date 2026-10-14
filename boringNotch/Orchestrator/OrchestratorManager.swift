@@ -23,6 +23,7 @@ final class OrchestratorManager: ObservableObject {
     @Published var notesOpen = false
     @Published private(set) var prompt: PromptCard? = nil
     @Published private(set) var liveStatus: LiveStatus? = nil
+    @Published private(set) var chatLive: Bool? = nil
     var capsuleStatus: CapsuleState {
         capsuleState(hasLoaded: hasLoaded, offline: offline, chatRunning: chatRunning, needsAttention: needsAttention, working: liveStatus != nil)
     }
@@ -179,8 +180,10 @@ final class OrchestratorManager: ObservableObject {
         if promptOptions != po { promptOptions = po }
         let pc = running ? detectPromptCard(screen: s) : nil
         if prompt != pc { prompt = pc }
-        let ls = running ? parseLiveStatus(screen: s) : nil
+        let ls = running ? liveStatusFor(screen: s, live: r.live) : nil
         if liveStatus != ls { liveStatus = ls }
+        let cl = running ? r.live : nil
+        if chatLive != cl { chatLive = cl }
     }
 
     private func applyOffline() {
@@ -189,6 +192,7 @@ final class OrchestratorManager: ObservableObject {
         if !promptOptions.isEmpty { promptOptions = [] }
         if prompt != nil { prompt = nil }
         if liveStatus != nil { liveStatus = nil }
+        if chatLive != nil { chatLive = nil }
         statusMenuOpen = false
         notesOpen = false
     }

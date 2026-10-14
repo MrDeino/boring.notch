@@ -355,7 +355,7 @@ struct OrchestratorChatView: View {
     private var fallbackLines: [String] {
         chatTail(screen: manager.screen, maxLines: maxRows).filter {
             guard let c = $0.trimmingCharacters(in: .whitespaces).first else { return true }
-            return !"✻✢✳✶✽✺✹".contains(c)
+            return !"✻✢✳✶✽✺✹".contains(c) && parseLiveStatus(screen: $0) == nil
         }
     }
 
@@ -772,7 +772,7 @@ private struct ChatBlockRow: View {
     }
 }
 
-/// "✻ Working · m:ss  esc to interrupt". Elapsed ticks each second between polls; the accent text shimmers.
+/// "✻ Verb · m:ss · ↓ tokens  esc to interrupt". Elapsed ticks each second between polls; the accent text shimmers.
 private struct OrchestratorLiveStatusRow: View {
     let status: LiveStatus
     @State private var anchor: (base: TimeInterval, at: Date) = (0, Date())
@@ -792,9 +792,12 @@ private struct OrchestratorLiveStatusRow: View {
     private func reset() { anchor = (status.elapsed ?? 0, Date()) }
 
     private func label(_ now: Date) -> some View {
-        let t = status.elapsed == nil ? "✻ Working"
-            : "✻ Working · " + formatElapsed(anchor.base + now.timeIntervalSince(anchor.at))
-        let text = Text(verbatim: t).font(OT.F.meta).foregroundStyle(OT.C.claude)
+        var verb = status.text
+        if verb.hasSuffix("…") { verb.removeLast() } else if verb.hasSuffix("...") { verb.removeLast(3) }
+        var t = "✻ " + (verb.isEmpty ? "Working" : verb)
+        if status.elapsed != nil { t += " · " + formatElapsed(anchor.base + now.timeIntervalSince(anchor.at)) }
+        if let k = status.tokens { t += " · " + k }
+        let text = Text(verbatim: t).font(OT.F.meta).foregroundStyle(OT.C.claude).lineLimit(1)
         return text.overlay {
             if !reduceMotion {
                 TimelineView(.animation(minimumInterval: 1.0 / 30)) { c in

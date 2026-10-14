@@ -89,6 +89,7 @@ runQuickQeiTests()
 runQuickR8wTests()
 runQuickRm9Tests()
 runQuickS3qTests()
+runQuickTmqTests()
 if ProcessInfo.processInfo.environment["ORCH_NOTES_MOCK"] != nil { await runQuickR8wMock() }
 if ProcessInfo.processInfo.environment["ORCH_IMAGE_MOCK"] != nil { await runQuickRm9Mock() }
 print("OK")

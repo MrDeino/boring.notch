@@ -43,16 +43,19 @@ enum ExpandLevel: Equatable { case open, expanded, terminal }
 struct LiveStatus: Equatable {
     let text: String
     let elapsed: TimeInterval?
+    var tokens: String? = nil
 }
 
-/// Spinner line of a working Claude Code, e.g. "✻ Working… (41s · ↑ 1.2k tokens · esc to interrupt)".
-// ponytail: working-line format is assumed (RESEARCH A1); degrades to idle if Claude Code drops "esc to interrupt".
+/// Spinner line of a working Claude Code: "✻ Working… (41s · ↑ 1.2k tokens · esc to interrupt)" (old)
+/// or "· Waddling… (35s · ↓ 2.3k tokens)" (current).
+// ponytail: both formats are assumed; serve's `live` flag (liveStatusFor) covers what the parser misses.
 func parseLiveStatus(screen: String) -> LiveStatus? {
     let line = #/^[ \u{a0}]*[✻✢✳✶✽✺✹·*][ \u{a0}]+(.+?)[ \u{a0}]*\((.*)\)[ \u{a0}]*$/#
     let part = #/(\d+)\s*([hms])/#
+    let tok = #/[↑↓]\s*[\d.,]+k?\s*tokens/#
     let lines = screen.split(separator: "\n", omittingEmptySubsequences: false).suffix(30)
     for l in lines.reversed() {
-        guard let m = try? line.wholeMatch(in: String(l)), m.2.contains("esc to interrupt") else { continue }
+        guard let m = try? line.wholeMatch(in: String(l)) else { continue }
         var elapsed: TimeInterval?
         if let first = m.2.split(separator: "·").first {
             let toks = first.matches(of: part)
@@ -63,9 +66,21 @@ func parseLiveStatus(screen: String) -> LiveStatus? {
                 }
             }
         }
-        return LiveStatus(text: String(m.1), elapsed: elapsed)
+        let tokens = m.2.split(separator: "·").map { $0.trimmingCharacters(in: .whitespaces) }.first { (try? tok.wholeMatch(in: $0)) != nil }
+        let verb = String(m.1)
+        guard m.2.contains("esc to interrupt") || ((verb.hasSuffix("…") || verb.hasSuffix("...")) && (elapsed != nil || tokens != nil)) else { continue }
+        return LiveStatus(text: verb, elapsed: elapsed, tokens: tokens)
     }
     return nil
+}
+
+/// Serve's `live` flag wins when present; without it, screen parsing only.
+func liveStatusFor(screen: String, live: Bool?) -> LiveStatus? {
+    switch live {
+    case false: return nil
+    case true: return parseLiveStatus(screen: screen) ?? LiveStatus(text: "Working…", elapsed: nil)
+    default: return parseLiveStatus(screen: screen)
+    }
 }
 
 func formatElapsed(_ seconds: TimeInterval) -> String {

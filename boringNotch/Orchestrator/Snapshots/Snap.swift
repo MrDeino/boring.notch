@@ -240,6 +240,9 @@ struct Snap {
             Scene(name: "41-permission-context-open", chat: chat(fixture("phase6-edit.txt")), blocks: editBlocks),
             Scene(name: "42-question-context-open", chat: chat(longQuestion), blocks: questionBlocks),
             Scene(name: "36-permission-dismissed-open", chat: chat(fixture("phase6-edit.txt")), blocks: markerBlocks, dismissed: true),
+            Scene(name: "43-chat-live-new", chat: chat(fixture("working-new.txt")), blocks: shortBlocks),
+            Scene(name: "44-expanded-live-new", chat: chat(fixture("working-new.txt")), blocks: markerBlocks, expanded: true),
+            Scene(name: "45-chat-live-flag-only", chat: ChatResponse(running: true, screen: "", live: true), blocks: markerBlocks),
         ]
 
         let savedRail = Defaults[.orchRunsRailCollapsed]

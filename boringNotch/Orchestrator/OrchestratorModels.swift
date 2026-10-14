@@ -5,6 +5,17 @@ import AppKit
 struct ChatResponse: Decodable {
     let running: Bool?
     let screen: String?
+    var live: Bool? = nil
+}
+
+extension ChatResponse {
+    private enum CodingKeys: String, CodingKey { case running, screen, live }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        running = try c.decodeIfPresent(Bool.self, forKey: .running)
+        screen = try c.decodeIfPresent(String.self, forKey: .screen)
+        live = try? c.decodeIfPresent(Bool.self, forKey: .live) // lossy: a wrong-typed flag must not fail the chat decode
+    }
 }
 
 /// Last `maxLines` non-blank conversation lines of a terminal screen, trailing spaces/NBSP trimmed.
