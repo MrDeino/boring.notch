@@ -191,3 +191,43 @@ func diffRows(_ hunks: [ChatDiffHunk]) -> [DiffRow] {
     }
     return rows
 }
+
+// MARK: - Optimistic sends
+
+struct PendingMessage: Equatable, Identifiable {
+    enum State { case queued, sending, sent, failed }
+    let id: Int
+    let text: String
+    var state: State
+    var sentAt: Date?
+}
+
+func normalizeChatText(_ s: String) -> String {
+    s.split(whereSeparator: { $0.isWhitespace || $0 == "\u{a0}" }).joined(separator: " ")
+}
+
+func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: Set<String>, now: Date, staleAfter: TimeInterval = 30) -> (pending: [PendingMessage], known: Set<String>) {
+    var known = known
+    var out: [PendingMessage] = []
+    for p in pending {
+        if p.state != .queued {
+            let want = normalizeChatText(p.text)
+            if let b = blocks.last(where: { $0.kind == .user && !known.contains($0.id) && normalizeChatText($0.text ?? "") == want }) {
+                known.insert(b.id)
+                continue
+            }
+            // ponytail: a sent message whose block text differs (e.g. a slash command) is dropped after staleAfter;
+            // upgrade = serve echoing a client id.
+            if p.state == .sent, let t = p.sentAt, now.timeIntervalSince(t) > staleAfter { continue }
+        }
+        out.append(p)
+    }
+    return (out, known)
+}
+
+extension ChatBlock {
+    init(pendingID: String, text: String) {
+        id = pendingID; kind = .user; self.text = text
+        name = nil; target = nil; result = nil; added = nil; removed = nil; diff = nil
+    }
+}
