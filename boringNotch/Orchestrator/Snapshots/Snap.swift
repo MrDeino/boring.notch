@@ -170,6 +170,7 @@ struct Scene {
     var attachments: [Data] = []
     var dismissed = false
     var draft = ""
+    var calm = false // no runs: capsule shows Running (+ ctx)
 }
 
 /// Two-colour test PNG through the real orchestratorPNG path.
@@ -206,6 +207,9 @@ struct Snap {
         let state = (try? JSONDecoder().decode(StateResponse.self, from: Data(fixture("phase7-state.txt").utf8)))
             ?? StateResponse(runs: [], usage: nil)
         func chat(_ screen: String, running: Bool = true) -> ChatResponse { ChatResponse(running: running, screen: screen) }
+        func ctxChat(_ pct: Int) -> ChatResponse {
+            try! JSONDecoder().decode(ChatResponse.self, from: Data(#"{"running":true,"screen":"","live":true,"context":{"percent":\#(pct)}}"#.utf8))
+        }
         let working = fixture("working.txt")
         let shortBlocks = blocks(fixture("phase5-blocks.json"))
 
@@ -266,6 +270,8 @@ struct Snap {
             Scene(name: "43-chat-live-new", chat: chat(fixture("working-new.txt")), blocks: shortBlocks),
             Scene(name: "44-expanded-live-new", chat: chat(fixture("working-new.txt")), blocks: markerBlocks, expanded: true),
             Scene(name: "45-chat-live-flag-only", chat: ChatResponse(running: true, screen: "", live: true), blocks: markerBlocks),
+            Scene(name: "48-capsule-ctx", chat: ctxChat(38), blocks: markerBlocks, calm: true),
+            Scene(name: "49-capsule-ctx-high", chat: ctxChat(86), blocks: markerBlocks, calm: true),
         ]
 
         let savedRail = Defaults[.orchRunsRailCollapsed]
@@ -273,7 +279,7 @@ struct Snap {
         for s in scenes {
             let vm = BoringViewModel()
             let m = OrchestratorManager.shared
-            await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: state, runsBoard: s.runsBoard)
+            await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: s.calm ? StateResponse(runs: [], usage: nil) : state, runsBoard: s.runsBoard)
             OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends, attachments: s.attachments, draft: s.draft)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
             PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending, dismissCurrent: s.dismissed)
