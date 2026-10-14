@@ -21,8 +21,8 @@ final class OrchestratorManager: ObservableObject {
     /// Fed by notch open/close hooks; opening triggers an immediate refresh.
     var notchOpen = false {
         didSet {
+            // Typing teardown is owned by OrchestratorView (close() is blocked while typing).
             if notchOpen && !oldValue { Task { await refresh() } }
-            if !notchOpen { endTyping() }
         }
     }
 
