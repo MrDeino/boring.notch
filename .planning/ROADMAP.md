@@ -221,10 +221,12 @@ Plans:
   4. The input box ghost text uses serve's `{text, suggested}` (from `tmux capture-pane -e`) instead of guessing
   5. The Running capsule shows "ctx N%"; music unaffected
 
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 8 to break down)
+- [ ] 08-01-PLAN.md — serve `input`/`context` in the chat payload: exact ghost text (LIVE-04), ctx N% capsule (LIVE-05), split apply path
+- [ ] 08-02-PLAN.md — SSE `/api/events` consumer with polling fallback and 30 s retry (LIVE-01)
+- [ ] 08-03-PLAN.md — streaming caret (LIVE-02) and ▸ diff frame 12 card (LIVE-03)
 
 **UI hint**: yes
 
@@ -242,10 +244,17 @@ Plans:
   3. ⌥⏎ and ⌥⎋ answer the pending approval globally, without the notch being focused, using a sandbox-safe hotkey API
   4. The panel frame follows content size instead of the fixed `windowSize` plus a separate expand step; music unaffected
 
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 9 to break down)
+**Wave 1**
+- [ ] 09-01-PLAN.md — Approval from serve (`approval` on GET /api/chat + stream) -> frame 00 closed-notch drop-down, Allow/Deny/More… via POST /api/chat {key} behind the freshness gate (APR-01, APR-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 09-02-PLAN.md — Global ⌥⏎/⌥⎋ via KeyboardShortcuts, registered only while pending; 15.0/15.1 ⌃⌥ fallback (APR-03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 09-03-PLAN.md — One sizer: panel window height from vm.notchSize.height (`panelHeight` + `OrchestratorExpand.fit`), top edge pinned, music unchanged (APR-04)
 
 **UI hint**: yes
 
@@ -260,5 +269,5 @@ Plans:
 | 5. 2a Structured Chat | 3/3 | Complete   | 2026-10-14 |
 | 6. 2a Prompt Cards | 3/3 | Complete   | 2026-10-14 |
 | 7. 2a Runs Board, Expand Levels & Wings | 5/5 | Complete   | 2026-10-14 |
-| 8. Phase B Live Data | 0/0 | Not planned | - |
+| 8. Phase B Live Data | 0/3 | Planned | - |
 | 9. Phase B Approvals | 0/0 | Not planned | - |
