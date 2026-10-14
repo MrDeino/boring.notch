@@ -8,10 +8,13 @@ struct ClosedReplica: View {
     @ObservedObject var vm: BoringViewModel
     var music = false
     @ObservedObject var wings = OrchestratorWingsModel.shared
+    @ObservedObject var approvals = OrchestratorApprovalCenter.shared
 
     var body: some View {
         Group {
-            if music {
+            if approvals.approval != nil { // ContentView's branch order: the drop-down wins over music
+                OrchestratorApprovalPanel(onMore: {})
+            } else if music {
                 let side = vm.effectiveClosedNotchHeight - 12
                 HStack(spacing: 0) {
                     RoundedRectangle(cornerRadius: 4).fill(Color.purple).frame(width: side, height: side)
@@ -30,10 +33,10 @@ struct ClosedReplica: View {
         }
         .padding(.horizontal, cornerRadiusInsets.closed.bottom)
         .background(.black)
-        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12))
+        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: approvals.approval != nil ? OT.R.approvalPanel : 12, bottomTrailingRadius: approvals.approval != nil ? OT.R.approvalPanel : 12))
         .overlay { OrchestratorClosedIndicators() }
         .offset(x: music ? 0 : wings.shiftX)
-        .frame(width: 440, height: 56, alignment: .top)
+        .frame(width: approvals.approval != nil ? 520 : 440, height: approvals.approval != nil ? 190 : 56, alignment: .top)
         .overlay(alignment: .top) { // where the hardware notch is
             Rectangle().stroke(Color.red, lineWidth: 1).frame(width: vm.closedNotchSize.width, height: vm.closedNotchSize.height)
         }
@@ -63,14 +66,15 @@ extension Snap {
             await m.snapshotApply(loaded: true, chat: c, state: state(runs))
             try? await Task.sleep(for: .milliseconds(50)) // wings recompute on the next main-queue turn
         }
-        func shot(_ name: String, music: Bool = false, height: CGFloat = 32) async {
+        func shot(_ name: String, music: Bool = false, height: CGFloat = 32, panel: Bool = false) async {
+            let W: CGFloat = panel ? 520 : 440, H: CGFloat = panel ? 190 : 56
             let vm = BoringViewModel()
             vm.notchState = .closed
             vm.closedNotchSize = CGSize(width: 185, height: height)
             let host = NSHostingView(rootView: ClosedReplica(vm: vm, music: music))
-            let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 440, height: 56),
+            let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: W, height: H),
                                   styleMask: .borderless, backing: .buffered, defer: false)
-            host.frame = NSRect(x: 0, y: 0, width: 440, height: 56)
+            host.frame = NSRect(x: 0, y: 0, width: W, height: H)
             window.contentView = host
             try? await Task.sleep(for: .milliseconds(500))
             host.layoutSubtreeIfNeeded()
@@ -82,11 +86,11 @@ extension Snap {
             if !music, let rep = rep0 {
                 func black(_ x: Int) -> Bool { (rep.colorAt(x: x, y: 2)?.usingColorSpace(.deviceRGB)?.brightnessComponent ?? 1) < 0.05 }
                 let xs = (0..<rep.pixelsWide).filter(black)
-                let scale = CGFloat(rep.pixelsWide) / 440
+                let scale = CGFloat(rep.pixelsWide) / W
                 if let a = xs.first, let b = xs.last {
                     let centre = (CGFloat(a) + CGFloat(b + 1)) / 2 / scale
                     let shift = OrchestratorWingsModel.shared.shiftX
-                    print("wings \(name): shift=\(shift) centre=\(abs(centre - (220 + shift)) <= 1 ? "ok" : "off") (\(centre))")
+                    print("wings \(name): shift=\(shift) centre=\(abs(centre - (W / 2 + shift)) <= 1 ? "ok" : "off") (\(centre))")
                 }
             } else if music { print("wings \(name): shift=\(OrchestratorWingsModel.shared.shiftX)") }
             window.contentView = nil
@@ -116,6 +120,21 @@ extension Snap {
         await apply(idle, [r1]); await apply(idle, [run("r1", "notch", "failed", ago: 4320)]); await shot("17-finished-failed-38", height: 38)
         try? await Task.sleep(for: .seconds(4))
         await apply(working, [r1, r2]); await shot("18-working-hour-count-38", height: 38)
+
+        // Phase 9: approval drop-down. Over music, over wings (needs-you), over the bare notch; then back to music.
+        let ap = ChatResponse.approvalFixture
+        await shot("20-music-before", music: true)
+        await apply(ap, []); await shot("21-approval-bare", panel: true)
+        await shot("22-approval-over-music", music: true, panel: true)
+        await apply(try! JSONDecoder().decode(ChatResponse.self, from: Data(#"{"running":true,"screen":"","approval":null}"#.utf8)), [r1]); await shot("23-approval-cleared-working")
+        await shot("24-music-after", music: true)
     }
 }
 
+
+extension ChatResponse {
+    /// GET /api/chat body with a pending approval (shape from the 09-CONTEXT contract).
+    static var approvalFixture: ChatResponse {
+        try! JSONDecoder().decode(ChatResponse.self, from: Data(#"{"running":true,"screen":"","approval":{"id":"a1","tool":"Bash","command":"git -C /Users/mitch/Documents/Claude/orchestrator/worktrees/notch status --short && npm run build -- --verbose","description":"Show status","at":"2026-10-14T09:12:03.000Z"}}"#.utf8))
+    }
+}
