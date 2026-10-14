@@ -188,14 +188,14 @@ Plans:
   4. The rail collapses to the 30px strip (‹ or ⌘\), persists in `Defaults` `orchRunsRailCollapsed`, and re-opens when a run starts waiting unless collapsed this session
   5. The closed notch shows Working / Needs you / Run finished wings and the usage hairline; with music playing the music live activity is unchanged apart from a 7px orange dot; closed polling drops to 3s while the chat runs
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 **Wave 1**
 - [x] 07-01-PLAN.md — OrchestratorRun fields + pure helpers (TDD): elapsed, latest action, waiting question, Ask-in-chat message, sort, pollInterval 3s, nextLevel, expandedHeight, wing kind/width
 
 **Wave 2** *(blocked on 07-01; disjoint files — run ONE AT A TIME, user 2026-10-14: commit-range checks assume serial commits)*
-- [ ] 07-02-PLAN.md — Runs board (frame 05), waiting card with question + Ask in chat (no Allow/Deny), bottom status line
+- [x] 07-02-PLAN.md — Runs board (frame 05), waiting card with question + Ask in chat (no Allow/Deny), bottom status line
 - [ ] 07-03-PLAN.md — Closed-notch wings (frame 00), music dot overlay, corner-dot hide, radius 26 (ContentView: one else-if after music)
 - [ ] 07-04-PLAN.md — Expand level machine, ⌘ shortcut monitor, transcriptTapped → .expanded, framed terminal (frame 10), ⌃ collapse button
 
@@ -259,6 +259,6 @@ Plans:
 | 4. 2a Foundation | 3/3 | Awaiting UAT | - |
 | 5. 2a Structured Chat | 0/3 | Planned | - |
 | 6. 2a Prompt Cards | 0/3 | Planned | - |
-| 7. 2a Runs Board, Expand Levels & Wings | 1/5 | In Progress|  |
+| 7. 2a Runs Board, Expand Levels & Wings | 2/5 | In Progress|  |
 | 8. Phase B Live Data | 0/0 | Not planned | - |
 | 9. Phase B Approvals | 0/0 | Not planned | - |
