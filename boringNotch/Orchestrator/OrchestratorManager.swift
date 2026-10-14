@@ -3,7 +3,11 @@ import AppKit
 @MainActor
 final class OrchestratorManager: ObservableObject {
     static let shared = OrchestratorManager()
+    #if ORCH_SNAPSHOT
+    static let baseURL = URL(string: ProcessInfo.processInfo.environment["ORCH_BASE"] ?? "http://127.0.0.1:4777")! // mock-server tests only
+    #else
     static let baseURL = URL(string: "http://127.0.0.1:4777")!
+    #endif
 
     @Published private(set) var offline = false
     @Published private(set) var chatRunning = false
@@ -27,6 +31,17 @@ final class OrchestratorManager: ObservableObject {
     // Phase 8
     /// serve's context.percent while the chat runs; nil on old serve.
     @Published private(set) var contextPercent: Int? = nil
+    /// True while the SSE stream is healthy; polling and the notch-open refresh stand down.
+    @Published private(set) var streaming = false
+    private var streamTask: Task<Void, Never>?
+    private var lastStreamLine = Date.distantPast
+    private let streamSession: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.timeoutIntervalForRequest = 45
+        c.timeoutIntervalForResource = .greatestFiniteMagnitude
+        c.waitsForConnectivity = false
+        return URLSession(configuration: c)
+    }()
     var capsuleStatus: CapsuleState {
         capsuleState(hasLoaded: hasLoaded, offline: offline, chatRunning: chatRunning, needsAttention: needsAttention, working: liveStatus != nil)
     }
@@ -35,7 +50,7 @@ final class OrchestratorManager: ObservableObject {
     var notchOpen = false {
         didSet {
             // Typing teardown is owned by OrchestratorView (close() is blocked while typing).
-            if notchOpen && !oldValue { Task { await refresh() } }
+            if notchOpen && !oldValue && !streaming { Task { await refresh() } }
             if !notchOpen { OrchestratorExpand.shared.reset(); statusMenuOpen = false; notesOpen = false }
         }
     }
@@ -123,14 +138,69 @@ final class OrchestratorManager: ObservableObject {
     private init() {}
 
     func start() {
+        startStream()
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
+                if self.streaming { try? await Task.sleep(for: .seconds(2)); continue }
                 await self.refresh()
                 let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning || self.runs.contains { $0.state == "running" }, offline: self.offline)
                 try? await Task.sleep(for: .seconds(secs))
             }
+        }
+    }
+
+    // ponytail: fixed 30 s retry, no backoff.
+    private func startStream() {
+        guard streamTask == nil else { return }
+        streamTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.runStream()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
+    }
+
+    /// Returns when the stream ends: 404 (old serve), error, or 20 s with no line. Polling resumes within ~2 s.
+    private func runStream() async {
+        var req = URLRequest(url: Self.baseURL.appendingPathComponent("api/events"))
+        req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        guard let (bytes, resp) = try? await streamSession.bytes(for: req), (resp as? HTTPURLResponse)?.statusCode == 200 else { return }
+        lastStreamLine = Date()
+        streaming = true
+        defer { streaming = false }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { @MainActor [weak self] in
+                var parser = SSELineParser()
+                var first = true
+                do {
+                    for try await line in bytes.lines {
+                        guard let self else { return }
+                        self.lastStreamLine = Date()
+                        guard let ev = parser.feed(line) else { continue }
+                        switch ev {
+                        case .state(let st): self.applyState(st)
+                        case .chat(let r):
+                            await self.applyChat(r)
+                            if r.running == false { OrchestratorTranscriptStore.shared.ingestBlocks(running: false, blocks: [], reset: true) }
+                        case .blocks(let running, let blocks, let reset):
+                            // First blocks event of a connection replaces; pending rows survive (store keeps them).
+                            OrchestratorTranscriptStore.shared.ingestBlocks(running: running, blocks: blocks, reset: first || reset)
+                            first = false
+                        }
+                        if !self.hasLoaded { self.hasLoaded = true }
+                    }
+                } catch {}
+            }
+            group.addTask { @MainActor [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(5))
+                    guard let self, streamHealthy(lastLineAt: self.lastStreamLine, now: Date()) else { return }
+                }
+            }
+            await group.next()
+            group.cancelAll()
         }
     }
 
@@ -187,7 +257,8 @@ final class OrchestratorManager: ObservableObject {
         if contextPercent != cp { contextPercent = cp }
         OrchestratorTranscriptStore.shared.applyScreen(r)
         // Blocks first: a new card must appear with its context (Phase 8: ingest blocks before publishing a prompt).
-        await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, chatRunning: running)
+        // While streaming, blocks arrive as events; only a stopped chat still needs the store to clear.
+        if !(streaming && running) { await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, chatRunning: running) }
         let po = running ? detectPrompt(screen: s) : []
         if promptOptions != po { promptOptions = po }
         let pc = running ? detectPromptCard(screen: s) : nil

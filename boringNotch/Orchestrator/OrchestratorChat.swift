@@ -60,12 +60,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
             fetchFailed()
             return
         }
-        if decoded.running == false && decoded.blocks.isEmpty {
-            if !blocks.isEmpty { blocks = [] }
-            fallback = true
-            needsFull = true
-            return
-        }
+        if decoded.running == false && decoded.blocks.isEmpty { ingestBlocks(running: false, blocks: [], reset: true); return }
         var reset = full
         if blocksDiscontinuous(sinceSent: sinceSent, incoming: decoded.blocks, existing: blocks) {
             // Full fetch: still holding our last block = plain append, else the conversation changed (/clear): replace.
@@ -76,7 +71,18 @@ final class OrchestratorTranscriptStore: ObservableObject {
             decoded = all
             reset = !all.blocks.contains { $0.id == blocks.last?.id }
         }
-        let m = mergeChatBlocks(blocks, decoded.blocks, reset: reset)
+        ingestBlocks(running: decoded.running, blocks: decoded.blocks, reset: reset)
+    }
+
+    /// The one place blocks enter the store (polled or pushed). `reset` replaces the rows; pending rows are kept and reconciled.
+    func ingestBlocks(running: Bool?, blocks incoming: [ChatBlock], reset: Bool) {
+        if running == false && incoming.isEmpty {
+            if !blocks.isEmpty { blocks = [] }
+            fallback = true
+            needsFull = true
+            return
+        }
+        let m = mergeChatBlocks(blocks, incoming, reset: reset)
         if m.blocks != blocks {
             if m.appended && !reset {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { blocks = m.blocks }
