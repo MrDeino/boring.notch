@@ -56,3 +56,11 @@ struct SSELineParser {
 func streamHealthy(lastLineAt: Date, now: Date, limit: TimeInterval = 20) -> Bool {
     now.timeIntervalSince(lastLineAt) <= limit
 }
+
+// MARK: - Caret (08-03)
+
+/// Streaming caret on the newest prose row while a turn is live. serve's `live` wins when present;
+/// old serve (nil) falls back to the working status line.
+func caretVisible(live: Bool?, working: Bool, kind: ChatBlock.Kind, id: String, newestID: String?) -> Bool {
+    (live ?? working) && kind == .prose && id == newestID
+}

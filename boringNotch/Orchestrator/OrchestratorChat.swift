@@ -330,7 +330,7 @@ struct OrchestratorChatView: View {
                 }
             } else {
                 ForEach(store.blocks.suffix(maxRows)) { b in
-                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, onClick: expandChat, onCopied: showCopied)
+                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, caret: caretVisible(live: manager.chatLive, working: manager.liveStatus != nil, kind: b.kind, id: b.id, newestID: store.blocks.last?.id) && store.pending.isEmpty, onClick: expandChat, onCopied: showCopied)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -703,16 +703,41 @@ struct OrchestratorChatView: View {
     }
 }
 
+#if ORCH_SNAPSHOT
+var orchSnapDiffOpen = false
+#endif
+
 private struct ChatBlockRow: View {
     let block: ChatBlock
     let proseLineLimit: Int?
     var expanded = false
+    var caret = false
     var onClick: () -> Void = {}
     var onCopied: () -> Void = {}
     @State private var folded = false
+    #if ORCH_SNAPSHOT
+    @State private var diffOpen = orchSnapDiffOpen // open chat: "▸ diff" shows the same card inline
+    #else
+    @State private var diffOpen = false
+    #endif
 
-    private var hasDiffCard: Bool {
-        expanded && block.kind == .tool && ["Edit", "Write"].contains(block.name ?? "") && !(block.diff ?? []).isEmpty
+    private var canDiff: Bool {
+        block.kind == .tool && ["Edit", "Write", "MultiEdit"].contains(block.name ?? "") && !(block.diff ?? []).isEmpty
+    }
+    private var hasDiffCard: Bool { expanded && canDiff }
+    /// Inline card: taps must not reach the transcript's expandChat().
+    private var cardClick: () -> Void { expanded ? onClick : {} }
+
+    @ViewBuilder private var diffToggle: some View {
+        if canDiff && !expanded {
+            Button { withAnimation(.easeOut(duration: 0.15)) { diffOpen.toggle() } } label: {
+                Text(verbatim: diffOpen ? "▾ diff" : "▸ diff").font(OT.F.meta).foregroundStyle(OT.C.text6)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(diffOpen ? "Hide diff" : "Show diff")
+        } else if block.added != nil {
+            Text(verbatim: "▸ diff").font(OT.F.meta).foregroundStyle(OT.C.text6)
+        }
     }
 
     /// Leading marker column like Claude Code's terminal (❯ user, ⏺ prose/tool); wrapped text hangs after it.
@@ -752,7 +777,7 @@ private struct ChatBlockRow: View {
         return HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(verbatim: sign + num).frame(minWidth: 34, alignment: .leading)
             OrchestratorSelectableText(r.text, font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular), color: NSColor(fg), maxLines: 1,
-                                       lineBreak: .byTruncatingTail, onClick: onClick, onCopied: onCopied)
+                                       lineBreak: .byTruncatingTail, onClick: cardClick, onCopied: onCopied)
                 .baselineAligned()
             Spacer(minLength: 0)
         }
@@ -765,7 +790,7 @@ private struct ChatBlockRow: View {
     private var diffCard: some View {
         let rows = diffRows(block.diff ?? [])
         return VStack(alignment: .leading, spacing: 0) {
-            Button { withAnimation(.easeOut(duration: 0.15)) { folded.toggle() } } label: {
+            Button { withAnimation(.easeOut(duration: 0.15)) { if expanded { folded.toggle() } else { diffOpen = false } } } label: {
                 HStack(spacing: 6) {
                     Text(verbatim: folded ? "▸" : "▾").font(OT.F.meta).foregroundStyle(OT.C.text6)
                     Text(verbatim: block.name ?? "Edit").font(OT.F.monoChip.weight(.medium)).foregroundStyle(OT.C.text3)
@@ -788,6 +813,8 @@ private struct ChatBlockRow: View {
         }
         .background(OT.C.diffCard, in: RoundedRectangle(cornerRadius: 9))
         .clipShape(RoundedRectangle(cornerRadius: 9))
+        .contentShape(Rectangle())
+        .onTapGesture { cardClick() }
     }
 
     @ViewBuilder private var marker: some View {
@@ -823,6 +850,7 @@ private struct ChatBlockRow: View {
             // lineSpacing 2 on 13pt text ~ line-height 1.35 (13 * 1.35 = 17.5 vs ~15.5 natural).
             OrchestratorSelectableText(orchestratorProseNS(proseAttributed(block.text ?? ""), size: 13, color: NSColor(OT.C.text), lineSpacing: 2),
                                        maxLines: proseLineLimit ?? 0, lineBreak: proseLineLimit == nil ? .byWordWrapping : .byTruncatingTail, onClick: onClick, onCopied: onCopied)
+                .caret(caret)
                 .baselineAligned()
         }
     }
@@ -855,9 +883,10 @@ private struct ChatBlockRow: View {
                 if let add = block.added {
                     Text(verbatim: "+\(add)").font(OT.F.monoChip).foregroundStyle(OT.C.green)
                     Text(verbatim: "\u{2212}\(block.removed ?? 0)").font(OT.F.monoChip).foregroundStyle(OT.C.redText)
-                    Text(verbatim: "▸ diff").font(OT.F.meta).foregroundStyle(OT.C.text6)
+                    diffToggle
                 }
             }
+            if diffOpen && !expanded && canDiff { diffCard }
             if let r = result {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(verbatim: "\u{23BF}").font(OT.F.meta).foregroundStyle(OT.C.text6)
@@ -874,7 +903,7 @@ private struct ChatBlockRow: View {
     private var plainToolRow: some View {
         let target = toolTargetDisplay(name: block.name, target: block.target)
         let isPath = target.contains("/")
-        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 4) { HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(verbatim: block.name ?? "Tool")
                 .font(OT.F.monoChip.weight(.medium)).foregroundStyle(OT.C.text3)
                 .padding(.vertical, 2).padding(.horizontal, 6)
@@ -885,12 +914,14 @@ private struct ChatBlockRow: View {
             if let add = block.added {
                 Text(verbatim: "+\(add)").font(OT.F.monoChip).foregroundStyle(OT.C.green)
                 Text(verbatim: "\u{2212}\(block.removed ?? 0)").font(OT.F.monoChip).foregroundStyle(OT.C.redText)
-                Text(verbatim: "▸ diff").font(OT.F.meta).foregroundStyle(OT.C.text6)
+                diffToggle
             } else if let r = toolResultDisplay(name: block.name, result: block.result, added: block.added) {
                 OrchestratorSelectableText(r, font: NSFont.systemFont(ofSize: 11), color: NSColor(toolResultIsError(block.result) ? OT.C.redText : OT.C.text6),
                                            maxLines: 1, lineBreak: .byTruncatingTail, onClick: onClick, onCopied: onCopied)
                     .baselineAligned()
             }
+        }
+            if diffOpen && !expanded && canDiff { diffCard }
         }
     }
 }
@@ -971,6 +1002,33 @@ final class OrchestratorSelectableTextView: NSTextView {
     var onClick: () -> Void = {}
     var onCopied: () -> Void = {}
     var current: NSAttributedString?
+    /// Streaming caret (08-03): 7x13 accent block after the last laid-out glyph; a CALayer, so blinking never
+    /// touches the text storage (selection survives). Static with Reduce Motion.
+    var caretOn = false { didSet { if caretOn != oldValue { needsLayout = true } } }
+    private let caretLayer = CALayer()
+
+    override func layout() {
+        super.layout()
+        guard caretOn, let lm = layoutManager, let tc = textContainer else { caretLayer.removeFromSuperlayer(); return }
+        wantsLayer = true
+        if caretLayer.superlayer == nil {
+            caretLayer.backgroundColor = NSColor(OT.C.claude).cgColor
+            caretLayer.cornerRadius = 1
+            caretLayer.bounds = CGRect(x: 0, y: 0, width: 7, height: 13)
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                let a = CABasicAnimation(keyPath: "opacity")
+                a.fromValue = 1; a.toValue = 0.2; a.duration = 0.5; a.autoreverses = true; a.repeatCount = .infinity
+                caretLayer.add(a, forKey: "blink")
+            }
+            layer?.addSublayer(caretLayer)
+        }
+        let g = lm.glyphRange(for: tc)
+        guard g.length > 0 else { caretLayer.removeFromSuperlayer(); return }
+        let r = lm.lineFragmentUsedRect(forGlyphAt: g.upperBound - 1, effectiveRange: nil)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        caretLayer.position = CGPoint(x: min(r.maxX + 5.5, max(bounds.width - 3.5, 3.5)), y: r.midY)
+        CATransaction.commit()
+    }
 
     convenience init() {
         let storage = NSTextStorage()
@@ -1049,6 +1107,9 @@ struct OrchestratorSelectableText: NSViewRepresentable {
     var lineBreak: NSLineBreakMode = .byWordWrapping
     var onClick: () -> Void = {}
     var onCopied: () -> Void = {}
+    var caret = false
+
+    func caret(_ on: Bool) -> Self { var c = self; c.caret = on; return c }
 
     init(_ text: NSAttributedString, maxLines: Int = 0, lineBreak: NSLineBreakMode = .byWordWrapping,
          onClick: @escaping () -> Void = {}, onCopied: @escaping () -> Void = {}) {
@@ -1078,6 +1139,7 @@ struct OrchestratorSelectableText: NSViewRepresentable {
     private func apply(to v: OrchestratorSelectableTextView) {
         v.onClick = onClick
         v.onCopied = onCopied
+        v.caretOn = caret
         v.textContainer?.maximumNumberOfLines = maxLines
         v.textContainer?.lineBreakMode = lineBreak
         if v.current?.isEqual(to: text) != true { // keep the selection across polls

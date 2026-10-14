@@ -170,6 +170,7 @@ struct Scene {
     var attachments: [Data] = []
     var dismissed = false
     var draft = ""
+    var diffOpen = false
     var calm = false // no runs: capsule shows Running (+ ctx)
 }
 
@@ -272,11 +273,15 @@ struct Snap {
             Scene(name: "45-chat-live-flag-only", chat: ChatResponse(running: true, screen: "", live: true), blocks: markerBlocks),
             Scene(name: "48-capsule-ctx", chat: ctxChat(38), blocks: markerBlocks, calm: true),
             Scene(name: "49-capsule-ctx-high", chat: ctxChat(86), blocks: markerBlocks, calm: true),
+            Scene(name: "50-caret-live", chat: ChatResponse(running: true, screen: "", live: true), blocks: editBlocks),
+            Scene(name: "51-open-diff-collapsed", chat: chat(""), blocks: editBlocks),
+            Scene(name: "52-open-diff-expanded", chat: chat(""), blocks: editBlocks, diffOpen: true),
         ]
 
         let savedRail = Defaults[.orchRunsRailCollapsed]
         defer { Defaults[.orchRunsRailCollapsed] = savedRail }
         for s in scenes {
+            orchSnapDiffOpen = s.diffOpen
             let vm = BoringViewModel()
             let m = OrchestratorManager.shared
             await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: s.calm ? StateResponse(runs: [], usage: nil) : state, runsBoard: s.runsBoard)

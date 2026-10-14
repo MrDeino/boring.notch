@@ -50,4 +50,12 @@ func runPhase8Tests() {
     precondition(p.feed("data: " + String(repeating: "a", count: 2_000_001)) == nil)
     let t = Date()
     precondition(streamHealthy(lastLineAt: t, now: t + 19) && !streamHealthy(lastLineAt: t, now: t + 21))
+    precondition(caretVisible(live: true, working: false, kind: .prose, id: "a", newestID: "a"))
+    precondition(caretVisible(live: nil, working: true, kind: .prose, id: "a", newestID: "a"))
+    precondition(!caretVisible(live: nil, working: false, kind: .prose, id: "a", newestID: "a"))
+    precondition(!caretVisible(live: false, working: true, kind: .prose, id: "a", newestID: "a"))
+    precondition(!caretVisible(live: true, working: true, kind: .tool, id: "a", newestID: "a"))
+    precondition(!caretVisible(live: true, working: true, kind: .user, id: "a", newestID: "a"))
+    precondition(!caretVisible(live: true, working: true, kind: .prose, id: "a", newestID: "b"))
+    precondition(!caretVisible(live: true, working: true, kind: .prose, id: "a", newestID: nil))
 }
