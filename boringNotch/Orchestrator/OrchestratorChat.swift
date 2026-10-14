@@ -233,15 +233,20 @@ struct OrchestratorChatView: View {
                     }
                     ZStack(alignment: .leading) {
                         ghostLayer
-                        TextField("", text: $draft)
-                            .textFieldStyle(.plain)
-                            .font(OT.F.ui)
-                            .foregroundStyle(OT.C.text)
-                            .focused($fieldFocused)
-                            .onSubmit { submit() }
-                            .onExitCommand { stopTyping() }
-                            .allowsHitTesting(manager.wantsKeyboard)
-                        if !manager.wantsKeyboard {
+                        // The AppKit-backed TextField swallows clicks even under allowsHitTesting(false) and a
+                        // tap overlay, so it only exists while typing; otherwise a Text shows the draft.
+                        if manager.wantsKeyboard {
+                            TextField("", text: $draft)
+                                .textFieldStyle(.plain)
+                                .font(OT.F.ui)
+                                .foregroundStyle(OT.C.text)
+                                .focused($fieldFocused)
+                                .onSubmit { submit() }
+                                .onExitCommand { stopTyping() }
+                                .onAppear { DispatchQueue.main.async { if manager.wantsKeyboard { fieldFocused = true } } }
+                        } else {
+                            Text(verbatim: draft).font(OT.F.ui).foregroundStyle(OT.C.text)
+                                .lineLimit(1).truncationMode(.head)
                             Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() }
                         }
                     }

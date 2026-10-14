@@ -127,6 +127,7 @@ struct Scene {
 struct Snap {
     static func main() async {
         if CommandLine.arguments.contains("--transition") { await transition(); return }
+        if CommandLine.arguments.contains("--hittest") { await hitTest(); return }
         let useImageRenderer = CommandLine.arguments.contains("--image-renderer")
         let out = URL(fileURLWithPath: "/tmp/notch-snapshots")
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
@@ -253,5 +254,100 @@ struct Snap {
         }
         print(moved ? "FAIL: top edge moved with the new root frame" : "OK: top edge pinned at y=0 in every step (new root frame)")
     }
+
+    /// Clicks into the real tab inside a copy of ContentView's root chain (mainLayout tap/hover, ZStack,
+    /// bottom padding, notchRootFrame, compositingGroup, scaleEffect) in the app's panel class, open and
+    /// expanded. Only actions that never POST: composer (starts typing, focuses the field), Chat|Runs
+    /// segment, status capsule. Also reports what a click below the visible notch hits.
+    static func hitTest() async {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory) // like the notch app (LSUIElement); windows stay offscreen
+        let m = OrchestratorManager.shared
+        await m.snapshotApply(loaded: true, chat: ChatResponse(running: true, screen: ""), state: StateResponse(runs: [], usage: nil))
+        OrchestratorTranscriptStore.shared.snapshotSet(blocks: longBlocks)
+        var ok = true
+        for expanded in [false, true] {
+            let vm = BoringViewModel()
+            let mainLayout = NotchReplica(vm: vm).core.environmentObject(vm)
+                .contentShape(Rectangle()).onHover { _ in }.onTapGesture { }
+            let root = ZStack(alignment: .top) { VStack(spacing: 0) { mainLayout } }
+                .padding(.bottom, 8)
+                .notchRootFrame(notchHeight: vm.notchSize.height)
+                .compositingGroup()
+                .scaleEffect(x: 1, y: 1, anchor: .top)
+            let window = KeyablePanel(contentRect: NSRect(x: -20000, y: -20000, width: windowSize.width, height: windowSize.height),
+                                      styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            let host = NSHostingView(rootView: root)
+            window.contentView = host
+            window.orderFrontRegardless() // offscreen; events only reach ordered-in windows
+            if expanded { OrchestratorExpand.shared.setLevel(.expanded, vm: vm, window: window) }
+            try? await Task.sleep(for: .milliseconds(500))
+            host.layoutSubtreeIfNeeded()
+            let H = host.bounds.height
+            func click(_ fromTop: CGFloat, x: CGFloat) async {
+                for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                    if let e = NSEvent.mouseEvent(with: type, location: NSPoint(x: x, y: H - fromTop), modifierFlags: [],
+                                                  timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                                  context: nil, eventNumber: 0, clickCount: 1, pressure: 1) { window.sendEvent(e) }
+                    try? await Task.sleep(for: .milliseconds(30))
+                }
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            let label = expanded ? "expanded" : "open"
+            var line: [String] = []
+
+            // The regression: an AppKit platform view (the TextField) under the composer took the click.
+            let hitName = window.contentView?.superview?.hitTest(NSPoint(x: expanded ? 200 : 320, y: H - (vm.notchSize.height - 27)))
+                .map { String(describing: type(of: $0)) } ?? "nil"
+            let reachesSwiftUI = hitName.hasPrefix("NSHostingView")
+            ok = ok && reachesSwiftUI
+            line.append("composer hit reaches SwiftUI: \(reachesSwiftUI)")
+            // Composer: notch bottom padding 12, pill 30 -> centre 27 above the notch bottom. Clicked at the open
+            // level only: while expanded, OrchestratorExpand's outside-click monitor reads the real cursor
+            // (NSEvent.mouseLocation), which a synthetic click doesn't move, and collapses the notch.
+            var typed: [Bool] = []
+            let sub = m.$wantsKeyboard.sink { typed.append($0) }
+            if !expanded {
+                await click(vm.notchSize.height - 27, x: 320)
+                let focused = window.firstResponder is NSTextView
+                line.append("composer click starts typing: \(typed.contains(true)), field focused: \(focused)")
+                ok = ok && typed.contains(true) && focused
+            }
+            sub.cancel()
+            OrchestratorExpand.shared.releaseKey(window)
+            m.endTyping()
+            window.makeFirstResponder(nil)
+            try? await Task.sleep(for: .milliseconds(200))
+
+            if !expanded {
+                m.showRunsBoard = false
+                await click(17, x: 190) // Runs half of the Chat|Runs segment
+                line.append("segment: \(m.showRunsBoard)")
+                ok = ok && m.showRunsBoard
+                m.showRunsBoard = false
+                m.statusMenuOpen = false
+                await click(17, x: 560) // status capsule
+                line.append("capsule opens menu: \(m.statusMenuOpen)")
+                ok = ok && m.statusMenuOpen
+                m.statusMenuOpen = false
+            }
+            // Below the visible notch (only exists while the window is taller than the notch).
+            if H > vm.notchSize.height + 30 {
+                let below = window.contentView?.superview?.hitTest(NSPoint(x: 320, y: 10)).map { String(String(describing: type(of: $0)).prefix(20)) } ?? "nil"
+                line.append("below notch hits: \(below)")
+            }
+            print("\(label) (\(Int(H))pt window): " + line.joined(separator: "; "))
+            OrchestratorExpand.shared.reset()
+            window.contentView = nil
+            window.orderOut(nil)
+        }
+        print(ok ? "OK: composer, segment and capsule respond to clicks" : "FAIL: a click target did not respond")
+    }
 }
 
+/// The app panel's key rule (BoringNotchSkyLightWindow.canBecomeKey).
+final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { OrchestratorManager.shared.keyboardWindow === self || OrchestratorKeyGate.terminalWantsKey }
+}
