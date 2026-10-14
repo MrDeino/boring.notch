@@ -15,6 +15,8 @@ final class OrchestratorManager: ObservableObject {
     var needsAttention: Bool { runs.contains { $0.state == "waiting" } || !promptOptions.isEmpty }
     /// False until the first response or error, so the view doesn't flash "offline".
     @Published private(set) var hasLoaded = false
+    /// Runs panel toggled by the header button.
+    @Published var showRuns = false
 
     /// Fed by notch open/close hooks; opening triggers an immediate refresh.
     var notchOpen = false {

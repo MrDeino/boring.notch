@@ -14,11 +14,16 @@ struct OrchestratorView: View {
                     Text("start `node orch.js serve` · 127.0.0.1:4777").font(.system(size: 11)).foregroundStyle(.gray)
                 }
             } else {
-                HStack(alignment: .top, spacing: 12) {
-                    chat
-                    runsStrip
-                        .frame(width: 200, alignment: .topLeading)
-                }
+                chat
+                    .overlay(alignment: .topTrailing) {
+                        if manager.showRuns {
+                            runsStrip
+                                .frame(width: 200, alignment: .topLeading)
+                                .padding(8)
+                                .background(.black.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.15)))
+                        }
+                    }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -69,6 +74,34 @@ struct OrchestratorView: View {
         case "failed", "stuck": return .red
         default: return .gray
         }
+    }
+}
+
+/// Header button that shows/hides the runs panel; from another tab it jumps to Orchestrator first.
+struct OrchestratorRunsButton: View {
+    @ObservedObject var manager = OrchestratorManager.shared
+    @ObservedObject var coordinator = BoringViewCoordinator.shared
+
+    var body: some View {
+        Button {
+            if coordinator.currentView != .orchestrator {
+                coordinator.currentView = .orchestrator
+                manager.showRuns = true
+            } else {
+                manager.showRuns.toggle()
+            }
+        } label: {
+            Capsule()
+                .fill(.black)
+                .frame(width: 30, height: 30)
+                .overlay {
+                    Image(systemName: "list.bullet.rectangle")
+                        .foregroundColor(manager.showRuns ? .white : .gray)
+                        .imageScale(.medium)
+                }
+        }
+        .buttonStyle(PlainButtonStyle())
+        .help("Runs")
     }
 }
 
