@@ -66,13 +66,25 @@ final class OrchestratorManager: ObservableObject {
         guard !sending else { return false }
         sending = true
         defer { sending = false }
+        return await postNow(p)
+    }
+
+    private func postNow(_ p: OrchestratorPost) async -> Bool {
         let code = (try? await sendOrchestratorPost(p, base: Self.baseURL, session: session)) ?? nil
         if code == 200 { await refresh(); return true }
         if code == 409 { await refresh() }
         return false
     }
 
-    func sendText(_ s: String) async -> Bool { await post(.text(s)) }
+    /// clearFirst runs inside the same `sending` window, so no other POST (a prompt answer) can land
+    /// between clearing Claude's box and typing the text. Returning false from it cancels the send.
+    func sendText(_ s: String, clearFirst: (() async -> Bool)? = nil) async -> Bool {
+        guard !sending else { return false }
+        sending = true
+        defer { sending = false }
+        if let clearFirst, !(await clearFirst()) { return false }
+        return await postNow(.text(s))
+    }
     /// Debounced: Esc-Esc opens Claude Code's rewind picker.
     func pressEscape() async {
         guard Date().timeIntervalSince(lastEscape) > 1 else { return }
@@ -124,12 +136,23 @@ final class OrchestratorManager: ObservableObject {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private var refreshing = false
+    private var inFlight: Task<Void, Never>?
 
-    func refresh() async {
-        guard !refreshing else { return }
-        refreshing = true
-        defer { refreshing = false }
+    /// fresh: the caller needs a screen read after this call (e.g. before acting on a prompt), so wait
+    /// out a poll already in flight and fetch again. Otherwise an in-flight poll makes this a no-op.
+    func refresh(fresh: Bool = false) async {
+        if let t = inFlight {
+            guard fresh else { return }
+            await t.value
+            if let t2 = inFlight, t2 != t { await t2.value; return } // started after our call: fresh enough
+        }
+        let t = Task { await load() }
+        inFlight = t
+        await t.value
+        if inFlight == t { inFlight = nil }
+    }
+
+    private func load() async {
         do {
             async let chat: ChatResponse = get("api/chat")
             async let state: StateResponse = get("api/state")

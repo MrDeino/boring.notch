@@ -112,17 +112,9 @@ final class OrchestratorTranscriptStore: ObservableObject {
         return false
     }
 
-    @Published private(set) var submitting = false
-
-    /// Clear + send as one operation: never alongside another submit or a manager POST, so C-u can't wipe the box for nothing.
-    // ponytail: a manager POST starting between C-u and the text still drops the send (draft is kept); one manager op fixes it when the manager is free to edit.
+    /// Clear + send as one manager operation: no other POST can land between C-u and the text.
     func submit(_ text: String) async -> Bool {
-        let m = OrchestratorManager.shared
-        guard !submitting, !m.sending else { return false }
-        submitting = true
-        defer { submitting = false }
-        guard await clearRealLineIfNeeded(), !m.sending else { return false }
-        return await m.sendText(text)
+        await OrchestratorManager.shared.sendText(text) { await self.clearRealLineIfNeeded() }
     }
 }
 
@@ -141,34 +133,23 @@ struct OrchestratorChatView: View {
     private let showComposer: Bool
     private let proseLineLimit: Int?
     private let maxRows: Int
+    private let scrolls: Bool
 
-    init(showComposer: Bool = true, proseLineLimit: Int? = 4, maxRows: Int = 12) {
+    /// scrolls: the expanded column (frame 12) shows full prose and scrolls, pinned to the newest row.
+    init(showComposer: Bool = true, proseLineLimit: Int? = 4, maxRows: Int = 12, scrolls: Bool = false) {
         self.showComposer = showComposer
         self.proseLineLimit = proseLineLimit
         self.maxRows = maxRows
+        self.scrolls = scrolls
     }
 
     var body: some View {
         VStack(spacing: 4) {
-            VStack(alignment: .leading, spacing: OT.S.gapS) {
-                if store.fallback {
-                    ForEach(Array(fallbackLines.enumerated()), id: \.offset) { _, line in
-                        Text(verbatim: line)
-                            .font(OT.F.prose)
-                            .foregroundStyle(OT.C.text)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
+            Group {
+                if scrolls {
+                    ScrollView(.vertical, showsIndicators: false) { rows }.defaultScrollAnchor(.bottom)
                 } else {
-                    ForEach(store.blocks.suffix(maxRows)) { b in
-                        ChatBlockRow(block: b, proseLineLimit: proseLineLimit)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                if let ls = manager.liveStatus {
-                    OrchestratorLiveStatusRow(status: ls)
-                } else if !store.fallback, let idle = store.idleStatus {
-                    Text(verbatim: idle).font(OT.F.meta).foregroundStyle(OT.C.text6).lineLimit(1)
+                    rows
                 }
             }
             .padding(.horizontal, 6)
@@ -193,6 +174,31 @@ struct OrchestratorChatView: View {
         .onChange(of: manager.promptOptions) { _, o in if !o.isEmpty { stopTyping() } }
         // Phase 4
         .onChange(of: manager.statusMenuOpen) { _, open in if open { stopTyping() } }
+    }
+
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: OT.S.gapS) {
+            if store.fallback {
+                ForEach(Array(fallbackLines.enumerated()), id: \.offset) { _, line in
+                    Text(verbatim: line)
+                        .font(OT.F.prose)
+                        .foregroundStyle(OT.C.text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            } else {
+                ForEach(store.blocks.suffix(maxRows)) { b in
+                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            if let ls = manager.liveStatus {
+                OrchestratorLiveStatusRow(status: ls)
+            } else if !store.fallback, let idle = store.idleStatus {
+                Text(verbatim: idle).font(OT.F.meta).foregroundStyle(OT.C.text6).lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// chatTail lines minus spinner lines (the status row shows those).
@@ -288,7 +294,7 @@ struct OrchestratorChatView: View {
             .frame(width: 20, height: 20)
         }
         .buttonStyle(.plain)
-        .disabled(blank || manager.sending || store.submitting)
+        .disabled(blank || manager.sending)
     }
 
     /// Terminal draft -> field on focus; key monitor lifecycle.
@@ -374,7 +380,7 @@ struct OrchestratorChatView: View {
     private func submit() {
         let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { stopTyping(); return }
-        guard !manager.sending, !store.submitting else { return } // Enter is ignored like the disabled send button
+        guard !manager.sending else { return } // Enter is ignored like the disabled send button
         // A terminal draft not pulled in on focus would be C-u'd unseen: pull it in front and wait for a second Enter.
         if !fromTerminal, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
             draft = l + " " + draft

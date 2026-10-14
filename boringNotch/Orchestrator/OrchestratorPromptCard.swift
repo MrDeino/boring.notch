@@ -63,9 +63,7 @@ final class PromptCardController: ObservableObject {
 
     /// True when the live prompt is still the one the user clicked on.
     private func stillCurrent(_ displayed: PromptCard) async -> Bool {
-        // ponytail: refresh() returns early if a poll is mid-flight, so the compare can use a <=2s-old
-        // screen; upgrade = awaitable refresh in the manager.
-        await OrchestratorManager.shared.refresh()
+        await OrchestratorManager.shared.refresh(fresh: true)
         let m = OrchestratorManager.shared
         guard let cur = m.prompt, promptIdentity(cur) == promptIdentity(displayed), !m.optionsLocked else {
             await flashStale()
@@ -207,12 +205,12 @@ final class PromptCardController: ObservableObject {
             m.pressOption(ft.number)
             try? await Task.sleep(for: .milliseconds(350))
             // Only type once the select list has left the screen; if the press was dropped, digits and
-            // Enter would answer the list. refresh() can return early mid-poll, so re-check a few times.
+            // Enter would answer the list, so re-check a few times.
             var landed = false
             for _ in 0..<6 {
                 var i = 0
                 while m.sending && i < 40 { try? await Task.sleep(for: .milliseconds(50)); i += 1 }
-                if !m.sending { await m.refresh() }
+                if !m.sending { await m.refresh(fresh: true) }
                 // A failed GET also nils the prompt, so offline never counts as landed.
                 if !m.offline, m.prompt.map(promptIdentity) != promptIdentity(displayed) { landed = true; break }
                 try? await Task.sleep(for: .milliseconds(200))
@@ -456,7 +454,7 @@ private struct QuestionCard: View {
     private func footPill(_ title: String?, key: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                if let title { Text(title).font(OT.F.ui).foregroundStyle(OT.C.text) }
+                if let title { Text(title).font(OT.F.ui).foregroundStyle(OT.C.text).lineLimit(1).fixedSize() }
                 PromptKeycap(text: key, light: false)
             }
             .padding(.leading, title == nil ? 7 : 14).padding(.trailing, 7)

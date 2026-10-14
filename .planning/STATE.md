@@ -55,6 +55,8 @@ Progress: [██████████] 100%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- 2026-10-14 (user): ⌃U and suggestion-accept (Tab/→) are local only — no `C-u`/`Tab` POST; every send clears Claude's box first. Supersedes the POST half of Phase 5 D-10.
+- 2026-10-14 post-merge (5+6+7): `OrchestratorManager.refresh(fresh:)` waits out an in-flight poll and fetches again (prompt re-check before answering); `sendText(_:clearFirst:)` runs the box clear and the text inside one `sending` window, so a prompt answer can't land in between; the expanded column's chat shows full prose and scrolls (`OrchestratorChatView(scrolls:)`).
 - [Roadmap]: 3 coarse phases; BLD-02/BLD-03 mapped to Phase 1 but every phase has a music-still-works criterion
 - [Roadmap]: `detectPrompt(screen)` built in Phase 1 (pure fn + assert check); fixtures refined from real captures in Phase 2
 - [Roadmap]: Phase 2 opens with the gated `canBecomeKey` spike
