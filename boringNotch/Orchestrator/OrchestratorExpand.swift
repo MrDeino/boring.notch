@@ -165,7 +165,7 @@ struct OrchestratorExpandOverlay: View {
                     .padding(8)
                 }
             }
-            if manager.hasLoaded && !manager.offline {
+            if isExp || (manager.hasLoaded && !manager.offline) {
                 Button {
                     isExp ? expand.collapse(vm: vm) : expand.expand(vm: vm, window: window)
                 } label: {
