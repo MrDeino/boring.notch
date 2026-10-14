@@ -29,6 +29,9 @@ struct OrchestratorTabContent: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 8)
+        // The sticky Runs board must not hide a live prompt or outlive a disconnect.
+        .onChange(of: manager.prompt != nil) { _, has in if has { manager.showRunsBoard = false } }
+        .onChange(of: manager.offline) { _, off in if off { manager.showRunsBoard = false } }
     }
 }
 
