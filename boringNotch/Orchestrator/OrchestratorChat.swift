@@ -21,6 +21,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
     private var session: URLSession?
     private var needsFull = true
     private var polls = 0
+    private var failures = 0
 
     func refresh(base: URL, session: URLSession, screen: String, chatRunning: Bool) async {
         self.base = base
@@ -45,7 +46,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
 
         let sinceSent = !full && !blocks.isEmpty
         guard var decoded = await fetchBlocks(base: base, session: session, since: sinceSent ? blocks.last?.id : nil) else {
-            if !fallback { fallback = true }
+            fetchFailed()
             return
         }
         if decoded.running == false && decoded.blocks.isEmpty {
@@ -58,7 +59,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
         if blocksDiscontinuous(sinceSent: sinceSent, incoming: decoded.blocks, existing: blocks) {
             // Full fetch: still holding our last block = plain append, else the conversation changed (/clear): replace.
             guard let all = await fetchBlocks(base: base, session: session, since: nil) else {
-                if !fallback { fallback = true }
+                fetchFailed()
                 return
             }
             decoded = all
@@ -74,6 +75,13 @@ final class OrchestratorTranscriptStore: ObservableObject {
         }
         if fallback { fallback = false }
         needsFull = false
+        failures = 0
+    }
+
+    /// D-03 fallback, but one transient failure keeps the rows we hold (no flicker to chatTail and back).
+    private func fetchFailed() {
+        failures += 1
+        if (blocks.isEmpty || failures >= 3) && !fallback { fallback = true }
     }
 
     private func fetchBlocks(base: URL, session: URLSession, since: String?) async -> (running: Bool?, blocks: [ChatBlock])? {
