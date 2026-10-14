@@ -71,6 +71,13 @@ func runPhase6Tests() {
     let sc = detectPromptCard(screen: "Review?\n❯ 1. Submit answers\n  2. Cancel\n Esc to cancel\n")!
     precondition(sc.items[1].role == .deny)
 
+    // long question (> 25 non-blank lines) still parses, and detectPrompt agrees
+    let det = (1...9).map { "  detail line \($0)" }.joined(separator: "\n")
+    let tall = "Pick one?\n❯ 1. Alpha\n\(det)\n  2. Beta\n\(det)\n  3. Gamma\n\(det)\n  4. Type something.\n  5. Chat about this\nEnter to select · Esc to cancel\n"
+    let tc = detectPromptCard(screen: tall)!
+    precondition(tc.kind == .question && tc.items.count == 5 && tc.question == "Pick one?")
+    precondition(detectPrompt(screen: tall).count == 5)
+
     // shortLabel
     precondition(shortLabel("Yes") == "Allow")
     precondition(shortLabel("No") == "Deny")

@@ -7,7 +7,7 @@ struct PromptOption: Equatable {
 
 /// Numbered options of a Claude Code prompt on the screen, [] when none.
 func detectPrompt(screen: String) -> [PromptOption] {
-    scanPrompt(screen, window: 25)?.options ?? []
+    scanPrompt(screen, window: 40)?.options ?? [] // same window as detectPromptCard, so they never disagree
 }
 
 /// Shared scan behind detectPrompt and detectPromptCard: trimmed non-blank lines plus where the winning
@@ -80,7 +80,7 @@ private func isRule(_ s: String, _ ch: Character) -> Bool { s.count >= 10 && s.a
 
 /// nil when no prompt is on screen.
 func detectPromptCard(screen: String) -> PromptCard? {
-    guard !detectPrompt(screen: screen).isEmpty, let sc = scanPrompt(screen, window: 40) else { return nil }
+    guard let sc = scanPrompt(screen, window: 40) else { return nil }
     let lines = sc.lines
     let first = sc.indices[0], last = sc.indices[sc.indices.count - 1]
     let full: (String) -> Bool = { isRule($0, "─") }
