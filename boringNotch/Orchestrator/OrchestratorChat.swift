@@ -289,8 +289,16 @@ struct OrchestratorChatView: View {
 
     private func pendingRow(_ p: PendingMessage) -> some View {
         VStack(alignment: expanded ? .trailing : .leading, spacing: 2) {
+            if !p.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ChatBlockRow(block: ChatBlock(pendingID: "pending-\(p.id)", text: p.text), proseLineLimit: proseLineLimit, expanded: expanded)
+                    .opacity(0.5)
+            }
             if !p.images.isEmpty {
+                let textBlank = p.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 HStack(spacing: 4) {
+                    if !expanded && textBlank { // image-only: keep the ❯ marker column so it reads as a user row
+                        Text(verbatim: "❯").font(OT.F.ui).foregroundStyle(OT.C.text5).frame(width: 10, alignment: .center).padding(.trailing, 2)
+                    }
                     ForEach(Array(p.images.enumerated()), id: \.offset) { _, d in
                         if let img = NSImage(data: d) {
                             Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
@@ -298,12 +306,8 @@ struct OrchestratorChatView: View {
                         }
                     }
                 }
-                .padding(.leading, expanded ? 0 : 16) // the ❯ marker column (10 + 6 spacing)
+                .padding(.leading, expanded || textBlank ? 0 : 16) // text rows: past the marker column (10 + 6)
                 .opacity(0.5)
-            }
-            if !p.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                ChatBlockRow(block: ChatBlock(pendingID: "pending-\(p.id)", text: p.text), proseLineLimit: proseLineLimit, expanded: expanded)
-                    .opacity(0.5)
             }
             if p.state == .failed {
                 HStack(spacing: 8) {
