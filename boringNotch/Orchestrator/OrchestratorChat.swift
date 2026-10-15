@@ -823,7 +823,7 @@ private struct ChatBlockRow: View {
         case .prose: dot(OT.C.text)
         case .tool:
             switch toolMarker(result: block.result) {
-            case .running: if toolDescription(block) != nil { dot(OT.C.text6).modifier(OrchPulse()) } else { dot(OT.C.text6) }
+            case .running: if toolDescription(block) != nil { OrchPulseDot(color: OT.C.text6) } else { dot(OT.C.text6) }
             case .done: dot(OT.C.green)
             case .error: dot(OT.C.red)
             }
@@ -956,23 +956,43 @@ private struct OrchestratorLiveStatusRow: View {
 }
 
 /// White highlight sweeping across the content every 1.6s, masked by the content; static with Reduce Motion.
+/// The sweep is a Core Animation on a gradient layer (no per-frame SwiftUI work).
+private final class ShimmerNSView: NSView {
+    private let band = CAGradientLayer()
+    private var animatedWidth: CGFloat = 0
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        band.colors = [NSColor.clear.cgColor, NSColor.white.withAlphaComponent(0.45).cgColor, NSColor.clear.cgColor]
+        band.startPoint = CGPoint(x: 0, y: 0.5); band.endPoint = CGPoint(x: 1, y: 0.5)
+        layer?.addSublayer(band)
+    }
+    required init?(coder: NSCoder) { nil }
+    override func layout() {
+        super.layout()
+        guard bounds.width > 0, bounds.width != animatedWidth else { return }
+        animatedWidth = bounds.width
+        let w = bounds.width
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        band.bounds = CGRect(x: 0, y: 0, width: w * 0.5, height: bounds.height)
+        band.position = CGPoint(x: -0.25 * w, y: bounds.midY)
+        CATransaction.commit()
+        band.add(orchAnimation("position.x", from: -0.25 * w, to: 1.25 * w, duration: 1.6, autoreverses: false, linear: true), forKey: "sweep")
+    }
+}
+
+private struct ShimmerLayer: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { ShimmerNSView(frame: .zero) }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 private struct OrchShimmer: ViewModifier {
     let active: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content.overlay {
-            if active && !reduceMotion {
-                TimelineView(.animation(minimumInterval: 1.0 / 30)) { c in
-                    let p = c.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
-                    GeometryReader { g in
-                        LinearGradient(colors: [.clear, .white.opacity(0.45), .clear], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: g.size.width * 0.5)
-                            .offset(x: (p * 1.5 - 0.5) * g.size.width)
-                    }
-                }
-                .mask(content)
-            }
+            if active && !reduceMotion { ShimmerLayer().mask(content) }
         }
     }
 }
@@ -981,13 +1001,21 @@ private extension View {
     func orchShimmer(_ active: Bool = true) -> some View { modifier(OrchShimmer(active: active)) }
 }
 
-/// Grey running dot that pulses 1 <-> 0.35 (static with Reduce Motion).
-private struct OrchPulse: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var dim = false
-    func body(content: Content) -> some View {
-        content.opacity(dim ? 0.35 : 1)
-            .onAppear { if !reduceMotion { withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { dim = true } } }
+/// Grey running dot that pulses 1 <-> 0.35 (static with Reduce Motion); a Core Animation like the shimmer.
+private struct OrchPulseDot: View {
+    let color: Color
+    var body: some View {
+        OrchLayer(size: CGSize(width: 7, height: 7)) { root in
+            let l = CALayer()
+            l.frame = root.bounds
+            l.backgroundColor = NSColor(color).cgColor; l.cornerRadius = 3.5
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                l.add(orchAnimation("opacity", from: 1, to: 0.35, duration: 0.9, autoreverses: true), forKey: "pulse")
+            }
+            root.addSublayer(l)
+        }
+        .frame(width: 7, height: 7)
+        .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 0.5 }
     }
 }
 

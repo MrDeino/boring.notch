@@ -144,14 +144,44 @@ private extension View {
     }
 }
 
-// Own subviews so their @State resets each time the wing kind re-inserts them (WR-03).
+/// Repeating animations run as Core Animation, in the render server: a SwiftUI `repeatForever` / 30fps TimelineView
+/// re-renders the whole notch root on the main thread every frame, which cost ~17% CPU on an idle closed notch.
+struct OrchLayer: NSViewRepresentable {
+    let size: CGSize
+    let build: (CALayer) -> Void
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView(frame: CGRect(origin: .zero, size: size))
+        v.wantsLayer = true
+        v.layer?.masksToBounds = false
+        build(v.layer!)
+        return v
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSView, context: Context) -> CGSize? { size }
+}
+
+func orchAnimation(_ keyPath: String, from: Any, to: Any, duration: CFTimeInterval, autoreverses: Bool, linear: Bool = false) -> CABasicAnimation {
+    let a = CABasicAnimation(keyPath: keyPath)
+    a.fromValue = from; a.toValue = to; a.duration = duration; a.autoreverses = autoreverses; a.repeatCount = .infinity
+    a.timingFunction = CAMediaTimingFunction(name: linear ? .linear : .easeInEaseOut)
+    return a
+}
+
+// Own subviews so their state resets each time the wing kind re-inserts them (WR-03).
 private struct WingSpinner: View {
     let size: CGFloat
-    @State private var spin: Double = 0
     var body: some View {
-        Text("✻").font(.system(size: size)).foregroundStyle(OT.C.claude)
-            .rotationEffect(.degrees(spin))
-            .onAppear { withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) { spin = 360 } }
+        let text = NSAttributedString(string: "✻", attributes: [.font: NSFont.systemFont(ofSize: size), .foregroundColor: NSColor(OT.C.claude)])
+        let box = text.size()
+        OrchLayer(size: box) { root in
+            let l = CALayer()
+            l.frame = root.bounds
+            l.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+            l.contents = NSImage(size: box, flipped: false) { _ in text.draw(at: .zero); return true }
+            l.add(orchAnimation("transform.rotation.z", from: 0, to: -2 * Double.pi, duration: 8, autoreverses: false, linear: true), forKey: "spin") // clockwise
+            root.addSublayer(l)
+        }
+        .frame(width: box.width, height: box.height)
     }
 }
 
@@ -165,11 +195,18 @@ private struct FinishedMark: View {
 }
 
 private struct WingGlowDot: View {
-    @State private var glow = false
     var body: some View {
-        Circle().fill(OT.C.orange).frame(width: 8, height: 8)
-            .shadow(color: OT.C.orange, radius: glow ? 8 : 2)
-            .onAppear { withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { glow = true } }
+        OrchLayer(size: CGSize(width: 8, height: 8)) { root in
+            let c = NSColor(OT.C.orange).cgColor
+            let l = CALayer()
+            l.frame = root.bounds
+            l.backgroundColor = c; l.cornerRadius = 4
+            l.shadowColor = c; l.shadowOpacity = 1; l.shadowOffset = .zero; l.shadowRadius = 2
+            l.shadowPath = CGPath(ellipseIn: l.bounds, transform: nil)
+            l.add(orchAnimation("shadowRadius", from: 2, to: 8, duration: 1.2, autoreverses: true), forKey: "glow")
+            root.addSublayer(l)
+        }
+        .frame(width: 8, height: 8)
     }
 }
 
