@@ -74,7 +74,9 @@ extension Snap {
             }
             return decodeChatBlocks(Data(#"{"running":true,"blocks":[\#(items.joined(separator: ","))]}"#.utf8))?.blocks ?? []
         }
-        func scene(_ name: String, closed: Bool, level: ExpandLevel = .open, runs: Bool, feed: Feed, limit: Double = 3) async {
+        /// Close the FramesRoot notch the way ContentView does (the Orchestrator tab stays built, hidden).
+        func closeNotch(_ vm: BoringViewModel) { withAnimation(.spring(response: 0.45, dampingFraction: 1.0)) { vm.notchSize = vm.closedNotchSize; vm.notchState = .closed } }
+        func scene(_ name: String, closed: Bool, level: ExpandLevel = .open, runs: Bool, feed: Feed, limit: Double = 3, tabBuilt: Bool = false) async {
             if let only = ProcessInfo.processInfo.environment["IDLE_SCENES"], !only.split(separator: ",").contains(where: { name.hasPrefix($0) }) { return } // IDLE_SCENES=f,g: only those scenes
             let store = OrchestratorTranscriptStore.shared
             store.snapshotSet(blocks: feed == .rich || feed == .typing ? richBlocks(12) : [])
@@ -84,7 +86,15 @@ extension Snap {
             let vm = BoringViewModel()
             let w = makeWindow()
             sceneVMs.append(vm)
-            if closed {
+            if closed && tabBuilt { // ContentView's root with the tab kept built: opened once, then closed
+                vm.closedNotchSize = CGSize(width: 185, height: 32)
+                vm.notchState = .open
+                w.contentView = panelHost(FramesRoot(vm: vm))
+                OrchestratorExpand.shared.syncWindow(vm: vm, window: w, now: true)
+                w.orderFrontRegardless()
+                try? await Task.sleep(for: .seconds(1))
+                closeNotch(vm)
+            } else if closed {
                 vm.notchState = .closed
                 vm.closedNotchSize = CGSize(width: 185, height: 32)
                 w.setFrame(NSRect(x: 0, y: screenTop - 64, width: 440, height: 64), display: false)
@@ -134,6 +144,7 @@ extension Snap {
             print(String(format: "cpu %@: %.1f%%", name, cpu))
             if cpu >= limit { failures.append("cpu \(name) \(String(format: "%.1f", cpu))%") }
             teardown(w)
+            FramesProbe.shape = []; FramesProbe.content = []; FramesProbe.bodies = []
             try? await Task.sleep(for: .milliseconds(300))
         }
         let gatesOnly = ProcessInfo.processInfo.environment["IDLE_GATES"] != nil
@@ -143,6 +154,8 @@ extension Snap {
         await scene("a3-closed-running-screen", closed: true, runs: true, feed: .screen)
         await scene("a4-closed-running-tokens", closed: true, runs: true, feed: .tokens)
         await scene("b-closed-nothing", closed: true, runs: false, feed: .same)
+        await scene("a5-closed-tab-built-rich", closed: true, runs: true, feed: .rich, tabBuilt: true) // transcript + status tick every second, hidden tab
+        await scene("a6-closed-tab-built-same", closed: true, runs: true, feed: .same, tabBuilt: true)
         await scene("c-open-running", closed: false, runs: true, feed: .same)
         await scene("c2-open-running-nofeed", closed: false, runs: true, feed: .none)
         await scene("d-expanded-running", closed: false, level: .expanded, runs: true, feed: .same)
@@ -265,6 +278,36 @@ extension Snap {
             try? await Task.sleep(for: .milliseconds(300))
             await click()
             return (true, [])
+        }
+
+        // Kept-built tab: close then reopen with a 3-line composer draft. Closed: no click monitors, no keep-open session.
+        // Reopened: level open and the notch is open + composer fit again (reset() cleared the fit on close).
+        do {
+            let vm = BoringViewModel(); keepAlive.append(vm)
+            vm.closedNotchSize = CGSize(width: 185, height: 32)
+            let w = makeWindow()
+            w.contentView = panelHost(FramesRoot(vm: vm))
+            OrchestratorExpand.shared.syncWindow(vm: vm, window: w, now: true)
+            w.orderFrontRegardless()
+            let store = OrchestratorTranscriptStore.shared
+            store.snapshotSet(blocks: richBlocks(6), draft: "line one\nline two\nline three")
+            try? await Task.sleep(for: .milliseconds(1200))
+            let fitted = vm.notchSize.height
+            closeNotch(vm)
+            try? await Task.sleep(for: .milliseconds(900))
+            var bad: [String] = []
+            if fitted <= openNotchSize.height + 1 { bad.append("composer fit not applied before close (h=\(fitted))") }
+            if OrchestratorExpand.shared.monitorsActive { bad.append("click monitors installed while closed") }
+            if share.preventNotchClose { bad.append("interaction leaked (sessions=\(share.sessions))") }
+            vm.notchSize = OrchestratorExpand.shared.openSize(for: vm); vm.notchState = .open
+            try? await Task.sleep(for: .milliseconds(1200))
+            if OrchestratorExpand.shared.level(for: vm) != .open { bad.append("level \(OrchestratorExpand.shared.level(for: vm))") }
+            if abs(vm.notchSize.height - fitted) > 0.5 { bad.append("reopened h=\(vm.notchSize.height) != open + composer fit \(fitted)") }
+            print("gate 8-kept-built-close-reopen: fitted=\(fitted) reopened=\(vm.notchSize.height) \(bad.isEmpty ? "ok" : "BAD " + bad.joined(separator: "; "))")
+            if !bad.isEmpty { failures.append("gate 8-kept-built-close-reopen: " + bad.joined(separator: "; ")) }
+            store.snapshotSet(blocks: [], draft: "")
+            teardown(w)
+            while share.preventNotchClose { share.endInteraction() }
         }
 
         if failures.isEmpty { print("OK: idle"); return }
