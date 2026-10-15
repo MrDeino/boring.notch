@@ -242,6 +242,8 @@ struct OrchestratorChatView: View {
     @State private var anchor = NSView()
     @FocusState private var fieldFocused: Bool
     @State private var keyMonitor: Any?
+    @State private var typeMonitor: Any?
+    @State private var caretToEnd = false
     @State private var dropTargeted = false
     @State private var tagGen = 0
     @State private var copiedToast = false
@@ -337,7 +339,8 @@ struct OrchestratorChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { n in
             if let w = keyWindow, (n.object as? NSWindow) === w { stopTyping() }
         }
-        .onDisappear { stopTyping(); removeKeyMonitor() }
+        .onAppear { if showComposer { installTypeMonitor() } }
+        .onDisappear { stopTyping(); removeKeyMonitor(); removeTypeMonitor() }
         // Focus loss ends typing; clicking elsewhere resigns key (above). Pointer leaving keeps it (INT-06).
         .onChange(of: fieldFocused) { _, f in if !f { stopTyping() } }
         .onChange(of: fieldFocused) { _, f in focusChanged(f) }
@@ -475,27 +478,17 @@ struct OrchestratorChatView: View {
                     }
                     ZStack(alignment: .topLeading) {
                         ghostLayer
-                        // The AppKit-backed TextField swallows clicks even under allowsHitTesting(false) and a
-                        // tap overlay, so it only exists while typing; otherwise a Text shows the draft.
-                        if manager.wantsKeyboard {
-                            TextField("", text: $store.draft, axis: .vertical)
-                                .lineLimit(1...5)
-                                .textFieldStyle(.plain)
-                                .font(OT.F.ui)
-                                .foregroundStyle(OT.C.text)
-                                .focused($fieldFocused)
-                                .onSubmit { submit() }
-                                .onExitCommand { stopTyping() }
-                                .onAppear { DispatchQueue.main.async { if manager.wantsKeyboard { fieldFocused = true } } }
-                        } else {
-                            Text(verbatim: store.draft).font(OT.F.ui).foregroundStyle(OT.C.text)
-                                .lineLimit(1...5).truncationMode(.tail)
-                        }
+                        // Always mounted: a click focuses it in place, so a drag or double-click selects on the first gesture.
+                        OrchestratorComposerField(text: $store.draft, focused: $fieldFocused,
+                                                  onFocus: { if keyWindow == nil { startTyping() } },
+                                                  onSubmit: submit, onExit: { stopTyping() })
+                            .font(OT.F.ui)
+                            .foregroundStyle(OT.C.text)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    // Overlay, not a ZStack child: Color.clear is greedy and would stretch the pill vertically.
-                    .overlay { if !manager.wantsKeyboard { Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() } } }
                     .padding(.vertical, 6)
+                    // Behind the field: a click in the pill's padding still starts typing.
+                    .background { Color.clear.contentShape(Rectangle()).onTapGesture { if !fieldFocused { startTyping() } } }
                 }
                 accessory.frame(height: 30)
                 sendButton.frame(height: 30)
@@ -620,6 +613,10 @@ struct OrchestratorChatView: View {
     private func focusChanged(_ f: Bool) {
         guard f else { removeKeyMonitor(); return }
         installKeyMonitor()
+        if caretToEnd {
+            caretToEnd = false
+            DispatchQueue.main.async { moveCaretToEnd(in: keyWindow) }
+        }
         if store.draft.isEmpty, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
             store.draft = l
             store.draftFromTerminal = true
@@ -686,6 +683,34 @@ struct OrchestratorChatView: View {
     private func removeKeyMonitor() {
         if let m = keyMonitor { NSEvent.removeMonitor(m) }
         keyMonitor = nil
+    }
+
+    /// Type-to-focus: a printable key while this notch is open on the tab and key, with the composer unfocused, starts
+    /// typing with that character. A local monitor only sees keys sent to this app, never another frontmost app's.
+    private func installTypeMonitor() {
+        guard typeMonitor == nil else { return }
+        typeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard let w = anchor.window, event.window === w else { return event }
+            let ctx = ComposerKeyContext(
+                notchOpen: vm.notchState == .open,
+                orchestratorTab: BoringViewCoordinator.shared.currentView == .orchestrator,
+                appActive: NSApp.isActive,
+                windowIsKey: w.isKeyWindow,
+                composerFocused: fieldFocused,
+                terminalFocused: OrchestratorKeyGate.terminalWantsKey,
+                editingOtherText: (w.firstResponder as? NSTextView)?.isEditable == true,
+                cardShowing: manager.prompt.map { promptIdentity($0) != PromptCardController.shared.dismissed } ?? false)
+            guard let s = typeToFocusText(characters: event.characters, modifierFlags: event.modifierFlags.rawValue, context: ctx) else { return event }
+            store.draft += s
+            caretToEnd = true
+            startTyping()
+            return nil
+        }
+    }
+
+    private func removeTypeMonitor() {
+        if let m = typeMonitor { NSEvent.removeMonitor(m) }
+        typeMonitor = nil
     }
 
     /// Clicking the conversation opens the terminal below; it takes the keyboard itself.

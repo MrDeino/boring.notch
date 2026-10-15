@@ -216,10 +216,27 @@ enum OrchestratorPost: Equatable {
     }
 }
 
+/// A POST that died before any HTTP response: serve restarted under a kept-alive connection, or isn't listening yet.
+/// Timeouts are left out (serve may have acted on the request).
+func isOrchestratorConnectionDrop(_ error: Error) -> Bool {
+    [.networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet].contains((error as? URLError)?.code)
+}
+
+/// session.data(for:) retried once, on a fresh session (no pooled connection), when the connection dropped before
+/// any response. Never after a response of any status, so a message can't be sent twice.
+func orchestratorPostData(for req: URLRequest, session: URLSession) async throws -> (Data, URLResponse) {
+    do { return try await session.data(for: req) } catch where isOrchestratorConnectionDrop(error) {
+        try? await Task.sleep(for: .milliseconds(250))
+        let fresh = URLSession(configuration: session.configuration)
+        defer { fresh.finishTasksAndInvalidate() }
+        return try await fresh.data(for: req)
+    }
+}
+
 /// HTTP status of the POST, nil when nothing was sent (invalid input). Network errors throw.
 func sendOrchestratorPost(_ post: OrchestratorPost, base: URL, session: URLSession) async throws -> Int? {
     guard let req = post.request(base: base) else { return nil }
-    let (_, resp) = try await session.data(for: req)
+    let (_, resp) = try await orchestratorPostData(for: req, session: session)
     guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
     return http.statusCode
 }
@@ -241,7 +258,7 @@ func decodeImagePath(_ data: Data) -> String? {
 /// Server path of the uploaded image; nil on any failure (non-200, network, bad body).
 func uploadOrchestratorImage(_ png: Data, base: URL, session: URLSession) async -> String? {
     guard let req = OrchestratorPost.image(png).request(base: base),
-          let (data, resp) = try? await session.data(for: req),
+          let (data, resp) = try? await orchestratorPostData(for: req, session: session),
           (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
     return decodeImagePath(data)
 }
