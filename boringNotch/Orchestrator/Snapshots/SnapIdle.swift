@@ -14,6 +14,13 @@ private struct IdleRoot: View {
     }
 }
 
+/// The app's panel host (boringNotchApp.createBoringNotchWindow). IDLE_DEFAULT_SIZING=1 keeps AppKit's default sizingOptions to reproduce the stale min size.
+@MainActor private func panelHost<V: View>(_ v: V) -> NSHostingView<V> {
+    let h = NSHostingView(rootView: v)
+    if ProcessInfo.processInfo.environment["IDLE_DEFAULT_SIZING"] == nil { h.sizingOptions = [] }
+    return h
+}
+
 private func cpuSeconds() -> Double {
     var u = rusage(); getrusage(RUSAGE_SELF, &u)
     func t(_ v: timeval) -> Double { Double(v.tv_sec) + Double(v.tv_usec) / 1e6 }
@@ -67,11 +74,11 @@ extension Snap {
                 vm.notchState = .closed
                 vm.closedNotchSize = CGSize(width: 185, height: 32)
                 w.setFrame(NSRect(x: 0, y: screenTop - 64, width: 440, height: 64), display: false)
-                w.contentView = NSHostingView(rootView: ClosedReplica(vm: vm).padding(.bottom, 8).compositingGroup())
+                w.contentView = panelHost(ClosedReplica(vm: vm).padding(.bottom, 8).compositingGroup())
             } else {
                 vm.notchState = .open
                 if level != .open { OrchestratorExpand.shared.setLevel(level, vm: vm, window: w) }
-                w.contentView = NSHostingView(rootView: IdleRoot(vm: vm))
+                w.contentView = panelHost(IdleRoot(vm: vm))
             }
             w.orderFrontRegardless()
             try? await Task.sleep(for: .seconds(1))
@@ -126,7 +133,7 @@ extension Snap {
         func gate(_ name: String, _ body: (BoringViewModel, KeyablePanel, () async -> Void, (ExpandLevel) async -> Void) async -> (expectClose: Bool, extra: [String])) async {
             let vm = BoringViewModel(); vm.notchState = .open; keepAlive.append(vm)
             let w = makeWindow()
-            w.contentView = NSHostingView(rootView: IdleRoot(vm: vm))
+            w.contentView = panelHost(IdleRoot(vm: vm))
             w.orderFrontRegardless()
             OrchestratorExpand.shared.syncWindow(vm: vm, window: w, now: true)
             try? await Task.sleep(for: .milliseconds(700))
@@ -151,9 +158,12 @@ extension Snap {
             if r.expectClose && closed < 1 { bad.append("notch not closed by outside click") }
             if share.preventNotchClose { bad.append("interaction leaked (sessions=\(share.sessions))") }
             if OrchestratorExpand.shared.level(for: vm) != .open { bad.append("level \(OrchestratorExpand.shared.level(for: vm))") }
-            // WARN only: this harness window is never "visible" to AppKit, so the hosting view's stale min size (597) sometimes clamps the shrink; cause not confirmed in the real app.
-            var warn = ""
-            if abs(w.frame.height - want.height) > 0.5 || abs(w.frame.width - want.width) > 0.5 { warn = " WARN window \(w.frame.size) != \(want) (hosting view min size still stale; the harness window is never visible to AppKit, unverified in the real app)" }
+            let hv = w.contentView as? NSHostingView<IdleRoot>
+            let diag = "min=\(w.minSize) cmin=\(w.contentMinSize) sizing=\(hv?.sizingOptions.rawValue ?? 99) fit=\(hv?.fittingSize ?? .zero)"
+            var warn = " " + diag
+            // Frame is owned by syncWindow: it must land on panelSize, and the window must not impose a larger min size.
+            if abs(w.frame.height - want.height) > 0.5 || abs(w.frame.width - want.width) > 0.5 { bad.append("window \(w.frame.size) != \(want)") }
+            if w.minSize.height > want.height + 0.5 || w.contentMinSize.height > want.height + 0.5 { bad.append("window min size \(w.minSize)/\(w.contentMinSize) above target") }
             print("gate \(name): visible=\(w.occlusionState.contains(.visible)) closes=\(closed) sessions=\(share.sessions) level=\(OrchestratorExpand.shared.level(for: vm)) win=\(w.frame.size) \(bad.isEmpty ? "ok" : "BAD " + bad.joined(separator: "; "))\(warn)")
             if !bad.isEmpty { failures.append("gate \(name): " + bad.joined(separator: "; ")) }
             teardown(w)
