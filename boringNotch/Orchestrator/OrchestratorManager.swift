@@ -337,8 +337,8 @@ extension OrchestratorManager {
     /// Snapshot harness only (Orchestrator/Snapshots): fixture responses through the real apply path.
     /// loaded false = connecting; chat nil = offline.
     func snapshotApply(loaded: Bool, chat: ChatResponse?, state: StateResponse, runsBoard: Bool = false) async {
-        hasLoaded = loaded
-        showRunsBoard = runsBoard
+        if hasLoaded != loaded { hasLoaded = loaded } // like the real path: an unchanged value must not publish
+        if showRunsBoard != runsBoard { showRunsBoard = runsBoard }
         guard loaded else { return }
         if let chat { applyState(state); await applyChat(chat) } else { applyOffline() }
     }
