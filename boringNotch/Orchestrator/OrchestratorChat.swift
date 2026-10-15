@@ -331,6 +331,7 @@ struct OrchestratorChatView: View {
             } else {
                 ForEach(store.blocks.suffix(maxRows)) { b in
                     ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, caret: caretVisible(live: manager.chatLive, working: manager.liveStatus != nil, kind: b.kind, id: b.id, newestID: store.blocks.last?.id) && store.pending.isEmpty, onClick: expandChat, onCopied: showCopied)
+                        .equatable()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -707,7 +708,13 @@ struct OrchestratorChatView: View {
 var orchSnapDiffOpen = false
 #endif
 
-private struct ChatBlockRow: View {
+/// Equatable on what it draws (closures excluded): `.equatable()` at the call site skips unchanged rows, so a keystroke
+/// or a new block re-lays-out only the rows whose block changed.
+private struct ChatBlockRow: View, Equatable {
+    static func == (a: ChatBlockRow, b: ChatBlockRow) -> Bool {
+        a.block == b.block && a.proseLineLimit == b.proseLineLimit && a.expanded == b.expanded && a.caret == b.caret
+    }
+
     let block: ChatBlock
     let proseLineLimit: Int?
     var expanded = false

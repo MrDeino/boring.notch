@@ -13,7 +13,7 @@ struct OrchestratorRunsBoard: View {
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 8) {
-                        ForEach(runs, id: \.stableID) { OrchestratorRunCard(run: $0) }
+                        ForEach(runs, id: \.stableID) { OrchestratorRunCard(run: $0).equatable() }
                     }
                 }
                 .frame(maxHeight: .infinity)
@@ -37,9 +37,10 @@ struct OrchestratorRunsBoard: View {
     }
 }
 
-struct OrchestratorRunCard: View {
+struct OrchestratorRunCard: View, Equatable {
     let run: OrchestratorRun
     var compact = false
+    static func == (a: Self, b: Self) -> Bool { a.run == b.run && a.compact == b.compact }
 
     private var state: String { run.state ?? "" }
     private var isWaiting: Bool { state == "waiting" }

@@ -95,7 +95,7 @@ struct OrchestratorRunsRail: View {
             }
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 6) {
-                    ForEach(boardRuns(manager.runs, limit: 10), id: \.stableID) { OrchestratorRunCard(run: $0, compact: true) }
+                    ForEach(boardRuns(manager.runs, limit: 10), id: \.stableID) { OrchestratorRunCard(run: $0, compact: true).equatable() }
                 }
             }
             Spacer(minLength: 0)
