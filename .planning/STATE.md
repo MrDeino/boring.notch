@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 Phase: 9
 Plan: Not started
 Status: Milestone complete
-Last activity: 2026-10-15 - Completed quick task 261015-ev9: expanded responsiveness, Release build
+Last activity: 2026-10-15 - Completed quick task 261015-hmo: notch animation frame rate (gate partly met)
 
 Progress: [██████████] 100%
 
@@ -110,4 +110,5 @@ Resume file: None
 | 261015-apm | Idle CPU fix (Core Animation for repeating animations, closed-notch views off the manager), run log closes on collapse, panel host no longer imposes min size (click-outside) | 2026-10-15 | .planning/quick/261015-apm-fix-lag-idle-cpu-and-click-outside-colla |
 | 261015-ehb | Expand/collapse pinned to the screen top again (window grows outside the spring transaction); screen-space --transition check on the real panel config | 2026-10-15 | .planning/quick/261015-ehb-expand-pinned-to-top-again |
 | 261015-ev9 | Outside click collapses in the same event turn (also open level while typing); scoped observation + Equatable rows/cards + text-fit cache cut expanded re-renders; signposts; Release build without Sparkle | 2026-10-15 | .planning/quick/261015-ev9-expanded-responsiveness-release-build |
+| 261015-hmo | Animation frame rate: --frames harness; tab content holds its size through a level change (no per-frame relayout); Orchestrator tab fades without 0.8 scale. p95 8.3 ms on all four transitions, but first/swap frames still 25-150 ms (20 ms gate not met) | 2026-10-15 | .planning/quick/261015-hmo-notch-animation-frame-rate |
 | 261014-q90 | Wings: runs + chat working (elapsed, count), queued done/failed, paused music yields, music-playing ✻/✓ | 2026-10-14 | .planning/quick/261014-q90-live-activity-wings |
