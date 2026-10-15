@@ -1036,7 +1036,11 @@ final class OrchestratorSelectableTextView: NSTextView {
     private static weak var active: OrchestratorSelectableTextView?
     var onClick: () -> Void = {}
     var onCopied: () -> Void = {}
-    var current: NSAttributedString?
+    var current: NSAttributedString? { didSet { fitCache = [:] } }
+    /// SwiftUI asks for the size several times per layout pass (and again on every composer keystroke that reflows the column);
+    /// laying the text out in a fresh stack each time dominated the typing cost. Keyed by width, line limit and break mode.
+    private struct FitKey: Hashable { let width: CGFloat; let lines: Int; let mode: UInt }
+    private var fitCache: [FitKey: CGSize] = [:]
     /// Streaming caret (08-03): 7x13 accent block after the last laid-out glyph; a CALayer, so blinking never
     /// touches the text storage (selection survives). Static with Reduce Motion.
     var caretOn = false { didSet { if caretOn != oldValue { needsLayout = true } } }
@@ -1120,6 +1124,9 @@ final class OrchestratorSelectableTextView: NSTextView {
     /// text stack: resizing the live container leaves usedRect stale.
     func fit(width: CGFloat?) -> CGSize {
         guard let live = textContainer, let text = current else { return .zero }
+        let key = FitKey(width: width ?? -1, lines: live.maximumNumberOfLines, mode: live.lineBreakMode.rawValue)
+        if let hit = fitCache[key] { return hit }
+        if fitCache.count > 16 { fitCache = [:] }
         let storage = NSTextStorage(attributedString: text)
         let layout = NSLayoutManager()
         let tc = NSTextContainer(size: NSSize(width: width ?? 100_000, height: .greatestFiniteMagnitude))
@@ -1130,7 +1137,9 @@ final class OrchestratorSelectableTextView: NSTextView {
         layout.addTextContainer(tc)
         layout.ensureLayout(for: tc)
         let u = layout.usedRect(for: tc)
-        return CGSize(width: ceil(u.width), height: u.height)
+        let size = CGSize(width: ceil(u.width), height: u.height)
+        fitCache[key] = size
+        return size
     }
 }
 
