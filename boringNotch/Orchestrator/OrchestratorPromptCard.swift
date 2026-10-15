@@ -319,6 +319,7 @@ struct OrchestratorPromptCard: View {
         .opacity(shownIn ? 1 : 0)
         .onAppear { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { shownIn = true }; ctl.appeared() }
         .onDisappear { ctl.disappeared() }
+        .onChange(of: vm.notchState == .open) { _, o in if o { ctl.appeared() } else { ctl.disappeared() } } // kept built while closed
         .onHover { ctl.hover($0, window: anchor.window) }
         .environment(\.promptWindow, anchor)
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: manager.prompt)

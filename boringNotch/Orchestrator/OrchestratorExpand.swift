@@ -141,6 +141,12 @@ final class OrchestratorExpand: ObservableObject {
         openTabs[key(vm)] = WeakVM(vm)
         installMonitors()
     }
+    /// vms whose Orchestrator tab view is built. ContentView keeps the tab built through a close only when it was
+    /// built (open on this tab): closing from Home/Shelf still removes their body with upstream's transition.
+    private var built: Set<ObjectIdentifier> = []
+    func setTabBuilt(_ on: Bool, vm: BoringViewModel) { if on { built.insert(key(vm)) } else { built.remove(key(vm)) } }
+    func keepsTabBuilt(_ vm: BoringViewModel) -> Bool { built.contains(key(vm)) }
+
     func tabClosed(vm: BoringViewModel) {
         openTabs[key(vm)] = nil
         if expanded.isEmpty && openTabs.isEmpty { removeMonitors() }
@@ -300,5 +306,26 @@ extension View {
     func notchRootFrame(notchSize: CGSize) -> some View {
         frame(maxWidth: max(windowSize.width, notchSize.width), maxHeight: windowSize.height + max(0, notchSize.height - openNotchSize.height), alignment: .top)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+/// ContentView's tab body while the notch is closed on the Orchestrator tab: kept built (opening no longer builds the
+/// transcript) but hidden and taking no space. The content keeps its last open size, overflowing a zero frame, so
+/// nothing re-lays out on close or reopen; it fades like the open/close transition it replaces.
+struct OrchestratorKeptBuilt: ViewModifier {
+    let hidden: Bool
+    @State private var size: CGSize?
+
+    func body(content: Content) -> some View {
+        content
+            // Never opened yet: lay it out near the open size, not at the zero frame (text at width 0 is a huge layout).
+            .frame(width: hidden ? (size ?? openNotchSize).width : nil, height: hidden ? (size ?? openNotchSize).height : nil, alignment: .top)
+            // Show/hide never animates the content's layout (it re-laid the column on every spring frame of the first open).
+            .transaction(value: hidden) { $0.animation = nil }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { if !hidden { size = $0 } }
+            .frame(width: hidden ? 0 : nil, height: hidden ? 0 : nil, alignment: .topLeading)
+            .animation(.smooth(duration: 0.35)) { $0.opacity(hidden ? 0 : 1) }
+            .allowsHitTesting(!hidden)
+            .accessibilityHidden(hidden)
     }
 }

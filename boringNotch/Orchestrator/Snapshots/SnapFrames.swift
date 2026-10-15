@@ -25,17 +25,19 @@ struct FramesRoot: View {
         let topR = open ? cornerRadiusInsets.opened.top : cornerRadiusInsets.closed.top
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
-                let mainLayout = VStack(alignment: .leading) { // NotchLayout
+                let mainLayout = VStack(alignment: .leading, spacing: open ? nil : 0) { // NotchLayout
                     VStack(alignment: .leading) {
                         if open { NotchReplica(vm: vm).header.frame(height: max(24, vm.effectiveClosedNotchHeight)) }
                         else { Rectangle().fill(.clear).frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight) }
                     }
                     .zIndex(2)
-                    if open {
+                    if open || (FramesProbe.keepBuilt && OrchestratorExpand.shared.keepsTabBuilt(vm)) { // ContentView: the Orchestrator tab is kept built while closed
                         VStack { OrchestratorView() }
                             .background(SizeProbe(shape: false))
                             .transition(.opacity.animation(.smooth(duration: 0.35))) // ContentView: the Orchestrator tab fades only
                             .zIndex(1)
+                            .allowsHitTesting(open)
+                            .modifier(OrchestratorKeptBuilt(hidden: !open))
                     }
                 }
                 .frame(alignment: .top)
@@ -115,6 +117,8 @@ enum FramesProbe {
     static var content: [(CFTimeInterval, CGSize)] = []
     /// Root body evaluations (time, the notchSize it read).
     static var bodies: [(CFTimeInterval, CGSize)] = []
+    /// ContentView's currentView == .orchestrator while closed (FRAMES_REMOUNT=1: the old insert-on-open, for before/after).
+    static var keepBuilt = ProcessInfo.processInfo.environment["FRAMES_REMOUNT"] == nil
 }
 
 /// An AppKit view in the shape's background: SwiftUI sets its frame on every animated frame (onGeometryChange and a

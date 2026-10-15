@@ -251,7 +251,7 @@ struct ContentView: View {
 
     @ViewBuilder
     func NotchLayout() -> some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: vm.notchState == .open ? nil : 0) { // closed: no gap above the kept-built tab
             VStack(alignment: .leading) {
                 if coordinator.helloAnimationRunning {
                     Spacer()
@@ -353,7 +353,7 @@ struct ContentView: View {
                       .fixedSize()
               }
               .zIndex(2)
-            if vm.notchState == .open {
+            if vm.notchState == .open || (coordinator.currentView == .orchestrator && OrchestratorExpand.shared.keepsTabBuilt(vm)) {
                 VStack {
                     switch coordinator.currentView {
                     case .home:
@@ -375,6 +375,7 @@ struct ContentView: View {
                 .zIndex(1)
                 .allowsHitTesting(vm.notchState == .open)
                 .opacity(gestureProgress != 0 ? 1.0 - min(abs(gestureProgress) * 0.1, 0.3) : 1.0)
+                .modifier(OrchestratorKeptBuilt(hidden: vm.notchState != .open))
             }
         }
         .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], delegate: GeneralDropTargetDelegate(isTargeted: $vm.generalDropTargeting))
