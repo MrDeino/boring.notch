@@ -26,7 +26,7 @@ struct FramesRoot: View {
                     .zIndex(2)
                     if open {
                         VStack { OrchestratorView() }
-                            .transition(.scale(scale: 0.8, anchor: .top).combined(with: .opacity).animation(.smooth(duration: 0.35)))
+                            .transition(.opacity.animation(.smooth(duration: 0.35))) // ContentView: the Orchestrator tab fades only
                             .zIndex(1)
                     }
                 }
