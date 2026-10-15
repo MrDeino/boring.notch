@@ -82,6 +82,56 @@ struct OrchestratorHeaderTrailing: View {
     }
 }
 
+/// "Claude update ready · Restart" and its confirm / busy / restarting states. Sits just under the header:
+/// the header row itself has no spare width at the open size.
+struct OrchestratorUpdateBadge: View {
+    @ObservedObject var manager = OrchestratorManager.shared
+
+    var body: some View {
+        let r = manager.claudeRestart
+        if !manager.offline && !manager.statusMenuOpen && !manager.notesOpen && (r != .idle || manager.claudeUpdateReady) {
+            HStack(spacing: 6) {
+                switch r {
+                case .idle:
+                    Button { withAnimation(.easeOut(duration: 0.15)) { manager.askRestart() } } label: {
+                        HStack(spacing: 6) {
+                            Circle().fill(OT.C.orange).frame(width: 6, height: 6)
+                            Text("Claude update ready").foregroundColor(OT.C.orangeText)
+                            Text("·").foregroundColor(OT.C.text5)
+                            Text("Restart").foregroundColor(OT.C.text)
+                        }.contentShape(Capsule())
+                    }.buttonStyle(PlainButtonStyle())
+                case .confirming:
+                    Text("Restart Claude?").foregroundColor(OT.C.text)
+                    pill("Restart", fg: .black, bg: OT.C.orange) { Task { await manager.restartClaude() } }
+                    pill("Cancel", fg: OT.C.text, bg: OT.C.selected2) { manager.cancelRestart() }
+                case .busy:
+                    Text("Claude is busy — restart when idle").foregroundColor(OT.C.orangeText)
+                    pill("Restart anyway", fg: .black, bg: OT.C.orange) { Task { await manager.restartClaude(force: true) } }
+                    pill("Cancel", fg: OT.C.text, bg: OT.C.selected2) { manager.cancelRestart() }
+                case .restarting:
+                    ProgressView().controlSize(.mini)
+                    Text("Restarting Claude…").foregroundColor(OT.C.text4)
+                }
+            }
+            .font(OT.F.meta)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(Capsule().fill(OT.C.orangeBg))
+            .fixedSize()
+            .disabled(manager.sending && r != .restarting)
+            .animation(.easeInOut(duration: 0.18), value: r)
+        }
+    }
+
+    private func pill(_ t: String, fg: Color, bg: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(t).foregroundColor(fg).padding(.horizontal, 9).frame(height: 18).background(Capsule().fill(bg))
+        }.buttonStyle(PlainButtonStyle())
+    }
+}
+
 struct OrchestratorUsageRing: View {
     let fraction: Double
     let high: Bool
