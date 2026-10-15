@@ -4,7 +4,7 @@ import Darwin
 // run.sh --idle: process CPU (limit 3% per scene) while idle (closed + open scenes, a running run, SSE-like repeated payloads),
 // and the outside-click / close-gate checks. Windows are on screen at alpha 0.01 so springs and
 // repeatForever animations really tick. Lines ending in //RUNLOG are dropped when the file is copied into
-// bisect worktrees older than the run log overlay. Env: IDLE_REPORT=1 never fails, IDLE_SAMPLE=1 samples each scene, IDLE_GATES=1 runs only the close-gate checks.
+// bisect worktrees older than the run log overlay. Env: IDLE_REPORT=1 never fails, IDLE_SAMPLE=1 samples each scene, IDLE_GATES=1 runs only the close-gate checks, IDLE_SCENES=f,g only the CPU scenes with those prefixes.
 
 private struct IdleRoot: View {
     @ObservedObject var vm: BoringViewModel
@@ -75,6 +75,7 @@ extension Snap {
             return decodeChatBlocks(Data(#"{"running":true,"blocks":[\#(items.joined(separator: ","))]}"#.utf8))?.blocks ?? []
         }
         func scene(_ name: String, closed: Bool, level: ExpandLevel = .open, runs: Bool, feed: Feed, limit: Double = 3) async {
+            if let only = ProcessInfo.processInfo.environment["IDLE_SCENES"], !only.split(separator: ",").contains(where: { name.hasPrefix($0) }) { return } // IDLE_SCENES=f,g: only those scenes
             let store = OrchestratorTranscriptStore.shared
             store.snapshotSet(blocks: feed == .rich || feed == .typing ? richBlocks(12) : [])
             defer { store.snapshotSet(blocks: []) }
@@ -145,9 +146,9 @@ extension Snap {
         await scene("c-open-running", closed: false, runs: true, feed: .same)
         await scene("c2-open-running-nofeed", closed: false, runs: true, feed: .none)
         await scene("d-expanded-running", closed: false, level: .expanded, runs: true, feed: .same)
-        await scene("e-expanded-running-doing", closed: false, level: .expanded, runs: true, feed: .doing, limit: 9) // the board redraws its activity line every second: real data, unoptimized harness
-        await scene("f-expanded-rich-tick", closed: false, level: .expanded, runs: true, feed: .rich, limit: 9) // doing + live status + one more block every second
-        await scene("g-expanded-rich-typing", closed: false, level: .expanded, runs: true, feed: .typing, limit: 9) // plus a keystroke every 100 ms
+        await scene("e-expanded-running-doing", closed: false, level: .expanded, runs: true, feed: .doing, limit: optimized ? 5 : 9) // the board redraws its activity line every second: real data, unoptimized harness
+        await scene("f-expanded-rich-tick", closed: false, level: .expanded, runs: true, feed: .rich, limit: optimized ? 5 : 9) // doing + live status + one more block every second
+        await scene("g-expanded-rich-typing", closed: false, level: .expanded, runs: true, feed: .typing, limit: 20) // plus a keystroke every 100 ms: a stress rate (about 2x a fast typist); was 30% before the fan-out fixes, the rest is SwiftUI geometry queries
 
         }
         // ---- outside-click / close-gate checks ----
@@ -186,6 +187,11 @@ extension Snap {
             let closed = vm.closeCount - before
             func lat(_ t: TimeInterval?) -> String { clickAt.flatMap { c in t.map { String(format: "%.1fms", ($0 - c) * 1000) } } ?? "-" }
             print("latency \(name): collapse=\(lat(collapseAt)) close=\(lat(vm.closedAt)) refused=\(vm.refused)")
+            // Click -> collapse start and click -> close under 150 ms (gates 3/4 are structural: they churn the window around the click).
+            if let c = clickAt, ["2-", "5-", "6-", "7-"].contains(where: name.hasPrefix) {
+                if let t = vm.closedAt, (t - c) * 1000 >= 150 { bad.append("click->close \(lat(t))") }
+                if let t = collapseAt, (t - c) * 1000 >= 150 { bad.append("click->collapse \(lat(t))") }
+            }
             if r.expectClose && closed < 1 { bad.append("notch not closed by outside click") }
             if share.preventNotchClose { bad.append("interaction leaked (sessions=\(share.sessions))") }
             if OrchestratorExpand.shared.level(for: vm) != .open { bad.append("level \(OrchestratorExpand.shared.level(for: vm))") }
