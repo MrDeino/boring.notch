@@ -19,7 +19,12 @@ final class BoringViewModel: NSObject, ObservableObject {
     @Published var screenUUID: String? = nil
     var effectiveClosedNotchHeight: CGFloat { closedNotchSize.height }
     var closeCount = 0
-    func close() { closeCount += 1 }
+    var closedAt: TimeInterval?
+    /// Like the real one: refused while a keep-open interaction (typing, expand) is active.
+    func close() {
+        if SharingStateManager.shared.preventNotchClose { return }
+        closeCount += 1; closedAt = ProcessInfo.processInfo.systemUptime
+    }
 }
 
 final class BoringViewCoordinator: ObservableObject {

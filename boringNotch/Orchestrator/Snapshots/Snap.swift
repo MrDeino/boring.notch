@@ -833,8 +833,8 @@ struct Snap {
             ok = ok && reachesSwiftUI
             line.append("composer hit reaches SwiftUI: \(reachesSwiftUI)")
             // Composer: notch bottom padding 12, pill 30 -> centre 27 above the notch bottom. Clicked at the open
-            // level only: while expanded, OrchestratorExpand's outside-click monitor reads the real cursor
-            // (NSEvent.mouseLocation), which a synthetic click doesn't move, and collapses the notch.
+            // level only. (These clicks go through window.sendEvent, which the NSApp-level outside-click monitors never see;
+            // the monitors take their point from the event, so SnapIdle's gates click outside without moving the cursor.)
             var typed: [Bool] = []
             let sub = m.$wantsKeyboard.sink { typed.append($0) }
             if !expanded {

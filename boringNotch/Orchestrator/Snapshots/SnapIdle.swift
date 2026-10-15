@@ -63,8 +63,21 @@ extension Snap {
 
         // ---- CPU scenes ----
         var sceneVMs: [BoringViewModel] = [] // same reason as keepAlive below
-        enum Feed { case same, doing, screen, tokens, none }
+        enum Feed { case same, doing, screen, tokens, none, rich, typing }
+        let optimized = ProcessInfo.processInfo.environment["OPT"]?.contains("-O") == true
+        // Transcript fixture for the rich feeds: a dozen blocks, one more per tick.
+        func richBlocks(_ n: Int) -> [ChatBlock] {
+            let items = (0..<n).map { i in
+                i % 3 == 0 ? #"{"id":"u\#(i)","kind":"user","text":"Question number \#(i) about the notch"}"#
+                : i % 3 == 1 ? #"{"id":"p\#(i)","kind":"prose","text":"Here is answer \#(i) with some **bold** words and `code`, long enough to wrap onto a second line in the expanded column."}"#
+                : #"{"id":"t\#(i)","kind":"tool","name":"Edit","target":"boringNotch/File\#(i).swift","result":"ok","added":3,"removed":1}"#
+            }
+            return decodeChatBlocks(Data(#"{"running":true,"blocks":[\#(items.joined(separator: ","))]}"#.utf8))?.blocks ?? []
+        }
         func scene(_ name: String, closed: Bool, level: ExpandLevel = .open, runs: Bool, feed: Feed, limit: Double = 3) async {
+            let store = OrchestratorTranscriptStore.shared
+            store.snapshotSet(blocks: feed == .rich || feed == .typing ? richBlocks(12) : [])
+            defer { store.snapshotSet(blocks: []) }
             await m.snapshotApply(loaded: true, chat: runs ? chat(41) : ChatResponse(running: true, screen: ""), state: runs ? state(doing: "Reading files") : none)
             try? await Task.sleep(for: .milliseconds(100))
             let vm = BoringViewModel()
@@ -93,10 +106,19 @@ extension Snap {
                     case .none: break
                     case .doing: await m.snapshotApply(loaded: true, chat: chat(41), state: state(doing: "Reading file \(n)"))
                     case .screen: await m.snapshotApply(loaded: true, chat: chat(41 + n), state: state(doing: "Reading file \(n)"))
+                    case .rich, .typing:
+                        store.snapshotSet(blocks: richBlocks(12 + n), draft: store.draft)
+                        await m.snapshotApply(loaded: true, chat: chat(41 + n), state: state(doing: "Reading file \(n)"))
                     }
                     try? await Task.sleep(for: .seconds(1))
                 }
             }
+            let typist = Task { @MainActor in // one character per 100 ms, like a fast typist
+                guard feed == .typing else { return }
+                var k = 0
+                while !Task.isCancelled { k += 1; store.draft = String(repeating: "x", count: k % 60); try? await Task.sleep(for: .milliseconds(100)) }
+            }
+            defer { typist.cancel() }
             if sampling {
                 let p = Process()
                 p.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
@@ -124,6 +146,8 @@ extension Snap {
         await scene("c2-open-running-nofeed", closed: false, runs: true, feed: .none)
         await scene("d-expanded-running", closed: false, level: .expanded, runs: true, feed: .same)
         await scene("e-expanded-running-doing", closed: false, level: .expanded, runs: true, feed: .doing, limit: 9) // the board redraws its activity line every second: real data, unoptimized harness
+        await scene("f-expanded-rich-tick", closed: false, level: .expanded, runs: true, feed: .rich, limit: 9) // doing + live status + one more block every second
+        await scene("g-expanded-rich-typing", closed: false, level: .expanded, runs: true, feed: .typing, limit: 9) // plus a keystroke every 100 ms
 
         }
         // ---- outside-click / close-gate checks ----
@@ -140,12 +164,16 @@ extension Snap {
             let before = vm.closeCount
             // The window is "not visible" to AppKit, so SwiftUI's onChange handlers run late: wait for the state a user would see before acting.
             func waitLevel(_ l: ExpandLevel) async { for _ in 0..<50 where OrchestratorExpand.shared.level(for: vm) != l { w.contentView?.layoutSubtreeIfNeeded(); try? await Task.sleep(for: .milliseconds(100)) }; try? await Task.sleep(for: .milliseconds(700)); w.contentView?.layoutSubtreeIfNeeded() }
+            var clickAt: TimeInterval?, collapseAt: TimeInterval?
+            let watch = OrchestratorExpand.shared.$expanded.sink { set in // fires synchronously when the collapse starts
+                if clickAt != nil, collapseAt == nil, !set.contains(ObjectIdentifier(vm)) { collapseAt = ProcessInfo.processInfo.systemUptime }
+            }
             func outsideClick() async {
-                // The expand monitors read NSEvent.mouseLocation: park the cursor just under the notch, then deliver a real mouseDown.
-                let y = w.frame.maxY - vm.notchSize.height - 10
-                CGWarpMouseCursorPosition(CGPoint(x: w.frame.midX, y: screenTop - y))
-                for _ in 0..<30 where abs(NSEvent.mouseLocation.y - y) > 2 { try? await Task.sleep(for: .milliseconds(50)) } // the monitors read NSEvent.mouseLocation
-                if let e = NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: w.frame.width / 2, y: y - w.frame.minY), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                // A mouseDown 10pt under the notch, delivered in-process: the monitors take the point from the event, the real cursor never moves.
+                let y = w.frame.height - vm.notchSize.height - 10
+                let t = ProcessInfo.processInfo.systemUptime
+                clickAt = t
+                if let e = NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: w.frame.width / 2, y: y), modifierFlags: [], timestamp: t,
                                               windowNumber: w.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1) { NSApp.sendEvent(e) }
                 try? await Task.sleep(for: .milliseconds(150))
             }
@@ -153,8 +181,11 @@ extension Snap {
             // The shrink waits for the notch spring, which this alpha-0.01 window sometimes advances slowly: allow up to 4s.
             let want = panelSize(notch: vm.notchSize, base: windowSize, openHeight: openNotchSize.height)
             for _ in 0..<40 where abs(w.frame.height - want.height) > 0.5 || abs(w.frame.width - want.width) > 0.5 { w.contentView?.layoutSubtreeIfNeeded(); try? await Task.sleep(for: .milliseconds(100)) }
+            watch.cancel()
             var bad = r.extra
             let closed = vm.closeCount - before
+            func lat(_ t: TimeInterval?) -> String { clickAt.flatMap { c in t.map { String(format: "%.1fms", ($0 - c) * 1000) } } ?? "-" }
+            print("latency \(name): collapse=\(lat(collapseAt)) close=\(lat(vm.closedAt))")
             if r.expectClose && closed < 1 { bad.append("notch not closed by outside click") }
             if share.preventNotchClose { bad.append("interaction leaked (sessions=\(share.sessions))") }
             if OrchestratorExpand.shared.level(for: vm) != .open { bad.append("level \(OrchestratorExpand.shared.level(for: vm))") }
@@ -167,6 +198,7 @@ extension Snap {
             print("gate \(name): visible=\(w.occlusionState.contains(.visible)) closes=\(closed) sessions=\(share.sessions) level=\(OrchestratorExpand.shared.level(for: vm)) win=\(w.frame.size) \(bad.isEmpty ? "ok" : "BAD " + bad.joined(separator: "; "))\(warn)")
             if !bad.isEmpty { failures.append("gate \(name): " + bad.joined(separator: "; ")) }
             teardown(w)
+            m.endTyping()
             while share.preventNotchClose { share.endInteraction() } // do not let one failure poison the next gate
             try? await Task.sleep(for: .milliseconds(300))
         }
@@ -206,6 +238,27 @@ extension Snap {
             await click() //RUNLOG
             return (true, []) //RUNLOG
         } //RUNLOG
+
+        await gate("6-expanded-ticking-outside-click") { vm, w, click, wait in
+            OrchestratorExpand.shared.setLevel(.expanded, vm: vm, window: w)
+            await wait(.expanded)
+            let store = OrchestratorTranscriptStore.shared
+            store.snapshotSet(blocks: richBlocks(12))
+            let feeder = Task { @MainActor in
+                var n = 0
+                while !Task.isCancelled { n += 1; store.snapshotSet(blocks: richBlocks(12 + n)); await m.snapshotApply(loaded: true, chat: chat(41 + n), state: state(doing: "Reading file \(n)")); try? await Task.sleep(for: .milliseconds(300)) }
+            }
+            try? await Task.sleep(for: .milliseconds(1500))
+            await click()
+            feeder.cancel(); store.snapshotSet(blocks: [])
+            return (true, [])
+        }
+        await gate("7-open-typing-outside-click") { vm, w, click, wait in
+            m.beginTyping(in: w) // the composer is focused: the hover-exit close is refused while typing
+            try? await Task.sleep(for: .milliseconds(300))
+            await click()
+            return (true, [])
+        }
 
         if failures.isEmpty { print("OK: idle"); return }
         print("FAIL: " + failures.joined(separator: ", "))

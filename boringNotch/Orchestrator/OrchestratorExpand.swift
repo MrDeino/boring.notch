@@ -1,4 +1,9 @@
 import SwiftUI
+import os
+
+/// Perf probes for the click->collapse path (Instruments > os_signpost; `log stream --predicate 'subsystem == "boringnotch.orch"'`).
+let orchPerf = OSSignposter(subsystem: "boringnotch.orch", category: "perf")
+private let orchLog = Logger(subsystem: "boringnotch.orch", category: "perf")
 
 /// Per-screen expand-down state for the Orchestrator tab (Phase 3).
 /// While expanded, one SharingStateManager interaction keeps the notch from auto-closing.
@@ -164,7 +169,9 @@ final class OrchestratorExpand: ObservableObject {
         vms[k] = WeakVM(vm)
         installMonitors()
         SharingStateManager.shared.beginInteraction()
+        let sp = orchPerf.beginInterval("expand")
         animate(vm, to: openSize(for: vm))
+        Task { try? await Task.sleep(for: .milliseconds(450)); orchPerf.endInterval("expand", sp) }
     }
 
     func collapse(vm: BoringViewModel, refocus: Bool = true) {
@@ -200,11 +207,13 @@ final class OrchestratorExpand: ObservableObject {
         guard globalMonitor == nil else { return }
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         // Global = click in another app, which takes focus itself; don't hand it back to previousApp.
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] _ in
-            Task { @MainActor in self?.collapseIfOutside(refocus: false) }
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] e in
+            let p = e.locationInWindow, t = e.timestamp // window-less event: already screen coordinates
+            Task { @MainActor in self?.collapseIfOutside(at: p, timestamp: t, refocus: false) }
         }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] e in
-            Task { @MainActor in self?.collapseIfOutside(refocus: true) }
+            let p = e.window.map { $0.convertPoint(toScreen: e.locationInWindow) } ?? NSEvent.mouseLocation, t = e.timestamp
+            Task { @MainActor in self?.collapseIfOutside(at: p, timestamp: t, refocus: true) }
             return e
         }
     }
@@ -216,16 +225,18 @@ final class OrchestratorExpand: ObservableObject {
     }
 
     /// Outside click: collapse, then close the notch (keep-open is released by collapse).
-    private func collapseIfOutside(refocus: Bool) {
-        let p = NSEvent.mouseLocation
+    private func collapseIfOutside(at p: CGPoint, timestamp: TimeInterval, refocus: Bool) {
+        func ms() -> Double { (ProcessInfo.processInfo.systemUptime - timestamp) * 1000 }
+        orchLog.info("outsideClick handler \(ms(), format: .fixed(precision: 1)) ms after the event")
+        orchPerf.emitEvent("outsideClick", "\(ms(), format: .fixed(precision: 1))ms")
         let outside = expanded.compactMap { k -> BoringViewModel? in
             guard let vm = vms[k]?.vm, let w = windows[k]?.w,
                   isOutsideNotch(point: p, windowFrame: w.frame, notchWidth: vm.notchSize.width, notchHeight: vm.notchSize.height) else { return nil }
             return vm
         }
         // Collapse all first: close() is blocked while any keep-open session is still active.
-        for vm in outside { collapse(vm: vm, refocus: refocus) }
-        for vm in outside { vm.close() }
+        for vm in outside { orchPerf.emitEvent("collapseStart", "\(ms(), format: .fixed(precision: 1))ms"); collapse(vm: vm, refocus: refocus) }
+        for vm in outside { orchPerf.emitEvent("closeStart", "\(ms(), format: .fixed(precision: 1))ms"); vm.close() }
     }
 
     /// Shared bookkeeping: exactly one endInteraction per expand.
