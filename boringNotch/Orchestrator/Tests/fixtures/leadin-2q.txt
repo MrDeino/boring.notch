@@ -1,0 +1,60 @@
+
+ ▐▛███▛█   Claude Code v2.1.299
+▝▜██████▀  Haiku 5.5 · Claude Max
+ ▝▝   ▝▝   /private/tmp/notch-fixture
+
+
+❯ Write a paragraph of exactly three sentences about why notches exist on laptops, then on a new paragraph write: LEADIN-END. Then use the AskUserQuestion tool once with two questions: header Fruit   
+  (options apple, banana) and header Color (options red, blue). Do nothing else.                                                                                                                        
+
+⏺ Laptop notches exist because the webcam has to sit somewhere, and manufacturers put it in the top bezel, the thinnest part of the frame that still faces the user. Apple's 2021 MacBook Pro introduced
+  a notch that houses the camera and microphones in a small cutout, so the display can run to the top edge without a thick black bar. The trade-off is that the cutout takes up a slice of the menu bar
+  and screen area, so software has to be designed to work around it.
+
+  LEADIN-END
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Fruit  ☐ Color  ✔ Submit  →
+
+Which fruit do you prefer?
+
+❯ 1. apple
+     Choose apple
+  2. banana
+     Choose banana
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                      
+
+
+
+                                       
+                                                     

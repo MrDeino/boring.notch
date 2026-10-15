@@ -1,0 +1,60 @@
+
+❯ the animations are smoother, but still not 100% smooth, expand moves in two steps
+
+⏺ The two-phase move is probably the window and the notch shape resizing in separate steps: first wider, then taller. The window frame is set before the spring starts, so the shape catches up in a
+  second pass. Here's what I'd send back to the run that just did the animation work (29b9), since it has the measurements already:
+
+  Goal: expand and close are one continuous motion, with width and height growing together from the top centre.
+
+  Context: the user tried the Release build. It is smoother, but expand still moves in two steps and close has one long frame near the end.
+
+  Constraints: don't regress the music player; keep the closed notch's idle CPU low; stay on the current branch.
+
+  Done when: the --transition check shows one spring for both axes, no frame over 20 ms, and the closed notch idles under 1% CPU.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Fruit  ☐ Color  ✔ Submit  →
+
+Which fruit do you prefer?
+
+❯ 1. apple
+     Choose apple
+  2. banana
+     Choose banana
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                      
+
+
+
+                                       
+                                                     
