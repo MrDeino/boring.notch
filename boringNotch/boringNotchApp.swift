@@ -21,8 +21,13 @@ struct DynamicNotchApp: App {
     let updaterController: SPUStandardUpdaterController
 
     init() {
+        #if ORCH_NO_SPARKLE
+        let startUpdater = false // local ad-hoc builds must not self-update
+        #else
+        let startUpdater = true
+        #endif
         updaterController = SPUStandardUpdaterController(
-            startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+            startingUpdater: startUpdater, updaterDelegate: nil, userDriverDelegate: nil)
 
         // Initialize the settings window controller with the updater controller
         SettingsWindowController.shared.setUpdaterController(updaterController)
