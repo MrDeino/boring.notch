@@ -239,8 +239,12 @@ func workingCount(chatWorking: Bool, runs: [OrchestratorRun]) -> Int {
 
 /// Elapsed of the longest-working agent: the chat's own timer or a running run's startedAt.
 func longestWorking(chatElapsed: TimeInterval?, runs: [OrchestratorRun], now: Date) -> TimeInterval? {
-    let r = runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt).map { now.timeIntervalSince($0) } }
-    return (r + [chatElapsed].compactMap { $0 }).max()
+    longestWorking(chatElapsed: chatElapsed, starts: runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt) }, now: now)
+}
+
+/// `starts`: startedAt of the running runs.
+func longestWorking(chatElapsed: TimeInterval?, starts: [Date], now: Date) -> TimeInterval? {
+    (starts.map { now.timeIntervalSince($0) } + [chatElapsed].compactMap { $0 }).max()
 }
 
 func wingLabel(promptTitle: String?, waitingDenials: [String]?) -> String {

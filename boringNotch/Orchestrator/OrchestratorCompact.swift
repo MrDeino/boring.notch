@@ -3,9 +3,9 @@ import SwiftUI
 /// Closed-notch overlay: attention dot. Overlay only, no layout effect.
 struct OrchestratorClosedIndicators: View {
     @EnvironmentObject var vm: BoringViewModel
-    @ObservedObject var manager = OrchestratorManager.shared
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var wings = OrchestratorWingsModel.shared
+    @ObservedObject var inputs = OrchestratorWingsInputs.shared
     @ObservedObject var music = MusicManager.shared
     @ObservedObject var approvals = OrchestratorApprovalCenter.shared
 
@@ -17,9 +17,9 @@ struct OrchestratorClosedIndicators: View {
 
     var body: some View {
         if vm.notchState == .closed && !vm.hideOnClosed && vm.effectiveClosedNotchHeight > 0
-            && !coordinator.helloAnimationRunning && !manager.offline && approvals.approval == nil {
+            && !coordinator.helloAnimationRunning && approvals.approval == nil {
             ZStack {
-                if manager.needsAttention && !dotCovered {
+                if inputs.attentionDot && !dotCovered {
                     Circle().fill(.orange).frame(width: 6, height: 6)
                         .padding(.trailing, 10).padding(.top, 5)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)

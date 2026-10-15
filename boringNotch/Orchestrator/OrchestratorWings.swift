@@ -2,13 +2,37 @@
 import SwiftUI
 import Combine
 
-/// Decides which wing (if any) the closed notch shows. Publishes only `kind`.
+/// What the working wing's elapsed text is computed from.
+struct WingTiming: Equatable {
+    var chatElapsed: TimeInterval?
+    var starts: [Date]
+}
+
+/// The small inputs of the closed-notch views, split from `OrchestratorWingsModel` because ContentView observes that
+/// one (its `kind`/`shiftX`) and must not re-evaluate its whole body every time the elapsed timer re-anchors.
+@MainActor
+final class OrchestratorWingsInputs: ObservableObject {
+    static let shared = OrchestratorWingsInputs()
+    /// Not @Published: the wing's TimelineView re-reads it every second, so a changing timer re-renders nothing else.
+    /// `chatAt` is when `chatElapsed` last changed (the base for counting on between updates).
+    fileprivate(set) var timing = WingTiming(chatElapsed: nil, starts: []) {
+        didSet { if timing.chatElapsed != oldValue.chatElapsed { chatAt = Date() } }
+    }
+    private(set) var chatAt = Date()
+    /// A run waits or the chat shows a prompt, and serve is reachable.
+    @Published fileprivate(set) var attentionDot = false
+}
+
+/// Decides which wing (if any) the closed notch shows. Publishes only `kind` and `shiftX`; the other inputs the
+/// closed notch draws live in `OrchestratorWingsInputs`, and all of them publish only when they change, so a manager
+/// publish that changes none of them (a run's activity line, usage) re-renders nothing in the closed notch.
 @MainActor
 final class OrchestratorWingsModel: ObservableObject {
     static let shared = OrchestratorWingsModel()
     @Published private(set) var kind: WingKind? = nil
     /// Offset that re-centres the closed shape when the wings differ in width; 0 while no wing is on screen.
     @Published private(set) var shiftX: CGFloat = 0
+    private let inputs = OrchestratorWingsInputs.shared
     private let manager = OrchestratorManager.shared
     private var baseline = RunsBaseline()
     private var queue: [(project: String, failed: Bool)] = []
@@ -51,6 +75,10 @@ final class OrchestratorWingsModel: ObservableObject {
     }
 
     private func recompute() {
+        let dot = manager.needsAttention && !manager.offline
+        if dot != inputs.attentionDot { inputs.attentionDot = dot }
+        let t = WingTiming(chatElapsed: manager.liveStatus?.elapsed, starts: manager.runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt) })
+        if t != inputs.timing { inputs.timing = t }
         var k: WingKind? = nil
         if manager.hasLoaded && !manager.offline {
             let label = wingLabel(promptTitle: manager.prompt?.title,
@@ -67,8 +95,7 @@ final class OrchestratorWingsModel: ObservableObject {
 struct OrchestratorWingsView: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var model = OrchestratorWingsModel.shared
-    @ObservedObject var manager = OrchestratorManager.shared
-    @State private var anchor: (elapsed: TimeInterval, at: Date) = (0, .now)
+    private let inputs = OrchestratorWingsInputs.shared // read by the TimelineView, deliberately not observed
     @State private var leftW: CGFloat = 0
     @State private var rightW: CGFloat = 0
 
@@ -84,17 +111,15 @@ struct OrchestratorWingsView: View {
             }
             .frame(height: vm.effectiveClosedNotchHeight)
             .transition(.opacity)
-            .onAppear { anchor = (manager.liveStatus?.elapsed ?? 0, .now) }
             .onChange(of: wingShift(left: leftW, right: rightW), initial: true) { _, x in model.setShift(x) }
             .onDisappear { model.setShift(0) }
-            .onChange(of: manager.liveStatus?.elapsed) { _, e in anchor = (e ?? 0, .now) }
         }
     }
 
     private func elapsedText(_ now: Date) -> String {
         guard case .working = model.kind else { return "" }
-        let chat = manager.liveStatus?.elapsed.map { _ in anchor.elapsed + now.timeIntervalSince(anchor.at) }
-        return longestWorking(chatElapsed: chat, runs: manager.runs, now: now).map(formatElapsed) ?? ""
+        let chat = inputs.timing.chatElapsed.map { $0 + now.timeIntervalSince(inputs.chatAt) }
+        return longestWorking(chatElapsed: chat, starts: inputs.timing.starts, now: now).map(formatElapsed) ?? ""
     }
 
     @ViewBuilder private func left(_ k: WingKind) -> some View {
@@ -213,11 +238,11 @@ private struct WingGlowDot: View {
 /// Just before the music visualizer while music plays (the wings stay hidden): 7px needs-you dot,
 /// else a tiny ✻ while anything works, or a ✓/✕ for the 4s a finished run would show.
 struct OrchestratorMusicIndicator: View {
-    @ObservedObject var manager = OrchestratorManager.shared
     @ObservedObject var wings = OrchestratorWingsModel.shared
+    @ObservedObject var inputs = OrchestratorWingsInputs.shared
     var body: some View {
         Group {
-            if manager.needsAttention && !manager.offline {
+            if inputs.attentionDot {
                 Circle().fill(OT.C.orange).frame(width: 7, height: 7)
             } else if case .working = wings.kind {
                 WingSpinner(size: 8)
