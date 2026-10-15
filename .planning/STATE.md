@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 Phase: 9
 Plan: Not started
 Status: Milestone complete
-Last activity: 2026-10-15 - Completed quick task 261015-hm7: readable approvals, AskUserQuestion opens the question card
+Last activity: 2026-10-15 - Completed quick task 261015-jym: one-motion expand, tab kept built (partly met), merged main
 
 Progress: [██████████] 100%
 
@@ -119,3 +119,4 @@ Resume file: None
 | 261015-me4 | Type-to-focus composer (printable key on the open/expanded tab, app frontmost, no card); composer field always mounted so drag/double-click select on the first gesture; POSTs retry once on a fresh session after a dropped connection, never after an HTTP response | 2026-10-15 | .planning/quick/261015-me4-type-to-focus-composer-first-gesture-sel |
 | 261014-q90 | Wings: runs + chat working (elapsed, count), queued done/failed, paused music yields, music-playing ✻/✓ | 2026-10-14 | .planning/quick/261014-q90-live-activity-wings |
 | 261015-me5 | "Claude update ready · Restart" badge under the tab header + closed dot; confirmed POST /api/chat/restart, 409 busy -> Restart anyway (force), restarting until running | 2026-10-15 | .planning/quick/261015-me5-claude-update-ready-restart |
+| 261015-jym | One-motion expand: per-frame width/height together gate (passes, gap 0.000), root-read guard, Orchestrator tab kept built while closed (+2-3% closed idle with a rich feed); merged main #5-#11. Partly met: expand still stalls ~50 ms at the content swap (even gate and 20 ms gate fail) | 2026-10-15 | .planning/quick/261015-jym-one-motion-expand-and-keep-tab-built |
