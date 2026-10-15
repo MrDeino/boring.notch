@@ -429,13 +429,67 @@ struct Snap {
                 print("\(pinned ? "new" : "old") \(name): " + tops.joined(separator: "  "))
             }
         }
-        print(moved ? "FAIL: top edge moved with the new root frame" : "OK: top edge pinned at y=0 in every step (new root frame)")
+        print(moved ? "FAIL: root-frame-only check: top edge moved" : "OK: root-frame-only check (no panel, host-local): top edge at y=0 in every step")
         await livePass(out)
     }
 
     private struct LiveRoot: View {
         @ObservedObject var vm: BoringViewModel
-        var body: some View { NotchReplica(vm: vm).core.environmentObject(vm).notchRootFrame(notchSize: vm.notchSize) }
+        var body: some View {
+            // ContentView's root chain, including the onChange hook that drives the real panel frame.
+            ZStack(alignment: .top) { VStack(spacing: 0) { NotchReplica(vm: vm).core.environmentObject(vm).frame(height: vm.notchState == .open ? vm.notchSize.height : nil) } }
+                .padding(.bottom, 8)
+                .notchRootFrame(notchSize: vm.notchSize)
+                .onChange(of: vm.notchSize) { _, _ in OrchestratorExpand.shared.syncWindow(vm: vm) }
+                .compositingGroup()
+                .scaleEffect(x: 1, y: 1, anchor: .top)
+        }
+    }
+
+    /// Dense screen-space check on the app-like panel: window top, shape top and shape bottom every ~16ms through grow and collapse.
+    static func topEdgePass(vm: BoringViewModel, window: NSWindow, host: NSView) async -> [String] {
+        let screenTop = NSScreen.main?.frame.maxY ?? 900
+        var bad: [String] = []
+        print("dense start: screen \(NSScreen.main?.frame ?? .zero) window \(window.frame) host \(host.frame)")
+        for (phase, level) in [("grow", ExpandLevel.expanded), ("collapse", .open)] {
+            OrchestratorExpand.shared.setLevel(level, vm: vm, window: window)
+            let t0 = ContinuousClock.now
+            var lastBottom: CGFloat? = nil
+            var first = true
+            var settledFor = 0
+            print("dense \(phase): t window(y,h) hostTopScreen hostH shapeTop shapeBottom notchH")
+            while true {
+                try? await Task.sleep(for: .milliseconds(8))
+                let t = Int((ContinuousClock.now - t0) / .milliseconds(1))
+                if t > 1000 { break }
+                let hb = host.convert(host.bounds, to: nil)
+                let hostTop = window.frame.minY + hb.maxY
+                let col = NSRect(x: host.bounds.midX - 2, y: 0, width: 4, height: host.bounds.height)
+                guard let rep = host.bitmapImageRepForCachingDisplay(in: col) else { continue }
+                host.cacheDisplay(in: col, to: rep)
+                let k = CGFloat(rep.pixelsHigh) / col.height
+                func dark(_ y: Int) -> Bool { let c = rep.colorAt(x: 1, y: y); return (c?.brightnessComponent ?? 1) < 0.05 && (c?.alphaComponent ?? 0) > 0.5 }
+                let topRow = (0..<rep.pixelsHigh).first(where: dark), botRow = (0..<rep.pixelsHigh).last(where: dark)
+                let shapeTop = topRow.map { hostTop - CGFloat($0) / k } ?? -1
+                let shapeBot = botRow.map { hostTop - CGFloat($0 + 1) / k } ?? -1
+                print(String(format: "dense %@ %4d  win(%.1f,%.0f) hostTop=%.1f hostH=%.0f top=%.1f bottom=%.1f notchH=%.0f", phase, t, window.frame.minY, window.frame.height, hostTop, host.bounds.height, shapeTop, shapeBot, vm.notchSize.height))
+                var why: [String] = []
+                if abs(window.frame.maxY - screenTop) > 0.5 { why.append("window top \(window.frame.maxY)") }
+                if abs(hostTop - screenTop) > 0.5 { why.append("host top \(hostTop)") }
+                if topRow == nil || abs(shapeTop - screenTop) > 0.5 { why.append("shape top \(shapeTop)") }
+                if let lb = lastBottom, topRow != nil {
+                    let dy = shapeBot - lb // screen y up: growing moves the bottom down (negative)
+                    // spring overshoot allowed: only judge until the notch height first reaches its target
+                    if settledFor == 0, phase == "grow" ? dy > 0.5 : dy < -0.5 { why.append("bottom moved the wrong way (\(dy))") }
+                }
+                if vm.notchSize.height == OrchestratorExpand.shared.openSize(for: vm).height { settledFor += 1 }
+                if topRow != nil { lastBottom = shapeBot }
+                if !why.isEmpty, first { first = false; bad.append("\(phase) t=\(t)ms: " + why.joined(separator: ", ")) }
+                if settledFor > 5 && t > 600 { break }
+            }
+            try? await Task.sleep(for: .milliseconds(700))
+        }
+        return bad
     }
 
     /// One hosted window, real setLevel animation. Content fades out, lays out once at the final size while hidden and
@@ -443,13 +497,16 @@ struct Snap {
     /// layout, never an intermediate one, and the blank window must be short.
     static func livePass(_ out: URL) async {
         let vm = BoringViewModel()
-        let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: windowSize.width, height: windowSize.height),
-                              styleMask: .borderless, backing: .buffered, defer: false)
-        window.backgroundColor = NSColor(white: 0.35, alpha: 1)
+        // Hosted like createBoringNotchWindow: panel style mask, clear, sizingOptions = [] (TRANSITION_DEFAULT_SIZING=1 keeps the default).
+        let window = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: windowSize.width, height: windowSize.height),
+                                  styleMask: [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow], backing: .buffered, defer: false)
+        window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = false; window.isFloatingPanel = true
+        window.level = .mainMenu + 3; window.collectionBehavior = [.fullScreenAuxiliary, .stationary, .canJoinAllSpaces, .ignoresCycle] // like BoringNotchWindow: above the menu bar, so the frame is not pushed below it
         // Offscreen windows get no display link, so springs stall; a (nearly) transparent on-screen window keeps them ticking.
         window.alphaValue = 0.01; window.ignoresMouseEvents = true
-        window.setFrameOrigin(NSPoint(x: 0, y: (NSScreen.main?.frame.maxY ?? 900) - windowSize.height))
+        window.setFrameOrigin(NSPoint(x: ((NSScreen.main?.frame.midX ?? 720) - windowSize.width / 2), y: (NSScreen.main?.frame.maxY ?? 900) - windowSize.height))
         let host = NSHostingView(rootView: LiveRoot(vm: vm))
+        if ProcessInfo.processInfo.environment["TRANSITION_DEFAULT_SIZING"] == nil { host.sizingOptions = [] }
         window.contentView = host
         window.orderFrontRegardless()
         try? await Task.sleep(for: .milliseconds(700))
@@ -519,6 +576,10 @@ struct Snap {
             blankSpan.removeAll()
             settled = final
         }
+        OrchestratorExpand.shared.reset()
+        try? await Task.sleep(for: .milliseconds(900))
+        let topBad = await topEdgePass(vm: vm, window: window, host: host)
+        print(topBad.isEmpty ? "OK: screen-space top edge pinned through grow and collapse (panel-hosted)" : "FAIL: screen-space top edge: first offender " + topBad.joined(separator: " | "))
         OrchestratorExpand.shared.reset()
         window.contentView = nil
         window.orderOut(nil)

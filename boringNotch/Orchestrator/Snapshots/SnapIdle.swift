@@ -15,7 +15,7 @@ private struct IdleRoot: View {
 }
 
 /// The app's panel host (boringNotchApp.createBoringNotchWindow). IDLE_DEFAULT_SIZING=1 keeps AppKit's default sizingOptions to reproduce the stale min size.
-@MainActor private func panelHost<V: View>(_ v: V) -> NSHostingView<V> {
+@MainActor func panelHost<V: View>(_ v: V) -> NSHostingView<V> {
     let h = NSHostingView(rootView: v)
     if ProcessInfo.processInfo.environment["IDLE_DEFAULT_SIZING"] == nil { h.sizingOptions = [] }
     return h
