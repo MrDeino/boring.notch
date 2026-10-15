@@ -212,6 +212,7 @@ struct Snap {
         if CommandLine.arguments.contains("--sendmock") { await sendMock(); return }
         if CommandLine.arguments.contains("--idle") { await idle(); return }
         if CommandLine.arguments.contains("--frames") { await frames(); return }
+        if CommandLine.arguments.contains("--paint") { await paint(); return }
         if CommandLine.arguments.contains("--fulltext") { await fullText(); return }
         let useImageRenderer = CommandLine.arguments.contains("--image-renderer")
         let out = URL(fileURLWithPath: "/tmp/notch-snapshots")
