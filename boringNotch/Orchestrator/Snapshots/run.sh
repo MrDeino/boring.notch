@@ -9,12 +9,15 @@
 #        boringNotch/Orchestrator/Snapshots/run.sh --fulltext     ->  long multi-paragraph row keeps its whole text and last line (widths, growth)
 #        ORCH_BASE=http://127.0.0.1:47999 boringNotch/Orchestrator/Snapshots/run.sh --sendmock  ->  composer send path vs Tests/send-mock.py (~75 s)
 #        OPT=-O boringNotch/Orchestrator/Snapshots/run.sh --idle  ->  optimized harness (what a Release build costs)
+#        OPT=-O boringNotch/Orchestrator/Snapshots/run.sh --frames  ->  frame intervals per transition (open/expand/collapse/close), FAIL over 20 ms;
+#                                                                   width/height together check (FAIL when the shape grows one way first) (FRAMES_REPORT=1: never fail, FRAMES_TRACE=1: per-sample sizes)
 #        Redirect output to a file (> log) rather than piping: --hittest can leave a pipe open after it exits.
 set -e
 cd "$(dirname "$0")/../../.."
 P="${DD:-/tmp/notch-dd}/Build/Products/Debug"
-mkdir -p /tmp/notch-snap-build
+B="${SNAP_BUILD:-/tmp/notch-snap-build}" # SNAP_BUILD=<dir>: own binary when another checkout runs the harness at the same time
+mkdir -p "$B"
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swiftc -parse-as-library -swift-version 5 \
-  -target arm64-apple-macos14.0 $OPT -D ORCH_SNAPSHOT -I "$P" -o /tmp/notch-snap-build/snap \
-  $(ls boringNotch/Orchestrator/Orchestrator*.swift) boringNotch/Orchestrator/Snapshots/*.swift "$P/Defaults.o"
-/tmp/notch-snap-build/snap "$@"
+  -target arm64-apple-macos14.0 $OPT -D ORCH_SNAPSHOT -I "$P" -o "$B/snap" \
+  $(ls boringNotch/Orchestrator/Orchestrator*.swift) boringNotch/Orchestrator/Snapshots/*.swift boringNotch/components/Notch/NotchShape.swift "$P/Defaults.o"
+"$B/snap" "$@"

@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 Phase: 9
 Plan: Not started
 Status: Milestone complete
-Last activity: 2026-10-15 - Completed quick task 261015-hm7: readable approvals, AskUserQuestion opens the question card
+Last activity: 2026-10-15 - Completed quick task 261015-jym: one-motion expand, tab kept built (partly met), merged main
 
 Progress: [██████████] 100%
 
@@ -110,6 +110,7 @@ Resume file: None
 | 261015-apm | Idle CPU fix (Core Animation for repeating animations, closed-notch views off the manager), run log closes on collapse, panel host no longer imposes min size (click-outside) | 2026-10-15 | .planning/quick/261015-apm-fix-lag-idle-cpu-and-click-outside-colla |
 | 261015-ehb | Expand/collapse pinned to the screen top again (window grows outside the spring transaction); screen-space --transition check on the real panel config | 2026-10-15 | .planning/quick/261015-ehb-expand-pinned-to-top-again |
 | 261015-ev9 | Outside click collapses in the same event turn (also open level while typing); scoped observation + Equatable rows/cards + text-fit cache cut expanded re-renders; signposts; Release build without Sparkle | 2026-10-15 | .planning/quick/261015-ev9-expanded-responsiveness-release-build |
+| 261015-hmo | Animation frame rate: --frames harness; tab content holds its size through a level change (no per-frame relayout); Orchestrator tab fades without 0.8 scale. p95 8.3 ms on all four transitions, but first/swap frames still 25-150 ms (20 ms gate not met) | 2026-10-15 | .planning/quick/261015-hmo-notch-animation-frame-rate |
 | 261015-hm7 | AskUserQuestion approvals open the Phase 6 question card instead of Allow/Deny JSON; other approvals show a formatted summary (Bash description + command, file verb + path, key: value) | 2026-10-15 | .planning/quick/261015-hm7-readable-approvals-askuserquestion-card |
 | 261015-jzd | Pending prompt shows the lead-in text written before it (parsed from the screen; Claude Code writes the turn to the JSONL only after the answer) | 2026-10-15 | .planning/quick/261015-jzd-question-lead-in-text-above-card |
 | 261015-fast | Question card options never take screen chrome as a description: lines opening with a box-drawing char (rules, titled rules), the ❯ input line and footers end a description (review step Cancel showed the session-title rule) | 2026-10-15 | — |
@@ -118,3 +119,4 @@ Resume file: None
 | 261015-me4 | Type-to-focus composer (printable key on the open/expanded tab, app frontmost, no card); composer field always mounted so drag/double-click select on the first gesture; POSTs retry once on a fresh session after a dropped connection, never after an HTTP response | 2026-10-15 | .planning/quick/261015-me4-type-to-focus-composer-first-gesture-sel |
 | 261014-q90 | Wings: runs + chat working (elapsed, count), queued done/failed, paused music yields, music-playing ✻/✓ | 2026-10-14 | .planning/quick/261014-q90-live-activity-wings |
 | 261015-me5 | "Claude update ready · Restart" badge under the tab header + closed dot; confirmed POST /api/chat/restart, 409 busy -> Restart anyway (force), restarting until running | 2026-10-15 | .planning/quick/261015-me5-claude-update-ready-restart |
+| 261015-jym | One-motion expand: per-frame width/height together gate (passes, gap 0.000), root-read guard, Orchestrator tab kept built while closed tried and reverted 2026-10-16 (no gain, +2-3% closed idle); merged main #5-#11. Partly met: expand still stalls ~50 ms at the content swap (even gate and 20 ms gate fail) | 2026-10-15 | .planning/quick/261015-jym-one-motion-expand-and-keep-tab-built |
