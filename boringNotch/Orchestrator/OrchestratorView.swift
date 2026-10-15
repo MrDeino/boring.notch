@@ -9,7 +9,8 @@ struct WindowAnchor: NSViewRepresentable {
 
 struct OrchestratorView: View {
     @ObservedObject var expand = OrchestratorExpand.shared
-    @ObservedObject var manager = OrchestratorManager.shared
+    let manager = OrchestratorManager.shared
+    @StateObject private var slice = ModelSlice.view
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var runLog = OrchestratorRunLog.shared
     @State private var anchor = NSView()

@@ -66,7 +66,8 @@ private struct RailToggleButton: View {
 }
 
 struct OrchestratorRunsRail: View {
-    @ObservedObject var manager = OrchestratorManager.shared
+    let manager = OrchestratorManager.shared
+    @StateObject private var slice = ModelSlice.runs
 
     private func bar(_ label: String, _ w: UsageWindow?, reset: (Date) -> String) -> some View {
         let pct = w?.usedPercentage
@@ -106,7 +107,8 @@ struct OrchestratorRunsRail: View {
 }
 
 struct OrchestratorRunsStrip: View {
-    @ObservedObject var manager = OrchestratorManager.shared
+    let manager = OrchestratorManager.shared
+    @StateObject private var slice = ModelSlice.runs
     @State private var hovered: String?
 
     var body: some View {
@@ -140,11 +142,12 @@ struct OrchestratorRunsStrip: View {
 /// The Orchestrator tab body at every level: one view tree, so expanding and collapsing only reflows it
 /// (the chat keeps its identity and scroll position); just the runs rail and the terminal panel come and go.
 struct OrchestratorExpandedView: View {
-    @ObservedObject var manager = OrchestratorManager.shared
+    let manager = OrchestratorManager.shared
+    @StateObject private var slice = ModelSlice.column
     @ObservedObject var expand = OrchestratorExpand.shared
     @ObservedObject var rail = OrchestratorRailState.shared
     @ObservedObject var cards = PromptCardController.shared
-    @ObservedObject var store = OrchestratorTranscriptStore.shared
+    let store = OrchestratorTranscriptStore.shared
     @Default(.orchRunsRailCollapsed) var persisted
     @EnvironmentObject var vm: BoringViewModel
     /// The level the content is laid out for: it lags the live level while the content is hidden, so nothing reflows on screen.

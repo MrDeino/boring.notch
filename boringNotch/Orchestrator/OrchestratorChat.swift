@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import UniformTypeIdentifiers
 
 // Phase 5 owns this file.
@@ -204,8 +205,41 @@ extension OrchestratorTranscriptStore {
 }
 #endif
 
+/// A narrower objectWillChange than the whole model's: fires only when one of the listed fields changes. Containers
+/// observe this instead of the whole OrchestratorManager, so a runs/usage tick or a transcript or composer change
+/// does not re-evaluate (and re-lay-out) views that do not draw it.
+@MainActor
+final class ModelSlice: ObservableObject {
+    private var bag = Set<AnyCancellable>()
+    init(_ fields: [AnyPublisher<Void, Never>]) {
+        Publishers.MergeMany(fields).sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
+    }
+    /// A @Published projection as a change signal (the replayed first value dropped).
+    static func changes<P: Publisher>(_ p: P) -> AnyPublisher<Void, Never> where P.Failure == Never {
+        p.dropFirst().map { _ in () }.eraseToAnyPublisher()
+    }
+
+    private static var m: OrchestratorManager { .shared }
+    private static var t: OrchestratorTranscriptStore { .shared }
+    /// OrchestratorView: the two drop-downs.
+    static var view: ModelSlice { .init([changes(m.$statusMenuOpen), changes(m.$notesOpen)]) }
+    /// OrchestratorExpandedView: which state to show, and the prose above a prompt card.
+    static var column: ModelSlice {
+        .init([changes(m.$hasLoaded), changes(m.$offline), changes(m.$chatRunning), changes(m.$showRunsBoard), changes(m.$prompt),
+               changes(t.$blocks.map { latestAssistantProse($0) }.removeDuplicates())])
+    }
+    /// The runs rail / strip.
+    static var runs: ModelSlice { .init([changes(m.$runs), changes(m.$usage)]) }
+    /// The chat view's manager fields (it observes the transcript store directly).
+    static var chat: ModelSlice {
+        .init([changes(m.$chatLive), changes(m.$chatRunning), changes(m.$liveStatus), changes(m.$notesOpen), changes(m.$offline),
+               changes(m.$promptOptions), changes(m.$screen), changes(m.$statusMenuOpen), changes(m.$wantsKeyboard)])
+    }
+}
+
 struct OrchestratorChatView: View {
-    @ObservedObject var manager = OrchestratorManager.shared
+    let manager = OrchestratorManager.shared
+    @StateObject private var slice = ModelSlice.chat
     @EnvironmentObject var vm: BoringViewModel
     @State private var keyWindow: NSWindow?
     @State private var anchor = NSView()
