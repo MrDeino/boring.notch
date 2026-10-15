@@ -114,4 +114,5 @@ Resume file: None
 | 261015-jzd | Pending prompt shows the lead-in text written before it (parsed from the screen; Claude Code writes the turn to the JSONL only after the answer) | 2026-10-15 | .planning/quick/261015-jzd-question-lead-in-text-above-card |
 | 261015-fast | Question card options never take screen chrome as a description: lines opening with a box-drawing char (rules, titled rules), the ❯ input line and footers end a description (review step Cancel showed the session-title rule) | 2026-10-15 | — |
 | 261015-kg6 | Long chat rows keep their full text: prose cap 2000 -> 20 000 chars (cut ends in …), not the fit cache; run.sh --fulltext check | 2026-10-15 | .planning/quick/261015-kg6-long-chat-row-full-text |
+| 261015-lrf | Composer sends no longer fail while streaming: C-u used a store base URL only set by a blocks fetch; run.sh --sendmock check | 2026-10-15 | .planning/quick/261015-lrf-composer-send-fails-retry |
 | 261014-q90 | Wings: runs + chat working (elapsed, count), queued done/failed, paused music yields, music-playing ✻/✓ | 2026-10-14 | .planning/quick/261014-q90-live-activity-wings |
