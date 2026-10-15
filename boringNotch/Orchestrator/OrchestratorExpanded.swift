@@ -154,6 +154,11 @@ struct OrchestratorExpandedView: View {
     @State private var shown: ExpandLevel?
     @State private var contentOpacity: Double = 1
     @State private var fadeGen = 0
+    /// The size the content is laid out at. It changes only with the level swap (while hidden) or outside a level change,
+    /// so the notch spring never re-lays the column out at in-between sizes (SwiftUI lays a subtree out again at every
+    /// animated frame of a size change: each text row was measured anew on every spring frame).
+    @State private var held: CGSize?
+    @State private var slot: CGSize?
 
     /// Fade out, lay out once at the new level while invisible, fade in near the end of the shape spring. Newest change wins.
     private func levelChanged() {
@@ -164,7 +169,7 @@ struct OrchestratorExpandedView: View {
             try? await Task.sleep(for: .seconds(fadeOut))
             guard gen == fadeGen else { return }
             var t = Transaction(); t.disablesAnimations = true
-            withTransaction(t) { shown = expand.level(for: vm) }
+            withTransaction(t) { shown = expand.level(for: vm); held = slot }
             try? await Task.sleep(for: .seconds(fadeInDelay - fadeOut))
             guard gen == fadeGen else { return }
             withAnimation(.easeOut(duration: fadeIn)) { contentOpacity = 1 }
@@ -195,6 +200,17 @@ struct OrchestratorExpandedView: View {
         .padding(.top, open ? 0 : 6) // bottom comes only from ContentView's 12pt, same as at open
         .opacity(contentOpacity)
         .animation(railSpring, value: collapsed)
+        .frame(width: held?.width, height: held?.height)
+        // min 0: the slot is the space offered, never the held content's size (a held wider layout would keep itself).
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { s in
+            slot = s
+            // Mid level change: keep the old size until the swap (levelChanged). Otherwise (content fits at the open
+            // level) follow with OrchestratorExpand's notch spring, as the content did before it was held.
+            if held == nil { held = s } else if shown == expand.level(for: vm), held != s {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { held = s }
+            }
+        }
         .onAppear { shown = expand.level(for: vm) }
         .onChange(of: expand.level(for: vm)) { _, _ in levelChanged() }
         // The sticky Runs board must not hide a live prompt or outlive a disconnect.
