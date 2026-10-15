@@ -168,3 +168,52 @@ func approvalCommandLine(_ a: OrchestratorApproval) -> String {
     let c = clean(a.command)
     return c.isEmpty ? clean(a.description) : c
 }
+
+// MARK: - Readable approvals (quick hm7)
+
+func approvalIsQuestion(_ a: OrchestratorApproval?) -> Bool { a?.tool == "AskUserQuestion" }
+
+struct ApprovalSummary: Equatable { var caption: String?; var lines: [String]; var mono: Bool }
+
+/// Drop-down text: Bash = description + command; file tools = verb + path; others = "key: value" lines.
+func approvalSummary(_ a: OrchestratorApproval) -> ApprovalSummary {
+    func clean(_ s: String?) -> String {
+        String((s ?? "").split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").prefix(200))
+    }
+    let cmd = clean(a.command), desc = clean(a.description)
+    let verbs = ["Read": "Read file", "Edit": "Edit file", "Write": "Write file", "MultiEdit": "Edit file", "NotebookEdit": "Edit notebook"]
+    if a.tool == "Bash" || cmd.isEmpty {
+        return ApprovalSummary(caption: cmd.isEmpty ? nil : (desc.isEmpty ? nil : desc), lines: [cmd.isEmpty ? desc : cmd], mono: true)
+    }
+    if let v = a.tool.flatMap({ verbs[$0] }) {
+        return ApprovalSummary(caption: desc.isEmpty ? v : desc, lines: [cmd], mono: true)
+    }
+    var pairs: [(String, String)] = []
+    let raw = a.command ?? ""
+    if raw.hasPrefix("{") {
+        if let o = (try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any] {
+            for (k, v) in o {
+                if let s = v as? String { pairs.append((k, s)); continue }
+                let d = try? JSONSerialization.data(withJSONObject: v, options: [.sortedKeys, .fragmentsAllowed])
+                pairs.append((k, d.flatMap { String(data: $0, encoding: .utf8) } ?? ""))
+            }
+        } else {
+            // Truncated JSON (serve cuts at 300 chars): pull out what is readable.
+            let re = try! NSRegularExpression(pattern: #""([^"\\]+)"\s*:\s*(?:"((?:[^"\\]|\\.)*)("?)|([^,}\s][^,}]*))"#)
+            let ns = raw as NSString
+            for m in re.matches(in: raw, range: NSRange(location: 0, length: ns.length)) {
+                let key = ns.substring(with: m.range(at: 1))
+                if m.range(at: 2).location != NSNotFound {
+                    let v = ns.substring(with: m.range(at: 2)).replacingOccurrences(of: "\\\"", with: "\"")
+                    pairs.append((key, m.range(at: 3).length == 0 ? v + "…" : v))
+                } else {
+                    pairs.append((key, ns.substring(with: m.range(at: 4))))
+                }
+            }
+        }
+    }
+    guard !pairs.isEmpty else { return ApprovalSummary(caption: desc.isEmpty ? nil : desc, lines: [cmd], mono: true) }
+    var lines = pairs.sorted { $0.0 < $1.0 }.map { clean("\($0.0): \($0.1)") }
+    if lines.count > 4 { let n = lines.count - 4; lines = Array(lines.prefix(4)) + ["+\(n) more"] }
+    return ApprovalSummary(caption: desc.isEmpty ? nil : desc, lines: lines, mono: false)
+}

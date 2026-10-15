@@ -128,6 +128,20 @@ extension Snap {
         await shot("22-approval-over-music", music: true, panel: true)
         await apply(try! JSONDecoder().decode(ChatResponse.self, from: Data(#"{"running":true,"screen":"","approval":null}"#.utf8)), [r1]); await shot("23-approval-cleared-working")
         await shot("24-music-after", music: true)
+
+        // quick hm7: readable summaries, and a question never shows the drop-down.
+        func tool(_ t: String, _ cmd: String) -> ChatResponse {
+            let o: [String: Any] = ["running": true, "screen": "", "approval": ["id": "t-\(t)", "tool": t, "command": cmd]]
+            return try! JSONDecoder().decode(ChatResponse.self, from: JSONSerialization.data(withJSONObject: o))
+        }
+        await apply(ap, []); await shot("25-approval-bash-readable", panel: true)
+        await apply(tool("mcp__claude_ai_Notion__notion-search", #"{"query":"roadmap notes","page_size":10,"filters":{"type":"page"}}"#), []); await shot("26-approval-other-kv", panel: true)
+        await apply(tool("Edit", "/Users/mitch/x/boringNotch/ContentView.swift"), []); await shot("27-approval-edit-path", panel: true)
+        let c0 = OrchestratorApprovalCenter.shared.cardRequest
+        let qo: [String: Any] = ["running": true, "screen": fixture("question.txt"), "approval": ["id": "q1", "tool": "AskUserQuestion", "command": "{\"questions\":[…"]]
+        await apply(try! JSONDecoder().decode(ChatResponse.self, from: JSONSerialization.data(withJSONObject: qo)), [])
+        await shot("28-ask-over-music", music: true)
+        print("ask: approval==nil \(OrchestratorApprovalCenter.shared.approval == nil) cardRequest+\(OrchestratorApprovalCenter.shared.cardRequest - c0)")
     }
 }
 

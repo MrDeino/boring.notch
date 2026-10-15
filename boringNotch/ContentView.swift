@@ -210,7 +210,10 @@ struct ContentView: View {
         .notchRootFrame(notchSize: vm.notchSize)
         .onChange(of: vm.notchSize) { _, _ in OrchestratorExpand.shared.syncWindow(vm: vm) }
         .onChange(of: approvals.approval != nil && approvalVisibleToUser(pending: true, notchClosed: vm.notchState == .closed, hideOnClosed: vm.hideOnClosed, orchestratorTab: coordinator.currentView == .orchestrator), initial: true) { _, v in approvals.surfaceShown = v }
-        .onChange(of: approvals.cardRequest) { _, _ in OrchestratorManager.shared.showRunsBoard = false; coordinator.currentView = .orchestrator; if vm.notchState == .closed { doOpen() } }
+        .onChange(of: approvals.cardRequest) { _, _ in
+            // ponytail: a question that arrives while hidden is not re-requested later; the needs-you wing and hover-open still reach it.
+            if vm.notchState == .closed && vm.hideOnClosed { return }
+            OrchestratorManager.shared.showRunsBoard = false; coordinator.currentView = .orchestrator; if vm.notchState == .closed { doOpen() } }
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,

@@ -60,7 +60,7 @@ struct NotchReplica: View {
     }
 }
 
-private func fixture(_ name: String) -> String {
+func fixture(_ name: String) -> String {
     let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("Tests/fixtures")
     return (try? String(contentsOf: dir.appendingPathComponent(name), encoding: .utf8)) ?? ""
@@ -201,6 +201,7 @@ struct Snap {
             return
         }
         if CommandLine.arguments.contains("--closed") { await closed(); return }
+        if CommandLine.arguments.contains("--askmock") { await askMock(); return }
         if CommandLine.arguments.contains("--idle") { await idle(); return }
         let useImageRenderer = CommandLine.arguments.contains("--image-renderer")
         let out = URL(fileURLWithPath: "/tmp/notch-snapshots")
@@ -213,6 +214,10 @@ struct Snap {
         func chat(_ screen: String, running: Bool = true) -> ChatResponse { ChatResponse(running: running, screen: screen) }
         func ctxChat(_ pct: Int) -> ChatResponse {
             try! JSONDecoder().decode(ChatResponse.self, from: Data(#"{"running":true,"screen":"","live":true,"context":{"percent":\#(pct)}}"#.utf8))
+        }
+        func askChat(_ f: String) -> ChatResponse {
+            let o: [String: Any] = ["running": true, "screen": fixture(f), "approval": ["id": "q1", "tool": "AskUserQuestion", "command": "{\"questions\":[…"]]
+            return try! JSONDecoder().decode(ChatResponse.self, from: JSONSerialization.data(withJSONObject: o))
         }
         let working = fixture("working.txt")
         let shortBlocks = blocks(fixture("phase5-blocks.json"))
@@ -283,6 +288,8 @@ struct Snap {
             Scene(name: "54-runlog-expanded", chat: chat(""), blocks: longBlocks, expanded: true, logRun: "261014024541-r002"),
             Scene(name: "55-runlog-finished", chat: chat(""), blocks: longBlocks, expanded: true, logRun: "261014024541-d004"),
             Scene(name: "56-runlog-empty", chat: chat(""), blocks: longBlocks, expanded: true, logRun: "261014024541-s003", logLines: false),
+            Scene(name: "50-ask-1q", chat: askChat("question.txt"), expanded: true),
+            Scene(name: "51-ask-2q-multiselect", chat: askChat("multiselect-1.txt"), expanded: true),
             Scene(name: "57-runlog-open", chat: chat(""), blocks: longBlocks, logRun: "261014024541-r002"),
         ]
 
