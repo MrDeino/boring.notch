@@ -7,7 +7,8 @@
 #        boringNotch/Orchestrator/Snapshots/run.sh --hittest      ->  clicks composer/segment/capsule in the real tab (no POSTs)
 #        boringNotch/Orchestrator/Snapshots/run.sh --idle         ->  idle CPU per scene + outside-click/close-gate checks (IDLE_REPORT=1: never fail, IDLE_SAMPLE=1: sample hot scenes)
 #        OPT=-O boringNotch/Orchestrator/Snapshots/run.sh --idle  ->  optimized harness (what a Release build costs)
-#        OPT=-O boringNotch/Orchestrator/Snapshots/run.sh --frames  ->  frame intervals per transition (open/expand/collapse/close), FAIL over 20 ms (FRAMES_REPORT=1: never fail)
+#        OPT=-O boringNotch/Orchestrator/Snapshots/run.sh --frames  ->  frame intervals per transition (open/expand/collapse/close), FAIL over 20 ms;
+#                                                                   width/height together check (FAIL when the shape grows one way first) (FRAMES_REPORT=1: never fail, FRAMES_TRACE=1: per-sample sizes)
 #        Redirect output to a file (> log) rather than piping: --hittest can leave a pipe open after it exits.
 set -e
 cd "$(dirname "$0")/../../.."
