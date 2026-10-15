@@ -64,7 +64,13 @@ final class OrchestratorExpand: ObservableObject {
         // Window first (outside the animation): a window resize that lands in the spring's transaction makes SwiftUI
         // animate the root from the centre of the new window to the top (the "fills in from the middle" regression).
         syncWindow(vm: vm, size: target)
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = target }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
+            vm.notchSize = target
+            // @Published notifies before it stores. With another transaction pending (the level change just published),
+            // SwiftUI can run that update synchronously inside the notification, so the views read the old size and
+            // the spring is lost (run.sh --frames "rootread"). A second notification, after the store, re-reads it.
+            vm.objectWillChange.send()
+        }
         syncWindow(vm: vm)
     }
 

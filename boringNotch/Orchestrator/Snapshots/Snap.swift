@@ -40,7 +40,7 @@ struct NotchReplica: View {
     }
 
     /// BoringHeader with the tab icons drawn as placeholders.
-    private var header: some View {
+    var header: some View {
         HStack(spacing: 0) {
             HStack {
                 HStack(spacing: 10) {
@@ -73,7 +73,7 @@ private let longProse = (1...14).map { i -> String in
     let tool = #"{"id":"t\#(i)","kind":"tool","name":"Edit","target":"/Users/x/proj/OrchestratorChat.swift","added":\#(i),"removed":1}"#
     return #"{"id":"p\#(i)","kind":"prose","text":"\#(prose)"},\#(tool)"#
 }.joined(separator: ",")
-private let longBlocks = blocks(#"{"running":true,"blocks":["# + longProse + #",{"id":"u-last","kind":"user","text":"Newest user message — must be fully visible above the composer"}]}"#)
+let longBlocks = blocks(#"{"running":true,"blocks":["# + longProse + #",{"id":"u-last","kind":"user","text":"Newest user message — must be fully visible above the composer"}]}"#)
 
 private let longQuestion = """
 ⏺ Asking one question
@@ -211,6 +211,7 @@ struct Snap {
         if CommandLine.arguments.contains("--askmock") { await askMock(); return }
         if CommandLine.arguments.contains("--sendmock") { await sendMock(); return }
         if CommandLine.arguments.contains("--idle") { await idle(); return }
+        if CommandLine.arguments.contains("--frames") { await frames(); return }
         if CommandLine.arguments.contains("--fulltext") { await fullText(); return }
         let useImageRenderer = CommandLine.arguments.contains("--image-renderer")
         let out = URL(fileURLWithPath: "/tmp/notch-snapshots")
