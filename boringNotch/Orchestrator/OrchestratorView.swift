@@ -74,6 +74,7 @@ struct OrchestratorView: View {
                 }
             }
         }
+        .overlay(alignment: .top) { if runLog.runID == nil { OrchestratorUpdateBadge().padding(.top, 4) } }
         .background(WindowAnchor(view: anchor))
         .onAppear { expand.setTabBuilt(true, vm: vm); if vm.notchState == .open { opened() } }
         // The tab stays built while the notch is closed (ContentView): open/close are notchState changes, not mounts.

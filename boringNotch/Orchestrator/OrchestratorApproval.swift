@@ -19,6 +19,7 @@ final class OrchestratorApprovalCenter: ObservableObject {
     @Published private(set) var cardRequest = 0
     /// Pushed by ContentView: the closed drop-down or the Orchestrator tab is on screen (see approvalVisibleToUser).
     @Published var surfaceShown = false
+    private var lastQuestionId: String?
     private var cancellables = Set<AnyCancellable>()
 
     let ctrlFallback: Bool = {
@@ -41,7 +42,12 @@ final class OrchestratorApprovalCenter: ObservableObject {
         OrchestratorManager.shared.$approval.removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] a in
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { self?.approval = a }
+                guard let self else { return }
+                // AskUserQuestion is answered on the Phase 6 question card, never by Allow/Deny: no drop-down, open the card once per id.
+                let q = approvalIsQuestion(a)
+                if q, a?.id != self.lastQuestionId { self.cardRequest += 1 }
+                self.lastQuestionId = q ? a?.id : nil
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { self.approval = q ? nil : a }
             }
             .store(in: &cancellables)
         #if !ORCH_SNAPSHOT
@@ -73,11 +79,17 @@ struct OrchestratorApprovalPanel: View {
                     Spacer(minLength: 8)
                     Text(verbatim: a.tool ?? "").font(.system(size: 11)).foregroundStyle(OT.C.text6).lineLimit(1)
                 }
-                Text(verbatim: approvalCommandLine(a))
-                    .font(.system(size: 12, design: .monospaced))
+                let sm = approvalSummary(a)
+                if let c = sm.caption {
+                    Text(verbatim: c).font(.system(size: 12)).foregroundStyle(OT.C.text5).lineLimit(1).help(c)
+                }
+                let body = sm.lines.joined(separator: "\n")
+                Text(verbatim: body)
+                    .font(.system(size: 12, design: sm.mono ? .monospaced : .default))
                     .foregroundStyle(OT.C.text1)
-                    .lineLimit(3)
+                    .lineLimit(sm.caption == nil ? 4 : 3)
                     .truncationMode(.tail)
+                    .help(body)
                     .padding(.vertical, 7).padding(.horizontal, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(OT.C.raised, in: RoundedRectangle(cornerRadius: 8))

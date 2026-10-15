@@ -118,5 +118,8 @@ func runPhase5Tests() {
     let pa = proseAttributed("**bold** and [link](https://x.y)")
     precondition(String(pa.characters) == "bold and link")
     precondition(pa.runs.allSatisfy { $0.link == nil })
-    precondition(String(proseAttributed(String(repeating: "a", count: 5000)).characters).count <= 2000)
+    let long = (1...60).map { "Sentence \($0) of a long orchestrator message." }.joined(separator: " ") + " merged into your fork (#6). END"
+    precondition(long.count > 2000 && String(proseAttributed(long).characters) == long) // kg6: was cut at 2000 chars
+    let huge = String(proseAttributed(String(repeating: "a", count: proseCharCap + 5000)).characters)
+    precondition(huge.count == proseCharCap + 1 && huge.hasSuffix("…"))
 }

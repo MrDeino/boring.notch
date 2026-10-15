@@ -77,6 +77,33 @@ final class OrchestratorManager: ObservableObject {
         return ans
     }
 
+    // Claude Code update (serve's `claude`; nil on old serve)
+    @Published private(set) var claude: ClaudeInfo? = nil
+    @Published private(set) var claudeRestart = ClaudeRestart.idle
+    @Published private var restartedOnto: String? = nil
+    var claudeUpdateReady: Bool { claudeUpdateBadge(claude, restartedOnto: restartedOnto) }
+
+    func askRestart() { if claudeRestart == .idle { claudeRestart = .confirming } }
+    func cancelRestart() { if claudeRestart == .confirming || claudeRestart == .busy { claudeRestart = .idle } }
+
+    /// Confirmed restart. 409 (mid-turn) -> .busy, offering force. 200 -> .restarting until a chat payload says running.
+    func restartClaude(force: Bool = false) async {
+        guard !sending, claudeRestart != .restarting else { return }
+        sending = true
+        claudeRestart = .restarting
+        let code = (try? await sendOrchestratorPost(.restart(force: force), base: Self.baseURL, session: session)) ?? nil
+        if code == 200 { restartedOnto = claude?.installed }
+        sending = false
+        claudeRestart = claudeRestartPhase(afterPost: code)
+        await refresh(fresh: true)
+        // ponytail: fixed 30 s cap so a chat that never comes back can't strand "Restarting".
+        guard claudeRestart == .restarting else { return }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(30))
+            if self?.claudeRestart == .restarting { self?.claudeRestart = .idle }
+        }
+    }
+
     var capsuleStatus: CapsuleState {
         capsuleState(hasLoaded: hasLoaded, offline: offline, chatRunning: chatRunning, needsAttention: needsAttention, working: liveStatus != nil)
     }
@@ -295,6 +322,9 @@ final class OrchestratorManager: ObservableObject {
         if offline { offline = false }
         let running = r.running ?? false
         if chatRunning != running { chatRunning = running }
+        if claude != r.claude { claude = r.claude }
+        let cr = claudeRestartOnChat(claudeRestart, running: running, posting: sending)
+        if claudeRestart != cr { claudeRestart = cr }
         if !approvalFresh { recomputeApproval() } else if r.hasApproval { applyApproval(r.approval) } else if !running { applyApproval(nil) } else { recomputeApproval() }
         let s = r.screen ?? ""
         if screen != s { screen = s }
@@ -342,5 +372,7 @@ extension OrchestratorManager {
         guard loaded else { return }
         if let chat { applyState(state); await applyChat(chat) } else { applyOffline() }
     }
+    /// Send-path harness: behave as if the SSE stream is up (blocks arrive as events, not fetched per poll).
+    func snapshotSetStreaming(_ on: Bool) { streaming = on }
 }
 #endif

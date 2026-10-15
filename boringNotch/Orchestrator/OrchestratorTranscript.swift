@@ -176,9 +176,56 @@ func latestAssistantProse(_ blocks: [ChatBlock]) -> String? {
     return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
 }
 
-/// Transcript text is untrusted: truncated, inline markdown only, links stripped (T-05-01/02).
+/// The `⏺` prose right above a prompt dialog on the tmux screen. Claude Code writes a turn's assistant lines to
+/// the transcript only once the prompt is answered, so this is the only place the lead-in exists meanwhile.
+/// Skips the pending tool's own row; stops at another tool row, the user's ❯ echo, or any other element.
+/// Soft wraps are re-joined by terminal width (the rule's length); blank lines stay paragraph breaks.
+// ponytail: width heuristic counts Characters, so wide glyphs (CJK, emoji) can leave a stray line break.
+func screenLeadIn(screen: String) -> String? {
+    let lines = screen.split(separator: "\n", omittingEmptySubsequences: false).map {
+        String($0.replacingOccurrences(of: "\u{a0}", with: " ").reversed().drop { $0 == " " }.reversed())
+    }
+    func isRule(_ s: String) -> Bool { s.hasPrefix("───") }
+    guard let mark = lines.lastIndex(where: { $0.hasPrefix("⏺") }),
+          let top = lines[mark...].firstIndex(where: isRule) else { return nil }
+    let width = lines[top].count
+    // Elements start at column 0; Claude Code indents their continuation lines.
+    let starts = lines.indices.filter { $0 < top && !lines[$0].isEmpty && !lines[$0].hasPrefix(" ") }
+    var paragraphs: [String] = []
+    for (k, s) in starts.enumerated().reversed() {
+        let first = lines[s]
+        guard first.hasPrefix("⏺") else { break }
+        let isTool = first.range(of: #"^⏺ [^\s(]+\("#, options: .regularExpression) != nil
+        if isTool { if paragraphs.isEmpty { continue } else { break } }
+        let end = k + 1 < starts.count ? starts[k + 1] : top
+        var text = "", prevLen = 0
+        for (i, l) in lines[s..<end].enumerated() {
+            let body = i == 0 ? String(l.dropFirst(2)) : String(l.drop { $0 == " " })
+            if body.isEmpty { if !text.isEmpty, !text.hasSuffix("\n\n") { text += "\n\n" }; prevLen = 0; continue }
+            let word = body.prefix { $0 != " " }.count
+            if !text.isEmpty && !text.hasSuffix("\n\n") { text += prevLen + 1 + word > width - 1 ? " " : "\n" }
+            text += body
+            prevLen = l.count
+        }
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty { paragraphs.insert(t, at: 0) }
+    }
+    return paragraphs.isEmpty ? nil : paragraphs.joined(separator: "\n\n")
+}
+
+/// The screen lead-in while the transcript doesn't hold it yet (nil once its prose block has arrived).
+func heldLeadIn(screen: String, blocks: [ChatBlock]) -> String? {
+    guard let lead = screenLeadIn(screen: screen) else { return nil }
+    func key(_ s: String) -> String { String(s.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains).map(Character.init)) }
+    let probe = String(key(lead).prefix(40))
+    return (latestAssistantProse(blocks).map { key($0).contains(probe) } ?? false) ? nil : lead
+}
+
+/// Transcript text is untrusted: inline markdown only, links stripped (T-05-01/02). The size cap only bounds a hostile
+/// payload; real messages run past 2000 chars (one did, and lost its last line), and a cut ends in "…" so it shows.
+let proseCharCap = 20_000
 func proseAttributed(_ s: String) -> AttributedString {
-    let plain = String(s.prefix(2000))
+    let plain = s.count > proseCharCap ? s.prefix(proseCharCap) + "…" : s
     var a = (try? AttributedString(markdown: plain, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
         ?? AttributedString(plain)
     for run in a.runs { a[run.range].link = nil }
@@ -251,8 +298,8 @@ func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: S
 }
 
 extension ChatBlock {
-    init(pendingID: String, text: String) {
-        id = pendingID; kind = .user; self.text = text
+    init(pendingID: String, text: String, kind: Kind = .user) {
+        id = pendingID; self.kind = kind; self.text = text
         name = nil; target = nil; result = nil; added = nil; removed = nil; diff = nil; description = nil
     }
 }

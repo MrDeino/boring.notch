@@ -25,8 +25,6 @@ final class OrchestratorTranscriptStore: ObservableObject {
     private var nextPendingID = 0
     private var draining = false
 
-    private var base: URL?
-    private var session: URLSession?
     private var needsFull = true
     private var polls = 0
     private var failures = 0
@@ -43,8 +41,6 @@ final class OrchestratorTranscriptStore: ObservableObject {
     }
 
     func refresh(base: URL, session: URLSession, chatRunning: Bool) async {
-        self.base = base
-        self.session = session
         guard chatRunning else {
             if !blocks.isEmpty { blocks = [] }
             needsFull = true
@@ -184,10 +180,10 @@ final class OrchestratorTranscriptStore: ObservableObject {
 
     /// R-05: always C-u Claude's box before typing; no wait-for-empty check. Claude's dim suggested
     /// prompt reads as plain box text in capture-pane and C-u can't clear it (fixtures/idle-suggestion.txt),
-    /// but typing replaces it. false = the C-u POST failed, so don't type.
+    /// but typing replaces it. false = the C-u POST failed, so don't type. Same base/session as the text POST:
+    /// while streaming, refresh(base:) may never have run.
     func clearRealLine() async -> Bool {
-        guard let base, let session else { return false }
-        return (try? await sendOrchestratorPost(.key("C-u"), base: base, session: session)) == 200
+        (try? await sendOrchestratorPost(.key("C-u"), base: OrchestratorManager.baseURL, session: OrchestratorManager.shared.session)) == 200
     }
 }
 
@@ -226,14 +222,15 @@ final class ModelSlice: ObservableObject {
     /// OrchestratorExpandedView: which state to show, and the prose above a prompt card.
     static var column: ModelSlice {
         .init([changes(m.$hasLoaded), changes(m.$offline), changes(m.$chatRunning), changes(m.$showRunsBoard), changes(m.$prompt),
-               changes(t.$blocks.map { latestAssistantProse($0) }.removeDuplicates())])
+               changes(t.$blocks.map { latestAssistantProse($0) }.removeDuplicates()),
+               changes(m.$screen.combineLatest(m.$prompt).map { $1 == nil ? nil : screenLeadIn(screen: $0) }.removeDuplicates())])
     }
     /// The runs rail / strip.
     static var runs: ModelSlice { .init([changes(m.$runs), changes(m.$usage)]) }
     /// The chat view's manager fields (it observes the transcript store directly).
     static var chat: ModelSlice {
         .init([changes(m.$chatLive), changes(m.$chatRunning), changes(m.$liveStatus), changes(m.$notesOpen), changes(m.$offline),
-               changes(m.$promptOptions), changes(m.$screen), changes(m.$statusMenuOpen), changes(m.$wantsKeyboard)])
+               changes(m.$prompt), changes(m.$promptOptions), changes(m.$screen), changes(m.$statusMenuOpen), changes(m.$wantsKeyboard)])
     }
 }
 
@@ -245,6 +242,8 @@ struct OrchestratorChatView: View {
     @State private var anchor = NSView()
     @FocusState private var fieldFocused: Bool
     @State private var keyMonitor: Any?
+    @State private var typeMonitor: Any?
+    @State private var caretToEnd = false
     @State private var dropTargeted = false
     @State private var composerH: CGFloat = 30
     @State private var tagGen = 0
@@ -341,9 +340,12 @@ struct OrchestratorChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { n in
             if let w = keyWindow, (n.object as? NSWindow) === w { stopTyping() }
         }
-        .onDisappear { stopTyping(); removeKeyMonitor() }
+        .onAppear { if showComposer { installTypeMonitor() } }
+        .onDisappear { stopTyping(); removeKeyMonitor(); removeTypeMonitor() }
         // Kept built while closed: close ends typing; reopen re-asserts the composer fit that reset() cleared.
-        .onChange(of: vm.notchState == .open) { _, o in if o { if showComposer { fitComposer(composerH) } } else { stopTyping(); removeKeyMonitor() } }
+        .onChange(of: vm.notchState == .open) { _, o in
+            if o { if showComposer { fitComposer(composerH); installTypeMonitor() } } else { stopTyping(); removeKeyMonitor(); removeTypeMonitor() }
+        }
         // Focus loss ends typing; clicking elsewhere resigns key (above). Pointer leaving keeps it (INT-06).
         .onChange(of: fieldFocused) { _, f in if !f { stopTyping() } }
         .onChange(of: fieldFocused) { _, f in focusChanged(f) }
@@ -370,6 +372,11 @@ struct OrchestratorChatView: View {
                     ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, caret: caretVisible(live: manager.chatLive, working: manager.liveStatus != nil, kind: b.kind, id: b.id, newestID: store.blocks.last?.id) && store.pending.isEmpty, onClick: expandChat, onCopied: showCopied)
                         .equatable()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                // Claude Code writes the turn to the transcript only after the prompt is answered: show its screen text meanwhile.
+                if manager.prompt != nil, let lead = heldLeadIn(screen: manager.screen, blocks: store.blocks) {
+                    ChatBlockRow(block: ChatBlock(pendingID: "lead-in", text: lead, kind: .prose), proseLineLimit: proseLineLimit, expanded: expanded, onClick: expandChat, onCopied: showCopied)
+                        .equatable()
                 }
             }
             ForEach(store.pending) { p in
@@ -476,27 +483,17 @@ struct OrchestratorChatView: View {
                     }
                     ZStack(alignment: .topLeading) {
                         ghostLayer
-                        // The AppKit-backed TextField swallows clicks even under allowsHitTesting(false) and a
-                        // tap overlay, so it only exists while typing; otherwise a Text shows the draft.
-                        if manager.wantsKeyboard {
-                            TextField("", text: $store.draft, axis: .vertical)
-                                .lineLimit(1...5)
-                                .textFieldStyle(.plain)
-                                .font(OT.F.ui)
-                                .foregroundStyle(OT.C.text)
-                                .focused($fieldFocused)
-                                .onSubmit { submit() }
-                                .onExitCommand { stopTyping() }
-                                .onAppear { DispatchQueue.main.async { if manager.wantsKeyboard { fieldFocused = true } } }
-                        } else {
-                            Text(verbatim: store.draft).font(OT.F.ui).foregroundStyle(OT.C.text)
-                                .lineLimit(1...5).truncationMode(.tail)
-                        }
+                        // Always mounted: a click focuses it in place, so a drag or double-click selects on the first gesture.
+                        OrchestratorComposerField(text: $store.draft, focused: $fieldFocused,
+                                                  onFocus: { if keyWindow == nil { startTyping() } },
+                                                  onSubmit: submit, onExit: { stopTyping() })
+                            .font(OT.F.ui)
+                            .foregroundStyle(OT.C.text)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    // Overlay, not a ZStack child: Color.clear is greedy and would stretch the pill vertically.
-                    .overlay { if !manager.wantsKeyboard { Color.clear.contentShape(Rectangle()).onTapGesture { startTyping() } } }
                     .padding(.vertical, 6)
+                    // Behind the field: a click in the pill's padding still starts typing.
+                    .background { Color.clear.contentShape(Rectangle()).onTapGesture { if !fieldFocused { startTyping() } } }
                 }
                 accessory.frame(height: 30)
                 sendButton.frame(height: 30)
@@ -622,6 +619,10 @@ struct OrchestratorChatView: View {
     private func focusChanged(_ f: Bool) {
         guard f else { removeKeyMonitor(); return }
         installKeyMonitor()
+        if caretToEnd {
+            caretToEnd = false
+            DispatchQueue.main.async { moveCaretToEnd(in: keyWindow) }
+        }
         if store.draft.isEmpty, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
             store.draft = l
             store.draftFromTerminal = true
@@ -688,6 +689,34 @@ struct OrchestratorChatView: View {
     private func removeKeyMonitor() {
         if let m = keyMonitor { NSEvent.removeMonitor(m) }
         keyMonitor = nil
+    }
+
+    /// Type-to-focus: a printable key while this notch is open on the tab and key, with the composer unfocused, starts
+    /// typing with that character. A local monitor only sees keys sent to this app, never another frontmost app's.
+    private func installTypeMonitor() {
+        guard typeMonitor == nil else { return }
+        typeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard let w = anchor.window, event.window === w else { return event }
+            let ctx = ComposerKeyContext(
+                notchOpen: vm.notchState == .open,
+                orchestratorTab: BoringViewCoordinator.shared.currentView == .orchestrator,
+                appActive: NSApp.isActive,
+                windowIsKey: w.isKeyWindow,
+                composerFocused: fieldFocused,
+                terminalFocused: OrchestratorKeyGate.terminalWantsKey,
+                editingOtherText: (w.firstResponder as? NSTextView)?.isEditable == true,
+                cardShowing: manager.prompt.map { promptIdentity($0) != PromptCardController.shared.dismissed } ?? false)
+            guard let s = typeToFocusText(characters: event.characters, modifierFlags: event.modifierFlags.rawValue, context: ctx) else { return event }
+            store.draft += s
+            caretToEnd = true
+            startTyping()
+            return nil
+        }
+    }
+
+    private func removeTypeMonitor() {
+        if let m = typeMonitor { NSEvent.removeMonitor(m) }
+        typeMonitor = nil
     }
 
     /// Clicking the conversation opens the terminal below; it takes the keyboard itself.

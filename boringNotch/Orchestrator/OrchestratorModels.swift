@@ -14,6 +14,42 @@ struct ChatResponse: Decodable {
     var approval: OrchestratorApproval? = nil
     /// True when serve sent the `approval` key (null = none pending; absent = old serve, leave the current value alone).
     var hasApproval = false
+    /// Claude Code update state; nil on old serve.
+    var claude: ClaudeInfo? = nil
+}
+
+/// serve's `claude`: running/installed are version strings (running nil while unknown).
+struct ClaudeInfo: Decodable, Equatable {
+    let running: String?
+    let installed: String?
+    let updateReady: Bool?
+    private enum CodingKeys: String, CodingKey { case running, installed, updateReady }
+    init(running: String?, installed: String?, updateReady: Bool?) { self.running = running; self.installed = installed; self.updateReady = updateReady }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        running = try? c.decodeIfPresent(String.self, forKey: .running)
+        installed = try? c.decodeIfPresent(String.self, forKey: .installed)
+        updateReady = try? c.decodeIfPresent(Bool.self, forKey: .updateReady)
+    }
+}
+
+/// The "Claude update ready · Restart" flow.
+enum ClaudeRestart: Equatable { case idle, confirming, busy, restarting }
+
+/// serve's running version comes from the transcript, which stays on the old version until the new session
+/// writes to it, so the badge also hides once we restarted onto the installed version it reports.
+func claudeUpdateBadge(_ c: ClaudeInfo?, restartedOnto: String?) -> Bool {
+    c?.updateReady == true && (restartedOnto == nil || c?.installed != restartedOnto)
+}
+
+/// After POST /api/chat/restart: 200 restarting (until the chat runs again), 409 busy (mid-turn), else idle.
+func claudeRestartPhase(afterPost code: Int?) -> ClaudeRestart {
+    code == 200 ? .restarting : code == 409 ? .busy : .idle
+}
+
+/// A chat payload that says running ends .restarting, unless it raced the restart POST itself.
+func claudeRestartOnChat(_ p: ClaudeRestart, running: Bool, posting: Bool) -> ClaudeRestart {
+    p == .restarting && running && !posting ? .idle : p
 }
 
 /// Pending tool approval from serve (hook-driven, never screen-inferred). `at` stays the raw ISO string.
@@ -64,7 +100,7 @@ struct ChatContext: Decodable, Equatable {
 }
 
 extension ChatResponse {
-    private enum CodingKeys: String, CodingKey { case running, screen, live, input, context, approval }
+    private enum CodingKeys: String, CodingKey { case running, screen, live, input, context, approval, claude }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         running = try c.decodeIfPresent(Bool.self, forKey: .running)
@@ -76,6 +112,7 @@ extension ChatResponse {
         hasInputKey = c.contains(.input)
         hasApproval = c.contains(.approval)
         approval = (try? c.decodeIfPresent(OrchestratorApproval.self, forKey: .approval)) ?? nil // malformed -> nil, never fails the chat decode
+        claude = (try? c.decodeIfPresent(ClaudeInfo.self, forKey: .claude)) ?? nil
     }
 }
 
@@ -167,6 +204,8 @@ func stripRuns(_ runs: [OrchestratorRun], limit: Int) -> [OrchestratorRun] {
 
 enum OrchestratorPost: Equatable {
     case text(String), key(String), start, stop
+    /// POST /api/chat/restart; force restarts mid-turn (otherwise 409).
+    case restart(force: Bool)
     /// POST /api/notes: raw full text (not JSON).
     case notes(String)
     /// POST /api/chat/image: raw PNG body.
@@ -177,6 +216,7 @@ enum OrchestratorPost: Equatable {
     /// nil when the input would be rejected by the server (empty text, unknown key).
     func request(base: URL) -> URLRequest? {
         let path: String, body: [String: String]
+        var force = false
         if case .notes(let s) = self {
             let data = Data(s.utf8)
             guard data.count <= 1_000_000 else { return nil } // serve destroys larger bodies
@@ -205,21 +245,39 @@ enum OrchestratorPost: Equatable {
             path = "api/chat"; body = ["key": k]
         case .start: path = "api/chat/start"; body = [:]
         case .stop: path = "api/chat/stop"; body = [:]
+        case .restart(let f): path = "api/chat/restart"; body = [:]; force = f
         case .notes, .image: return nil
         }
         var r = URLRequest(url: base.appendingPathComponent(path))
         r.httpMethod = "POST"
         r.setValue("1", forHTTPHeaderField: "x-orch")
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        r.httpBody = try? JSONEncoder().encode(body)
+        r.httpBody = force ? Data(#"{"force":true}"#.utf8) : try? JSONEncoder().encode(body)
         return r
+    }
+}
+
+/// A POST that died before any HTTP response: serve restarted under a kept-alive connection, or isn't listening yet.
+/// Timeouts are left out (serve may have acted on the request).
+func isOrchestratorConnectionDrop(_ error: Error) -> Bool {
+    [.networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet].contains((error as? URLError)?.code)
+}
+
+/// session.data(for:) retried once, on a fresh session (no pooled connection), when the connection dropped before
+/// any response. Never after a response of any status, so a message can't be sent twice.
+func orchestratorPostData(for req: URLRequest, session: URLSession) async throws -> (Data, URLResponse) {
+    do { return try await session.data(for: req) } catch where isOrchestratorConnectionDrop(error) {
+        try? await Task.sleep(for: .milliseconds(250))
+        let fresh = URLSession(configuration: session.configuration)
+        defer { fresh.finishTasksAndInvalidate() }
+        return try await fresh.data(for: req)
     }
 }
 
 /// HTTP status of the POST, nil when nothing was sent (invalid input). Network errors throw.
 func sendOrchestratorPost(_ post: OrchestratorPost, base: URL, session: URLSession) async throws -> Int? {
     guard let req = post.request(base: base) else { return nil }
-    let (_, resp) = try await session.data(for: req)
+    let (_, resp) = try await orchestratorPostData(for: req, session: session)
     guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
     return http.statusCode
 }
@@ -241,7 +299,7 @@ func decodeImagePath(_ data: Data) -> String? {
 /// Server path of the uploaded image; nil on any failure (non-200, network, bad body).
 func uploadOrchestratorImage(_ png: Data, base: URL, session: URLSession) async -> String? {
     guard let req = OrchestratorPost.image(png).request(base: base),
-          let (data, resp) = try? await session.data(for: req),
+          let (data, resp) = try? await orchestratorPostData(for: req, session: session),
           (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
     return decodeImagePath(data)
 }
