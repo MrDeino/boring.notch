@@ -127,6 +127,19 @@ final class OrchestratorExpand: ObservableObject {
     /// Lets ⌘↓ find the notch window while still at level .open.
     func register(vm: BoringViewModel, anchor: NSView) { anchors[key(vm)] = (WeakVM(vm), WeakView(anchor)) }
 
+    /// The notch is open on the Orchestrator tab: an outside click closes it at once, even while the composer holds a
+    /// typing interaction (which makes the upstream hover-exit close refuse). Other tabs keep the upstream behaviour.
+    private var openTabs: [ObjectIdentifier: WeakVM] = [:]
+    func tabOpened(vm: BoringViewModel, anchor: NSView) {
+        register(vm: vm, anchor: anchor)
+        openTabs[key(vm)] = WeakVM(vm)
+        installMonitors()
+    }
+    func tabClosed(vm: BoringViewModel) {
+        openTabs[key(vm)] = nil
+        if expanded.isEmpty && openTabs.isEmpty { removeMonitors() }
+    }
+
     private init() {
         // ⌘↓/⌘↑/⌘T/⌘\ only while the notch panel is key (typing or terminal); a level change remounts the chat and ends typing (Phase 4 shell swap).
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
@@ -206,17 +219,21 @@ final class OrchestratorExpand: ObservableObject {
     private func installMonitors() {
         guard globalMonitor == nil else { return }
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        // Both handlers run on the main thread: act in the same event turn, a Task hop would queue behind any SwiftUI render.
         // Global = click in another app, which takes focus itself; don't hand it back to previousApp.
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] e in
             let p = e.locationInWindow, t = e.timestamp // window-less event: already screen coordinates
-            Task { @MainActor in self?.collapseIfOutside(at: p, timestamp: t, refocus: false) }
+            MainActor.assumeIsolated { self?.collapseIfOutside(at: p, timestamp: t, refocus: false) }
         }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] e in
             let p = e.window.map { $0.convertPoint(toScreen: e.locationInWindow) } ?? NSEvent.mouseLocation, t = e.timestamp
-            Task { @MainActor in self?.collapseIfOutside(at: p, timestamp: t, refocus: true) }
+            MainActor.assumeIsolated { self?.collapseIfOutside(at: p, timestamp: t, refocus: true) }
             return e
         }
     }
+
+    /// Harness check: the click monitors must not outlive the open tab / expanded level.
+    var monitorsActive: Bool { globalMonitor != nil }
 
     private func removeMonitors() {
         if let m = globalMonitor { NSEvent.removeMonitor(m) }
@@ -224,19 +241,28 @@ final class OrchestratorExpand: ObservableObject {
         globalMonitor = nil; localMonitor = nil
     }
 
-    /// Outside click: collapse, then close the notch (keep-open is released by collapse).
+    /// Outside click: collapse, end typing, then close the notch (keep-open is released by collapse/endTyping).
     private func collapseIfOutside(at p: CGPoint, timestamp: TimeInterval, refocus: Bool) {
         func ms() -> Double { (ProcessInfo.processInfo.systemUptime - timestamp) * 1000 }
         orchLog.info("outsideClick handler \(ms(), format: .fixed(precision: 1)) ms after the event")
         orchPerf.emitEvent("outsideClick", "\(ms(), format: .fixed(precision: 1))ms")
-        let outside = expanded.compactMap { k -> BoringViewModel? in
-            guard let vm = vms[k]?.vm, let w = windows[k]?.w,
-                  isOutsideNotch(point: p, windowFrame: w.frame, notchWidth: vm.notchSize.width, notchHeight: vm.notchSize.height) else { return nil }
-            return vm
+        func outside(_ vm: BoringViewModel, _ k: ObjectIdentifier) -> Bool {
+            guard let w = windows[k]?.w ?? anchors[k]?.view.v?.window else { return false }
+            return isOutsideNotch(point: p, windowFrame: w.frame, notchWidth: vm.notchSize.width, notchHeight: vm.notchSize.height)
         }
-        // Collapse all first: close() is blocked while any keep-open session is still active.
-        for vm in outside { orchPerf.emitEvent("collapseStart", "\(ms(), format: .fixed(precision: 1))ms"); collapse(vm: vm, refocus: refocus) }
-        for vm in outside { orchPerf.emitEvent("closeStart", "\(ms(), format: .fixed(precision: 1))ms"); vm.close() }
+        let hit = expanded.compactMap { k in vms[k]?.vm.flatMap { outside($0, k) ? $0 : nil } }
+        let openHit = BoringViewCoordinator.shared.currentView == .orchestrator
+            ? openTabs.compactMap { k, v in v.vm.flatMap { $0.notchState == .open && outside($0, k) ? $0 : nil } } : []
+        let targets = hit + openHit.filter { o in !hit.contains { $0 === o } }
+        guard !targets.isEmpty else { return }
+        // Collapse and end typing first: close() is blocked while any keep-open session is still active.
+        for vm in targets {
+            orchPerf.emitEvent("collapseStart", "\(ms(), format: .fixed(precision: 1))ms")
+            collapse(vm: vm, refocus: refocus)
+            releaseKey(windows[key(vm)]?.w ?? anchors[key(vm)]?.view.v?.window, refocus: refocus)
+        }
+        OrchestratorManager.shared.endTyping()
+        for vm in targets { orchPerf.emitEvent("closeStart", "\(ms(), format: .fixed(precision: 1))ms"); vm.close() }
     }
 
     /// Shared bookkeeping: exactly one endInteraction per expand.
@@ -245,7 +271,7 @@ final class OrchestratorExpand: ObservableObject {
         terminal.remove(k)
         releaseKey(windows[k]?.w, refocus: refocus)
         sizes[k] = nil
-        if expanded.isEmpty { removeMonitors() }
+        if expanded.isEmpty && openTabs.isEmpty { removeMonitors() }
         SharingStateManager.shared.endInteraction()
     }
 

@@ -185,7 +185,7 @@ extension Snap {
             var bad = r.extra
             let closed = vm.closeCount - before
             func lat(_ t: TimeInterval?) -> String { clickAt.flatMap { c in t.map { String(format: "%.1fms", ($0 - c) * 1000) } } ?? "-" }
-            print("latency \(name): collapse=\(lat(collapseAt)) close=\(lat(vm.closedAt))")
+            print("latency \(name): collapse=\(lat(collapseAt)) close=\(lat(vm.closedAt)) refused=\(vm.refused)")
             if r.expectClose && closed < 1 { bad.append("notch not closed by outside click") }
             if share.preventNotchClose { bad.append("interaction leaked (sessions=\(share.sessions))") }
             if OrchestratorExpand.shared.level(for: vm) != .open { bad.append("level \(OrchestratorExpand.shared.level(for: vm))") }
@@ -201,6 +201,7 @@ extension Snap {
             m.endTyping()
             while share.preventNotchClose { share.endInteraction() } // do not let one failure poison the next gate
             try? await Task.sleep(for: .milliseconds(300))
+            if OrchestratorExpand.shared.monitorsActive { failures.append("gate \(name): click monitors still installed after teardown") }
         }
         await gate("1-open-never-expanded") { _, _, _, _ in (false, []) }
         await gate("2-expanded-outside-click") { vm, w, click, wait in
@@ -215,7 +216,7 @@ extension Snap {
             OrchestratorRunLog.shared.snapshotSet(runID: nil, lines: []) //RUNLOG
             await wait(.open) //RUNLOG
             await click() //RUNLOG
-            return (false, []) //RUNLOG
+            return (true, []) //RUNLOG
         } //RUNLOG
         await gate("4-log-then-notch-closes-then-reopen") { vm, w, click, wait in //RUNLOG
             OrchestratorRunLog.shared.snapshotSet(runID: "r1", lines: ["a", "b"]) //RUNLOG
