@@ -56,19 +56,26 @@ final class OrchestratorExpand: ObservableObject {
 
     /// The one notch-size change: model first, then the window (grow now so the spring has room; shrink is deferred in syncWindow).
     private func animate(_ vm: BoringViewModel, to target: CGSize) {
+        // Window first (outside the animation): a window resize that lands in the spring's transaction makes SwiftUI
+        // animate the root from the centre of the new window to the top (the "fills in from the middle" regression).
+        syncWindow(vm: vm, size: target)
         withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = target }
         syncWindow(vm: vm)
     }
 
     /// The only place the panel is resized: it follows vm.notchSize (never below windowSize), top edge and centre pinned.
     /// Growing is immediate; shrinking waits for the spring, then re-reads the current target.
-    func syncWindow(vm: BoringViewModel, window: NSWindow? = nil, now: Bool = false) {
+    func syncWindow(vm: BoringViewModel, window: NSWindow? = nil, now: Bool = false, size: CGSize? = nil) {
         let k = key(vm)
         if let window { windows[k] = WeakWindow(window) }
         guard let w = window ?? windows[k]?.w ?? anchors[k]?.view.v?.window else { return }
         if windows[k]?.w == nil { windows[k] = WeakWindow(w) }
         func target() -> CGSize { panelSize(notch: vm.notchSize, base: windowSize, openHeight: openNotchSize.height) }
-        let t = target(), f = w.frame.size
+        let t = size.map { panelSize(notch: $0, base: windowSize, openHeight: openNotchSize.height) } ?? target(), f = w.frame.size
+        if size != nil { // pre-spring call: only ever grows; the shrink is scheduled by the call after the model change
+            if t.width > f.width || t.height > f.height { w.setFrame(pinnedFrame(current: w.frame, newSize: CGSize(width: max(t.width, f.width), height: max(t.height, f.height))), display: true) }
+            return
+        }
         shrinkTasks[k]?.cancel()
         if now { if t != f { w.setFrame(pinnedFrame(current: w.frame, newSize: t), display: true) }; return }
         if t.width > f.width || t.height > f.height {
