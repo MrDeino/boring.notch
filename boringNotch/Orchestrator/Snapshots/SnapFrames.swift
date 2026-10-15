@@ -65,9 +65,10 @@ final class FrameRecorder: NSObject {
     @objc func tick(_ link: CADisplayLink) { if recording { stamps.append(link.timestamp) } }
 }
 
-/// FRAMES_MARK=1: a 3 ms busy spin before each trigger, so Time Profiler samples show where each transition starts.
-@inline(never) func framesMarker() {
-    let end = CACurrentMediaTime() + 0.003
+/// FRAMES_MARK=1: a busy spin before each trigger (5 ms per step index: idle 5, open 10 … close 25), so Time Profiler
+/// samples show where each transition starts and which one it is.
+@inline(never) func framesMarker(_ step: Int) {
+    let end = CACurrentMediaTime() + 0.005 * Double(step + 1)
     while CACurrentMediaTime() < end {}
 }
 
@@ -119,8 +120,8 @@ extension Snap {
         var round = 0
         repeat {
             round += 1
-            for (name, act) in steps {
-                if mark { framesMarker() }
+            for (step, (name, act)) in steps.enumerated() {
+                if mark { framesMarker(step) }
                 rec.stamps = []; rec.recording = true
                 let t0 = CACurrentMediaTime()
                 act()
