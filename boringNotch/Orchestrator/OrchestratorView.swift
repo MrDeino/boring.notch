@@ -75,6 +75,9 @@ struct OrchestratorView: View {
         }
         .background(WindowAnchor(view: anchor))
         .onChange(of: runLog.runID) { _, id in logChanged(id) }
+        // The log lives on the expanded level: leaving it (outside click, back) must not strand an overlay whose
+        // content keeps the window from shrinking to the open size.
+        .onChange(of: expand.level(for: vm)) { _, l in if l == .open && runLog.runID != nil { restoreLevel = nil; runLog.close() } }
         .onDisappear {
             OrchestratorNotesStore.shared.flush(); manager.statusMenuOpen = false; manager.notesOpen = false
             runLog.close()
