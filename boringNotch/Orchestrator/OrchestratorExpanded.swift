@@ -204,7 +204,6 @@ struct OrchestratorExpandedView: View {
         // min 0: the slot is the space offered, never the held content's size (a held wider layout would keep itself).
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
         .onGeometryChange(for: CGSize.self) { $0.size } action: { s in
-            guard vm.notchState == .open else { return } // kept built while closed: never follow the hidden frame
             slot = s
             // Mid level change: keep the old size until the swap (levelChanged). Otherwise (content fits at the open
             // level) follow with OrchestratorExpand's notch spring, as the content did before it was held.
@@ -217,7 +216,6 @@ struct OrchestratorExpandedView: View {
         // The sticky Runs board must not hide a live prompt or outlive a disconnect.
         .onChange(of: manager.prompt != nil) { _, has in if has { manager.showRunsBoard = false } }
         .onChange(of: manager.offline) { _, off in if off { manager.showRunsBoard = false } }
-        .onChange(of: vm.notchState == .open) { _, o in if !o { expand.reset() } }
         .onDisappear { expand.reset() }
     }
 
@@ -289,7 +287,6 @@ private struct PromptContextView: View {
         .background(WindowAnchor(view: anchor))
         .onChange(of: height) { _, _ in fit() }
         .onAppear { fit() }
-        .onChange(of: vm.notchState == .open) { _, o in if o { fit() } } // reset() cleared it on close
         .onDisappear { OrchestratorExpand.shared.setFit("prompt", extra: 0, vm: vm, window: anchor.window) }
     }
 

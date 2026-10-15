@@ -76,23 +76,17 @@ struct OrchestratorView: View {
         }
         .overlay(alignment: .top) { if runLog.runID == nil { OrchestratorUpdateBadge().padding(.top, 4) } }
         .background(WindowAnchor(view: anchor))
-        .onAppear { expand.setTabBuilt(true, vm: vm); if vm.notchState == .open { opened() } }
-        // The tab stays built while the notch is closed (ContentView): open/close are notchState changes, not mounts.
-        .onChange(of: vm.notchState == .open) { _, o in if o { opened() } else { closed() } }
+        .onAppear { expand.tabOpened(vm: vm, anchor: anchor) }
         .onChange(of: runLog.runID) { _, id in logChanged(id) }
         // The log lives on the expanded level: leaving it (outside click, back) must not strand an overlay whose
         // content keeps the window from shrinking to the open size.
         .onChange(of: expand.level(for: vm)) { _, l in if l == .open && runLog.runID != nil { restoreLevel = nil; runLog.close() } }
-        .onDisappear { expand.setTabBuilt(false, vm: vm); closed() } // tab switch (Home/Shelf) still removes the view
-    }
-
-    private func opened() { expand.tabOpened(vm: vm, anchor: anchor) }
-
-    private func closed() {
-        expand.tabClosed(vm: vm)
-        OrchestratorNotesStore.shared.flush(); manager.statusMenuOpen = false; manager.notesOpen = false
-        runLog.close()
-        if let m = escMonitor { NSEvent.removeMonitor(m); escMonitor = nil }
-        restoreLevel = nil
+        .onDisappear {
+            expand.tabClosed(vm: vm)
+            OrchestratorNotesStore.shared.flush(); manager.statusMenuOpen = false; manager.notesOpen = false
+            runLog.close()
+            if let m = escMonitor { NSEvent.removeMonitor(m); escMonitor = nil }
+            restoreLevel = nil
+        }
     }
 }

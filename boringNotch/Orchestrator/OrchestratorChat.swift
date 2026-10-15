@@ -245,7 +245,6 @@ struct OrchestratorChatView: View {
     @State private var typeMonitor: Any?
     @State private var caretToEnd = false
     @State private var dropTargeted = false
-    @State private var composerH: CGFloat = 30
     @State private var tagGen = 0
     @State private var copiedToast = false
     @State private var copyGen = 0
@@ -342,10 +341,6 @@ struct OrchestratorChatView: View {
         }
         .onAppear { if showComposer { installTypeMonitor() } }
         .onDisappear { stopTyping(); removeKeyMonitor(); removeTypeMonitor() }
-        // Kept built while closed: close ends typing; reopen re-asserts the composer fit that reset() cleared.
-        .onChange(of: vm.notchState == .open) { _, o in
-            if o { if showComposer { fitComposer(composerH); installTypeMonitor() } } else { stopTyping(); removeKeyMonitor(); removeTypeMonitor() }
-        }
         // Focus loss ends typing; clicking elsewhere resigns key (above). Pointer leaving keeps it (INT-06).
         .onChange(of: fieldFocused) { _, f in if !f { stopTyping() } }
         .onChange(of: fieldFocused) { _, f in focusChanged(f) }
@@ -515,7 +510,6 @@ struct OrchestratorChatView: View {
 
     /// The open notch grows with extra composer lines; at expanded/terminal the column absorbs them.
     private func fitComposer(_ h: CGFloat) {
-        composerH = h
         OrchestratorExpand.shared.setFit("composer", extra: expanded ? 0 : h - 30, vm: vm, window: anchor.window)
     }
 
