@@ -111,6 +111,15 @@ func promptIdentity(_ c: PromptCard) -> PromptIdentity {
 
 private func isRule(_ s: String, _ ch: Character) -> Bool { s.count >= 10 && s.allSatisfy { $0 == ch } }
 
+/// Screen chrome below a dialog that is never part of an option: any line opening with a box-drawing
+/// character (─/━/╌ rules, titled rules like "─── Session title ──", box borders), the ❯ input line,
+/// and Claude Code's footers.
+private func isChrome(_ s: String) -> Bool {
+    if let u = s.unicodeScalars.first, (0x2500...0x257F).contains(u.value) { return true }
+    return s.hasPrefix("❯") || s.hasPrefix("⏵") || s.hasPrefix("? for shortcuts")
+        || s.localizedCaseInsensitiveContains("esc to cancel") || s.localizedCaseInsensitiveContains("enter to select")
+}
+
 /// nil when no prompt is on screen.
 func detectPromptCard(screen: String) -> PromptCard? {
     guard let sc = scanPrompt(screen, window: 40) else { return nil }
@@ -118,7 +127,6 @@ func detectPromptCard(screen: String) -> PromptCard? {
     let first = sc.indices[0], last = sc.indices[sc.indices.count - 1]
     let full: (String) -> Bool = { isRule($0, "─") }
     let dashed: (String) -> Bool = { isRule($0, "╌") }
-    let isFooter: (String) -> Bool = { $0.localizedCaseInsensitiveContains("esc to cancel") || $0.localizedCaseInsensitiveContains("enter to select") }
     let after = lines.dropFirst(last + 1)
     let ruleAbove = (0..<first).reversed().first { full(lines[$0]) }
     let chipIdx = ((ruleAbove.map { $0 + 1 } ?? 0)..<first).first { "←☐☒✔".contains(lines[$0].first!) }
@@ -135,7 +143,7 @@ func detectPromptCard(screen: String) -> PromptCard? {
         if it.label.hasPrefix("Type something") { it.role = .freeText } else if it.label == "Chat about this" { it.role = .chat }
         if kind == .question && it.role == .normal {
             let end = k + 1 < sc.indices.count ? sc.indices[k + 1] : lines.count
-            let d = lines[(sc.indices[k] + 1)..<end].prefix { !full($0) && !dashed($0) && !isFooter($0) }
+            let d = lines[(sc.indices[k] + 1)..<end].prefix { !isChrome($0) }
             it.detail = d.isEmpty ? nil : d.joined(separator: " ")
         }
         items.append(it)

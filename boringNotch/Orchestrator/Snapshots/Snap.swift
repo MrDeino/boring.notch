@@ -274,6 +274,7 @@ struct Snap {
             Scene(name: "18-question-multiselect-toggled", chat: chat(fixture("multiselect-1.txt")), expanded: true, pending: [1: true, 2: true]),
             Scene(name: "19-question-multiq-tabs", chat: chat(fixture("multiq-tab2.txt")), expanded: true),
             Scene(name: "20-question-review-submit", chat: chat(fixture("review-submit.txt")), expanded: true),
+            Scene(name: "20b-question-review-chrome", chat: chat(fixture("review-chrome.txt")), expanded: true),
             Scene(name: "21-permission-pressed", chat: chat(fixture("phase6-edit.txt")), pressed: 1),
             Scene(name: "22-permission-retry-note", chat: chat(fixture("phase6-edit.txt")), note: "Didn't go through"),
             Scene(name: "34-expanded-question-transcript", chat: chat(longQuestion), blocks: longBlocks, expanded: true),
