@@ -226,14 +226,15 @@ final class ModelSlice: ObservableObject {
     /// OrchestratorExpandedView: which state to show, and the prose above a prompt card.
     static var column: ModelSlice {
         .init([changes(m.$hasLoaded), changes(m.$offline), changes(m.$chatRunning), changes(m.$showRunsBoard), changes(m.$prompt),
-               changes(t.$blocks.map { latestAssistantProse($0) }.removeDuplicates())])
+               changes(t.$blocks.map { latestAssistantProse($0) }.removeDuplicates()),
+               changes(m.$screen.combineLatest(m.$prompt).map { $1 == nil ? nil : screenLeadIn(screen: $0) }.removeDuplicates())])
     }
     /// The runs rail / strip.
     static var runs: ModelSlice { .init([changes(m.$runs), changes(m.$usage)]) }
     /// The chat view's manager fields (it observes the transcript store directly).
     static var chat: ModelSlice {
         .init([changes(m.$chatLive), changes(m.$chatRunning), changes(m.$liveStatus), changes(m.$notesOpen), changes(m.$offline),
-               changes(m.$promptOptions), changes(m.$screen), changes(m.$statusMenuOpen), changes(m.$wantsKeyboard)])
+               changes(m.$prompt), changes(m.$promptOptions), changes(m.$screen), changes(m.$statusMenuOpen), changes(m.$wantsKeyboard)])
     }
 }
 
@@ -367,6 +368,11 @@ struct OrchestratorChatView: View {
                     ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, caret: caretVisible(live: manager.chatLive, working: manager.liveStatus != nil, kind: b.kind, id: b.id, newestID: store.blocks.last?.id) && store.pending.isEmpty, onClick: expandChat, onCopied: showCopied)
                         .equatable()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                // Claude Code writes the turn to the transcript only after the prompt is answered: show its screen text meanwhile.
+                if manager.prompt != nil, let lead = heldLeadIn(screen: manager.screen, blocks: store.blocks) {
+                    ChatBlockRow(block: ChatBlock(pendingID: "lead-in", text: lead, kind: .prose), proseLineLimit: proseLineLimit, expanded: expanded, onClick: expandChat, onCopied: showCopied)
+                        .equatable()
                 }
             }
             ForEach(store.pending) { p in

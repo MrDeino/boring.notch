@@ -221,7 +221,9 @@ struct OrchestratorExpandedView: View {
                         .frame(minHeight: promptVisible ? 72 : 0)
                 }
                 // Open: what Claude said before asking, a few lines, so the card is not out of context.
-                if open && promptVisible, let ctx = latestAssistantProse(store.blocks) { PromptContextView(text: ctx) }
+                if open && promptVisible, let ctx = heldLeadIn(screen: manager.screen, blocks: store.blocks) ?? latestAssistantProse(store.blocks) {
+                    PromptContextView(text: ctx)
+                }
                 if promptVisible { OrchestratorPromptCard() }
             }
         }
