@@ -342,5 +342,7 @@ extension OrchestratorManager {
         guard loaded else { return }
         if let chat { applyState(state); await applyChat(chat) } else { applyOffline() }
     }
+    /// Send-path harness: behave as if the SSE stream is up (blocks arrive as events, not fetched per poll).
+    func snapshotSetStreaming(_ on: Bool) { streaming = on }
 }
 #endif

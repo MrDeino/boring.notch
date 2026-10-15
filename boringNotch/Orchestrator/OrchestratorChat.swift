@@ -25,8 +25,6 @@ final class OrchestratorTranscriptStore: ObservableObject {
     private var nextPendingID = 0
     private var draining = false
 
-    private var base: URL?
-    private var session: URLSession?
     private var needsFull = true
     private var polls = 0
     private var failures = 0
@@ -43,8 +41,6 @@ final class OrchestratorTranscriptStore: ObservableObject {
     }
 
     func refresh(base: URL, session: URLSession, chatRunning: Bool) async {
-        self.base = base
-        self.session = session
         guard chatRunning else {
             if !blocks.isEmpty { blocks = [] }
             needsFull = true
@@ -184,10 +180,10 @@ final class OrchestratorTranscriptStore: ObservableObject {
 
     /// R-05: always C-u Claude's box before typing; no wait-for-empty check. Claude's dim suggested
     /// prompt reads as plain box text in capture-pane and C-u can't clear it (fixtures/idle-suggestion.txt),
-    /// but typing replaces it. false = the C-u POST failed, so don't type.
+    /// but typing replaces it. false = the C-u POST failed, so don't type. Same base/session as the text POST:
+    /// while streaming, refresh(base:) may never have run.
     func clearRealLine() async -> Bool {
-        guard let base, let session else { return false }
-        return (try? await sendOrchestratorPost(.key("C-u"), base: base, session: session)) == 200
+        (try? await sendOrchestratorPost(.key("C-u"), base: OrchestratorManager.baseURL, session: OrchestratorManager.shared.session)) == 200
     }
 }
 
