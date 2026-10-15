@@ -9,7 +9,9 @@ import QuartzCore
 // Together gate: the notch shape's width and height progress must stay within 0.08 of each other on every layout
 // sample of expand, collapse and close (and no frame where one moves while the other holds). FRAMES_TRACE=1 prints
 // the per-sample shape / tab-body / window sizes. Even gate: no mid-spring jump over 0.12 of the travel (a stall that
-// splits the motion). Content gate: the transcript frame is steady once it fades back in. FRAMES_PIXELS=1: drawn-shape pass.
+// splits the motion). Content gate: the transcript frame is steady once it fades back in. Root-read gate: the root body
+// reads the new notch size within 50 ms (a stale read inside @Published's willSet loses the spring). FRAMES_PIXELS=1:
+// drawn-shape pass.
 
 /// Mirror of ContentView.swift root chain (mainLayout + root modifiers, same order); keep in sync.
 /// Only ContentView's open/closed branches that the Orchestrator tab uses (no sneak peek, gestures, music).
@@ -18,6 +20,7 @@ struct FramesRoot: View {
     @ObservedObject var wings = OrchestratorWingsModel.shared
 
     var body: some View {
+        let _ = FramesProbe.bodies.append((CACurrentMediaTime(), vm.notchSize)) // stale-read gate
         let open = vm.notchState == .open
         let topR = open ? cornerRadiusInsets.opened.top : cornerRadiusInsets.closed.top
         ZStack(alignment: .top) {
@@ -110,6 +113,8 @@ func contentSteady(_ b: [FrameRecorder.Box]) -> String? {
 enum FramesProbe {
     static var shape: [(CFTimeInterval, CGSize)] = []
     static var content: [(CFTimeInterval, CGSize)] = []
+    /// Root body evaluations (time, the notchSize it read).
+    static var bodies: [(CFTimeInterval, CGSize)] = []
 }
 
 /// An AppKit view in the shape's background: SwiftUI sets its frame on every animated frame (onGeometryChange and a
@@ -251,7 +256,7 @@ extension Snap {
         var apart: Set<String> = []
         var lastShape: CGSize?
         var gaps: [String: [(gap: Double, stuck: Int, jump: Double)]] = [:]
-        var uneven: Set<String> = [], moving: Set<String> = []
+        var uneven: Set<String> = [], moving: Set<String> = [], lost: Set<String> = []
         var round = 0
         repeat {
             round += 1
@@ -259,10 +264,12 @@ extension Snap {
                 if mark { framesMarker(step) }
                 let a = FramesProbe.shape.last?.1 ?? lastShape
                 lastShape = a
-                FramesProbe.shape = []; FramesProbe.content = []; rec.windowSizes = []; rec.boxes = []
+                FramesProbe.shape = []; FramesProbe.content = []; rec.windowSizes = []; rec.boxes = []; FramesProbe.bodies = []
                 rec.stamps = []; rec.recording = true
+                let before = vm.notchSize
                 let t0 = CACurrentMediaTime()
                 act()
+                let target = vm.notchSize
                 try? await Task.sleep(for: .milliseconds(900)) // covers the 650 ms deferred shrink + 200 ms
                 rec.recording = false
                 lastShape = FramesProbe.shape.last?.1 ?? lastShape
@@ -288,6 +295,16 @@ extension Snap {
                         if !r.even && gated { uneven.insert(name) }
                         print(String(format: "together %@ maxGap=%.3f at=%.0f stuck=%d jump=%.3f at=%.0f samples=%d %@ %@", name, r.maxGap, r.at * 1000, r.stuck, r.jump, r.jumpAt * 1000, r.samples, r.worst, r.ok ? (r.even ? "ok" : "UNEVEN") : "APART"))
                     }
+                    // Stale read: SwiftUI can run the update synchronously inside @Published's willSet (before the new size is
+                        // stored); the root then keeps the old size and the spring never starts until something else
+                        // invalidates it. Gate: the root reads the new size within 50 ms of the trigger.
+                    if before != target {
+                        let stale = FramesProbe.bodies.filter { $0.0 >= t0 && $0.1 == before }.count
+                        let fresh = FramesProbe.bodies.first { $0.0 >= t0 && $0.1 == target }.map { ($0.0 - t0) * 1000 }
+                        let ok = (fresh ?? .infinity) <= 50
+                        if !ok && ["expand", "collapse", "close"].contains(name) { lost.insert(name) }
+                        print("rootread \(name) stale=\(stale) firstFresh=" + (fresh.map { String(format: "%.0fms", $0) } ?? "never") + (ok ? " ok" : " LOST"))
+                    }
                     if name == "expand" || name == "collapse" {
                         let c = contentSteady(rec.boxes.map { var b = $0; b.t -= t0; return b })
                         if c != nil { moving.insert(name) }
@@ -301,6 +318,7 @@ extension Snap {
                         var w: [(CFTimeInterval, CGSize)] = []
                         for x in rec.windowSizes where w.last?.1 != x.1 { w.append(x) }
                         row("window", w)
+                        row("rootBody", FramesProbe.bodies)
                         print("trace \(name) scroll " + rec.boxes.map { String(format: "%.0f:y%.0f,h%.0f,w%.0f,off%.0f,a%.2f", ($0.t - t0) * 1000, $0.y, $0.h, $0.w, $0.off, $0.alpha) }.joined(separator: " "))
                     }
                 }
@@ -337,6 +355,7 @@ extension Snap {
         print(apart.isEmpty ? "OK: together (width and height move as one in expand, collapse, close)" : "\(report ? "REPORT" : "FAIL"): width/height apart in " + apart.sorted().joined(separator: ", "))
         print(uneven.isEmpty ? "OK: even (no mid-spring jump over 0.12 of the travel in expand, collapse, close)" : "\(report ? "REPORT" : "FAIL"): shape jumps mid-spring in " + uneven.sorted().joined(separator: ", "))
         print(moving.isEmpty ? "OK: content laid out once (steady once it shows) in expand, collapse" : "\(report ? "REPORT" : "FAIL"): content moves after it shows in " + moving.sorted().joined(separator: ", "))
-        if (!bad.isEmpty || !apart.isEmpty || !uneven.isEmpty || !moving.isEmpty) && !report { exit(1) }
+        print(lost.isEmpty ? "OK: root reads the new notch size within 50 ms (expand, collapse, close)" : "\(report ? "REPORT" : "FAIL"): size change lost (stale root) in " + lost.sorted().joined(separator: ", "))
+        if (!bad.isEmpty || !apart.isEmpty || !uneven.isEmpty || !moving.isEmpty || !lost.isEmpty) && !report { exit(1) }
     }
 }
