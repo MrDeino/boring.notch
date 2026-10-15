@@ -116,3 +116,4 @@ Resume file: None
 | 261015-kg6 | Long chat rows keep their full text: prose cap 2000 -> 20 000 chars (cut ends in …), not the fit cache; run.sh --fulltext check | 2026-10-15 | .planning/quick/261015-kg6-long-chat-row-full-text |
 | 261015-lrf | Composer sends no longer fail while streaming: C-u used a store base URL only set by a blocks fetch; run.sh --sendmock check | 2026-10-15 | .planning/quick/261015-lrf-composer-send-fails-retry |
 | 261014-q90 | Wings: runs + chat working (elapsed, count), queued done/failed, paused music yields, music-playing ✻/✓ | 2026-10-14 | .planning/quick/261014-q90-live-activity-wings |
+| 261015-me5 | "Claude update ready · Restart" badge under the tab header + closed dot; confirmed POST /api/chat/restart, 409 busy -> Restart anyway (force), restarting until running | 2026-10-15 | .planning/quick/261015-me5-claude-update-ready-restart |
