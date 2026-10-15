@@ -19,7 +19,7 @@ final class OrchestratorWingsInputs: ObservableObject {
         didSet { if timing.chatElapsed != oldValue.chatElapsed { chatAt = Date() } }
     }
     private(set) var chatAt = Date()
-    /// A run waits or the chat shows a prompt, and serve is reachable.
+    /// A run waits, the chat shows a prompt or a Claude update is ready, and serve is reachable.
     @Published fileprivate(set) var attentionDot = false
 }
 
@@ -75,7 +75,7 @@ final class OrchestratorWingsModel: ObservableObject {
     }
 
     private func recompute() {
-        let dot = manager.needsAttention && !manager.offline
+        let dot = (manager.needsAttention || manager.claudeUpdateReady) && !manager.offline
         if dot != inputs.attentionDot { inputs.attentionDot = dot }
         let t = WingTiming(chatElapsed: manager.liveStatus?.elapsed, starts: manager.runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt) })
         if t != inputs.timing { inputs.timing = t }
