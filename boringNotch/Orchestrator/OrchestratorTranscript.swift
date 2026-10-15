@@ -221,9 +221,11 @@ func heldLeadIn(screen: String, blocks: [ChatBlock]) -> String? {
     return (latestAssistantProse(blocks).map { key($0).contains(probe) } ?? false) ? nil : lead
 }
 
-/// Transcript text is untrusted: truncated, inline markdown only, links stripped (T-05-01/02).
+/// Transcript text is untrusted: inline markdown only, links stripped (T-05-01/02). The size cap only bounds a hostile
+/// payload; real messages run past 2000 chars (one did, and lost its last line), and a cut ends in "…" so it shows.
+let proseCharCap = 20_000
 func proseAttributed(_ s: String) -> AttributedString {
-    let plain = String(s.prefix(2000))
+    let plain = s.count > proseCharCap ? s.prefix(proseCharCap) + "…" : s
     var a = (try? AttributedString(markdown: plain, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
         ?? AttributedString(plain)
     for run in a.runs { a[run.range].link = nil }

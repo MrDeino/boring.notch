@@ -210,6 +210,7 @@ struct Snap {
         if CommandLine.arguments.contains("--closed") { await closed(); return }
         if CommandLine.arguments.contains("--askmock") { await askMock(); return }
         if CommandLine.arguments.contains("--idle") { await idle(); return }
+        if CommandLine.arguments.contains("--fulltext") { await fullText(); return }
         let useImageRenderer = CommandLine.arguments.contains("--image-renderer")
         let out = URL(fileURLWithPath: "/tmp/notch-snapshots")
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
