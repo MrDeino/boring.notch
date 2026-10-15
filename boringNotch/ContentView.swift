@@ -368,9 +368,8 @@ struct ContentView: View {
                     }
                 }
                 .transition(
-                    // Orchestrator: fade only. Scaling AppKit-backed views (transcript scroll view, text rows) re-lays
-                    // them out on every frame of the open/close spring.
-                    coordinator.currentView == .orchestrator ? .opacity.animation(.smooth(duration: 0.35)) :
+                    // Orchestrator: fade only (scaling re-lays its AppKit text out every frame), in once the shape is open, out at once.
+                    coordinator.currentView == .orchestrator ? .orchestratorTab :
                     .scale(scale: 0.8, anchor: .top)
                     .combined(with: .opacity)
                     .animation(.smooth(duration: 0.35))
