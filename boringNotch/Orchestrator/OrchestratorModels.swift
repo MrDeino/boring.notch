@@ -1,9 +1,82 @@
 import Foundation
+import AppKit
 
 /// GET /api/chat. All fields optional so server omissions never break decoding.
 struct ChatResponse: Decodable {
     let running: Bool?
     let screen: String?
+    var live: Bool? = nil
+    var input: ChatInput? = nil
+    var context: ChatContext? = nil
+    /// True when serve sent the `input` key at all (null = no box on screen; absent = old serve, use the heuristic).
+    var hasInputKey = false
+    // Phase 9
+    var approval: OrchestratorApproval? = nil
+    /// True when serve sent the `approval` key (null = none pending; absent = old serve, leave the current value alone).
+    var hasApproval = false
+}
+
+/// Pending tool approval from serve (hook-driven, never screen-inferred). `at` stays the raw ISO string.
+struct OrchestratorApproval: Decodable, Equatable {
+    let id: String
+    let tool: String?
+    let command: String?
+    let description: String?
+    let at: String?
+    private enum CodingKeys: String, CodingKey { case id, tool, command, description, at }
+    init(id: String, tool: String?, command: String?, description: String?, at: String?) {
+        self.id = id; self.tool = tool; self.command = command; self.description = description; self.at = at
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        tool = try? c.decodeIfPresent(String.self, forKey: .tool)
+        command = try? c.decodeIfPresent(String.self, forKey: .command)
+        description = try? c.decodeIfPresent(String.self, forKey: .description)
+        at = try? c.decodeIfPresent(String.self, forKey: .at)
+    }
+}
+
+/// Serve's exact input-box state (Phase 8).
+struct ChatInput: Decodable, Equatable {
+    let text: String?
+    let suggested: Bool?
+    private enum CodingKeys: String, CodingKey { case text, suggested }
+    init(text: String?, suggested: Bool?) { self.text = text; self.suggested = suggested }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        text = try? c.decodeIfPresent(String.self, forKey: .text)
+        suggested = try? c.decodeIfPresent(Bool.self, forKey: .suggested)
+    }
+}
+
+struct ChatContext: Decodable, Equatable {
+    let tokens: Int?
+    let window: Int?
+    let percent: Int?
+    private enum CodingKeys: String, CodingKey { case tokens, window, percent }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tokens = try? c.decodeIfPresent(Int.self, forKey: .tokens)
+        window = try? c.decodeIfPresent(Int.self, forKey: .window)
+        percent = try? c.decodeIfPresent(Int.self, forKey: .percent)
+    }
+}
+
+extension ChatResponse {
+    private enum CodingKeys: String, CodingKey { case running, screen, live, input, context, approval }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        running = try c.decodeIfPresent(Bool.self, forKey: .running)
+        screen = try c.decodeIfPresent(String.self, forKey: .screen)
+        // lossy: a wrong-typed field must not fail the chat decode
+        live = try? c.decodeIfPresent(Bool.self, forKey: .live)
+        input = try? c.decodeIfPresent(ChatInput.self, forKey: .input)
+        context = try? c.decodeIfPresent(ChatContext.self, forKey: .context)
+        hasInputKey = c.contains(.input)
+        hasApproval = c.contains(.approval)
+        approval = (try? c.decodeIfPresent(OrchestratorApproval.self, forKey: .approval)) ?? nil // malformed -> nil, never fails the chat decode
+    }
 }
 
 /// Last `maxLines` non-blank conversation lines of a terminal screen, trailing spaces/NBSP trimmed.
@@ -69,7 +142,7 @@ struct OrchestratorRun: Decodable, Equatable {
     }
 }
 
-struct RunActivity: Decodable, Equatable { let step: String?; let agents: [RunAgent]? }
+struct RunActivity: Decodable, Equatable { let step: String?; let agents: [RunAgent]?; let doing: String? }
 struct RunAgent: Decodable, Equatable { let type: String?; let desc: String? }
 
 struct OrchestratorUsage: Decodable, Equatable {
@@ -96,6 +169,8 @@ enum OrchestratorPost: Equatable {
     case text(String), key(String), start, stop
     /// POST /api/notes: raw full text (not JSON).
     case notes(String)
+    /// POST /api/chat/image: raw PNG body.
+    case image(Data)
 
     static let allowedKeys: Set<String> = ["Enter", "Escape", "Up", "Down", "Left", "Right", "Tab", "BTab", "C-u", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
@@ -112,6 +187,15 @@ enum OrchestratorPost: Equatable {
             r.httpBody = data
             return r
         }
+        if case .image(let data) = self {
+            guard !data.isEmpty, data.count <= 10 * 1024 * 1024 else { return nil } // serve's IMAGE_MAX
+            var r = URLRequest(url: base.appendingPathComponent("api/chat/image"))
+            r.httpMethod = "POST"
+            r.setValue("1", forHTTPHeaderField: "x-orch")
+            r.setValue("image/png", forHTTPHeaderField: "Content-Type")
+            r.httpBody = data
+            return r
+        }
         switch self {
         case .text(let s):
             guard !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
@@ -121,7 +205,7 @@ enum OrchestratorPost: Equatable {
             path = "api/chat"; body = ["key": k]
         case .start: path = "api/chat/start"; body = [:]
         case .stop: path = "api/chat/stop"; body = [:]
-        case .notes: return nil
+        case .notes, .image: return nil
         }
         var r = URLRequest(url: base.appendingPathComponent(path))
         r.httpMethod = "POST"
@@ -145,4 +229,38 @@ func fetchOrchestratorNotes(base: URL, session: URLSession) async throws -> Stri
     let (data, resp) = try await session.data(for: URLRequest(url: base.appendingPathComponent("api/notes")))
     guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else { throw URLError(.badServerResponse) }
     return String(decoding: data, as: UTF8.self)
+}
+
+private struct ImagePathResponse: Decodable { let path: String? }
+
+func decodeImagePath(_ data: Data) -> String? {
+    guard let p = (try? JSONDecoder().decode(ImagePathResponse.self, from: data))?.path, !p.isEmpty else { return nil }
+    return p
+}
+
+/// Server path of the uploaded image; nil on any failure (non-200, network, bad body).
+func uploadOrchestratorImage(_ png: Data, base: URL, session: URLSession) async -> String? {
+    guard let req = OrchestratorPost.image(png).request(base: base),
+          let (data, resp) = try? await session.data(for: req),
+          (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+    return decodeImagePath(data)
+}
+
+/// PNG of the image, longest pixel side capped at maxSide (never upscaled); 2000px keeps retina screenshots far below serve's 10 MB cap.
+func orchestratorPNG(from image: NSImage, maxSide: CGFloat = 2000) -> Data? {
+    var w = CGFloat(0), h = CGFloat(0)
+    for r in image.representations { w = max(w, CGFloat(r.pixelsWide)); h = max(h, CGFloat(r.pixelsHigh)) }
+    if w <= 0 || h <= 0 { w = image.size.width; h = image.size.height }
+    guard w > 0, h > 0 else { return nil }
+    let k = min(1, maxSide / max(w, h))
+    let pw = max(1, Int((w * k).rounded())), ph = max(1, Int((h * k).rounded()))
+    guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pw, pixelsHigh: ph, bitsPerSample: 8, samplesPerPixel: 4,
+                                     hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+          let ctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+    rep.size = NSSize(width: pw, height: ph)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = ctx
+    image.draw(in: NSRect(x: 0, y: 0, width: pw, height: ph), from: .zero, operation: .copy, fraction: 1)
+    NSGraphicsContext.restoreGraphicsState()
+    return rep.representation(using: .png, properties: [:])
 }

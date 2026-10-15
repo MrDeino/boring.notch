@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phases 2 and 3 executed and merged; on-screen UAT pending
-last_updated: "2026-10-14T08:55:32.633Z"
-last_activity: 2026-10-14 -- Phase 9 planning complete
+status: milestone_complete
+stopped_at: Milestone complete (Phase 9 was final phase)
+last_updated: 2026-10-14T13:45:02.001Z
+last_activity: 2026-10-14
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 9
   total_plans: 26
-  completed_plans: 20
-  percent: 77
+  completed_plans: 26
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-14)
 
 **Core value:** Answer and steer the Claude Code orchestrator from the notch without switching to a terminal — and never break the music player doing it.
-**Current focus:** Phases 5–7 merged into orch/261014045709-9a3d; post-merge fixes; on-screen UAT pending
+**Current focus:** Milestone complete
 
 ## Current Position
 
-Phase: 05–07 (2a) — merged
-Plan: all plans complete
-Status: Phases 05–07 merged, awaiting human UAT; Phases 8–9 planned, ready to execute
-Last activity: 2026-10-14 - Phase 8–9 planning complete; quick task 261014-r8w (notepad drop-down, question back-navigation)
+Phase: 9
+Plan: Not started
+Status: Milestone complete
+Last activity: 2026-10-15 - Completed quick task 261015-ev9: expanded responsiveness, Release build
 
 Progress: [██████████] 100%
 
@@ -36,7 +36,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 6
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -44,7 +44,8 @@ Progress: [██████████] 100%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 8 | 3 | - | - |
+| 9 | 3 | - | - |
 
 *Updated after each plan completion*
 
@@ -88,7 +89,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-14T05:07:08.914Z
+Last session: 2026-10-14T13:37:53.675Z
 Stopped at: Phases 2 and 3 executed and merged; on-screen UAT pending
 Resume file: None
 
@@ -102,4 +103,11 @@ Resume file: None
 | 261014-pug | Multi-select/tabbed questions, optimistic prompt answers with retry note, expanded bubbles + Edit diff card, no swipe-close on Orchestrator tab, heavier marker dot | 2026-10-14 | .planning/quick/261014-pug-question-prompts-optimistic-polish |
 | 261014-qei | Optimistic message sending: instant composer clear, ordered send queue, dimmed pending rows reconciled from blocks, Not sent with Retry/Edit | 2026-10-14 | .planning/quick/261014-qei-optimistic-message-sending |
 | 261014-r8w | Notepad drop-down in header (GET/POST /api/notes, 1s autosave, Saved/Couldn't save), question back-navigation via BTab | 2026-10-14 | .planning/quick/261014-r8w-notepad-dropdown-and-question-back-navig |
+| 261014-rm9 | Closed-notch hairline pinned to the visible notch bottom at any height; image paste/drop chips uploaded via /api/chat/image through the send queue | 2026-10-14 | .planning/quick/261014-rm9-hairline-pin-and-image-paste |
+| 261014-s3q | No closed hairline; content-sized asymmetric wings; one view tree for smooth expand/collapse; 850-wide expanded level; draft in shared store; fresh fetch after send/answer; rail stays put; growing composer; notes click-to-type and grow; prompt context above cards | 2026-10-14 | .planning/quick/261014-s3q-wings-fit-smooth-bigger-expand-notes-dra |
+| 261014-tmq | Live status parses the new spinner format + serve `live`; segment hidden at expanded; stick-to-bottom scroll with New messages pill; drag-select auto-copy; CLI-like tool rows with description | 2026-10-14 | .planning/quick/261014-tmq-live-status-scroll-segment-selection-too |
+| 261014-x18 | Expanded composer on 12pt bottom padding; fade-out/spring/fade-in expand instead of reflow; blue run activity line; run log overlay from cards and rail dots | 2026-10-15 | .planning/quick/261014-x18-expand-gap-and-fade-run-log-viewer-activ |
+| 261015-apm | Idle CPU fix (Core Animation for repeating animations, closed-notch views off the manager), run log closes on collapse, panel host no longer imposes min size (click-outside) | 2026-10-15 | .planning/quick/261015-apm-fix-lag-idle-cpu-and-click-outside-colla |
+| 261015-ehb | Expand/collapse pinned to the screen top again (window grows outside the spring transaction); screen-space --transition check on the real panel config | 2026-10-15 | .planning/quick/261015-ehb-expand-pinned-to-top-again |
+| 261015-ev9 | Outside click collapses in the same event turn (also open level while typing); scoped observation + Equatable rows/cards + text-fit cache cut expanded re-renders; signposts; Release build without Sparkle | 2026-10-15 | .planning/quick/261015-ev9-expanded-responsiveness-release-build |
 | 261014-q90 | Wings: runs + chat working (elapsed, count), queued done/failed, paused music yields, music-playing ✻/✓ | 2026-10-14 | .planning/quick/261014-q90-live-activity-wings |

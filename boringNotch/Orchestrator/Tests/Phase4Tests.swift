@@ -2,13 +2,13 @@ import Foundation
 
 func runPhase4Tests() {
     func ls(_ s: String) -> LiveStatus? { parseLiveStatus(screen: s) }
-    precondition(ls("✻ Working… (41s · ↑ 1.2k tokens · esc to interrupt)") == LiveStatus(text: "Working…", elapsed: 41))
+    precondition(ls("✻ Working… (41s · ↑ 1.2k tokens · esc to interrupt)") == LiveStatus(text: "Working…", elapsed: 41, tokens: "↑ 1.2k tokens"))
     precondition(ls("✢ Pondering… (1m 52s · esc to interrupt)")?.elapsed == 112)
     precondition(ls("✶ Cogitating… (1h 2m · esc to interrupt)")?.elapsed == 3720)
     precondition(ls("✻ Thinking… (esc to interrupt)") == LiveStatus(text: "Thinking…", elapsed: nil))
     precondition(ls("✻ Sautéed for 22s · done 12:48 pm · 1 monitor still running") == nil)
     precondition(ls("> (esc to interrupt)") == nil)
-    precondition(ls(fixture("working")) == LiveStatus(text: "Working…", elapsed: 12))
+    precondition(ls(fixture("working")) == LiveStatus(text: "Working…", elapsed: 12, tokens: "↑ 1.2k tokens"))
     precondition(ls(fixture("permission")) == nil && ls(fixture("inputbox")) == nil)
 
     precondition(formatElapsed(0) == "0:00" && formatElapsed(41) == "0:41")

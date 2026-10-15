@@ -7,42 +7,35 @@ struct WindowAnchor: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// The state switch. Runs board is checked before stopped so "see Runs" works while the chat is stopped.
-struct OrchestratorTabContent: View {
-    @ObservedObject var manager = OrchestratorManager.shared
-
-    var body: some View {
-        Group {
-            if !manager.hasLoaded {
-                OrchestratorConnectingView()
-            } else if manager.offline {
-                OrchestratorOfflineView()
-            } else if manager.showRunsBoard {
-                OrchestratorRunsBoard()
-            } else if !manager.chatRunning {
-                OrchestratorStoppedView()
-            } else if manager.prompt != nil {
-                OrchestratorPromptCard()
-            } else {
-                OrchestratorChatView()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 8)
-        // The sticky Runs board must not hide a live prompt or outlive a disconnect.
-        .onChange(of: manager.prompt != nil) { _, has in if has { manager.showRunsBoard = false } }
-        .onChange(of: manager.offline) { _, off in if off { manager.showRunsBoard = false } }
-    }
-}
-
 struct OrchestratorView: View {
     @ObservedObject var expand = OrchestratorExpand.shared
-    @ObservedObject var manager = OrchestratorManager.shared
+    let manager = OrchestratorManager.shared
+    @StateObject private var slice = ModelSlice.view
     @EnvironmentObject var vm: BoringViewModel
+    @ObservedObject var runLog = OrchestratorRunLog.shared
     @State private var anchor = NSView()
+    @State private var restoreLevel: ExpandLevel?
+    @State private var escMonitor: Any?
 
-    @State private var notesGrew = false
-    @State private var bodyHeight: CGFloat = 999
+    /// The log opens over the content: the open level grows to expanded first and returns on close.
+    private func logChanged(_ id: String?) {
+        if id != nil {
+            guard restoreLevel == nil else { return }
+            restoreLevel = expand.level(for: vm)
+            if restoreLevel == .open { expand.setLevel(.expanded, vm: vm, window: anchor.window) }
+            if escMonitor == nil {
+                escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                    guard event.keyCode == 53, event.window === anchor.window else { return event }
+                    runLog.close()
+                    return nil
+                }
+            }
+        } else {
+            if let m = escMonitor { NSEvent.removeMonitor(m); escMonitor = nil }
+            if let r = restoreLevel, r != expand.level(for: vm) { expand.setLevel(r, vm: vm, window: anchor.window) }
+            restoreLevel = nil
+        }
+    }
 
     private func close() {
         withAnimation(.easeOut(duration: 0.15)) {
@@ -52,22 +45,20 @@ struct OrchestratorView: View {
     }
 
     var body: some View {
-        Group {
-            if expand.level(for: vm) != .open {
-                OrchestratorExpandedView()
-            } else {
-                OrchestratorTabContent()
-            }
-        }
+        OrchestratorExpandedView()
         // minHeight 0: take exactly the space under the header. A taller body would otherwise make the
         // notch's fixed-height frame centre it, pushing the header and the composer out of the notch.
         .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         .clipped()
-        .background(GeometryReader { g in Color.clear.onAppear { bodyHeight = g.size.height }.onChange(of: g.size.height) { _, h in bodyHeight = h } })
         .opacity(manager.statusMenuOpen || manager.notesOpen ? 0.35 : 1)
-        .allowsHitTesting(!manager.statusMenuOpen && !manager.notesOpen)
+        .allowsHitTesting(!manager.statusMenuOpen && !manager.notesOpen && runLog.runID == nil)
         .overlay(alignment: .topTrailing) {
-            if manager.notesOpen {
+            if runLog.runID != nil {
+                ZStack {
+                    Color.clear.contentShape(Rectangle()).onTapGesture { runLog.close() }
+                    OrchestratorRunLogOverlay().transition(.opacity)
+                }
+            } else if manager.notesOpen {
                 ZStack(alignment: .topTrailing) {
                     Color.clear.contentShape(Rectangle()).onTapGesture { close() }
                     OrchestratorNotesPanel(close: close)
@@ -84,14 +75,17 @@ struct OrchestratorView: View {
             }
         }
         .background(WindowAnchor(view: anchor))
-        .onChange(of: manager.notesOpen) { _, open in
-            // Grow only when the open level lacks room for a usable editor; undo only what we grew.
-            if open, expand.level(for: vm) == .open, bodyHeight < 130 {
-                expand.setLevel(.expanded, vm: vm, window: anchor.window); notesGrew = true
-            } else if !open, notesGrew {
-                notesGrew = false; expand.setLevel(.open, vm: vm, window: anchor.window)
-            }
+        .onAppear { expand.tabOpened(vm: vm, anchor: anchor) }
+        .onChange(of: runLog.runID) { _, id in logChanged(id) }
+        // The log lives on the expanded level: leaving it (outside click, back) must not strand an overlay whose
+        // content keeps the window from shrinking to the open size.
+        .onChange(of: expand.level(for: vm)) { _, l in if l == .open && runLog.runID != nil { restoreLevel = nil; runLog.close() } }
+        .onDisappear {
+            expand.tabClosed(vm: vm)
+            OrchestratorNotesStore.shared.flush(); manager.statusMenuOpen = false; manager.notesOpen = false
+            runLog.close()
+            if let m = escMonitor { NSEvent.removeMonitor(m); escMonitor = nil }
+            restoreLevel = nil
         }
-        .onDisappear { OrchestratorNotesStore.shared.flush(); manager.statusMenuOpen = false; manager.notesOpen = false }
     }
 }

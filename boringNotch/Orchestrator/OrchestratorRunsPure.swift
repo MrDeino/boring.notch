@@ -46,17 +46,48 @@ private func jsonField(_ key: String, in s: String) -> String? {
     return String(v)
 }
 
+/// Tool name + its main input field out of a "[Tool] {json" string (JSON may be truncated).
+private func toolField(_ tool: String, _ rest: String) -> String? {
+    let key: String
+    switch tool {
+    case "Bash": key = "command"
+    case "Edit", "Write", "Read", "MultiEdit", "NotebookEdit": key = "file_path"
+    case "Grep", "Glob": key = "pattern"
+    case "Task", "Agent": key = "description"
+    case "WebFetch": key = "url"
+    default: return nil
+    }
+    return jsonField(key, in: rest)
+}
+
 private func parseLatest(_ latest: String?) -> String? {
     guard let l = latest, let line = firstLine(l) else { return nil }
     guard let r = line.range(of: "^\\[(\\w+)\\] ", options: .regularExpression) else { return line }
     let tool = String(line[r].dropFirst().dropLast(2))
-    let rest = String(line[r.upperBound...])
-    switch tool {
-    case "Bash": return jsonField("command", in: rest).map { "$ " + $0 } ?? tool
-    case "Edit", "Write", "Read", "MultiEdit", "NotebookEdit": return jsonField("file_path", in: rest).map { tool + " " + $0 } ?? tool
-    case "Grep", "Glob": return jsonField("pattern", in: rest).map { tool + " " + $0 } ?? tool
-    default: return tool
-    }
+    guard ["Bash", "Edit", "Write", "Read", "MultiEdit", "NotebookEdit", "Grep", "Glob"].contains(tool),
+          let v = toolField(tool, String(line[r.upperBound...])) else { return tool }
+    return tool == "Bash" ? "$ " + v : tool + " " + v
+}
+
+/// "[Bash] {json" log line -> chip + summary; nil for prose / RESULT lines.
+func logToolLine(_ line: String) -> (tool: String, summary: String)? {
+    guard let first = line.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init),
+          let r = first.range(of: "^\\[(\\w+)\\] ", options: .regularExpression) else { return nil }
+    let tool = String(first[r].dropFirst().dropLast(2))
+    return (tool, toolField(tool, String(first[r.upperBound...])) ?? "")
+}
+
+func isRunID(_ s: String) -> Bool { s.range(of: "^[A-Za-z0-9_-]{1,64}$", options: .regularExpression) != nil }
+
+/// Dashboard activity line: "step → agent · desc — doing" (page.html).
+func runActivityLine(_ a: RunActivity?) -> String? {
+    guard let a else { return nil }
+    let doing = a.doing?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    var s = a.step ?? ""
+    for ag in a.agents ?? [] { s += " → " + (ag.type ?? "") + ((ag.desc ?? "").isEmpty ? "" : " · " + ag.desc!) }
+    if !doing.isEmpty { s += (s.isEmpty ? "" : " — ") + doing }
+    s = s.trimmingCharacters(in: .whitespaces)
+    return s.isEmpty ? nil : s
 }
 
 // ponytail: regex over serve's truncated "[Tool] {json" string; upgrade = serve sends parsed fields.
@@ -134,7 +165,13 @@ func nextLevel(_ l: ExpandLevel, _ e: LevelEvent) -> ExpandLevel {
     }
 }
 
-func expandedHeight(screenHeight: CGFloat) -> CGFloat { max(300, min(440, 0.45 * screenHeight)) }
+/// Expanded notch size for a screen. 850 wide so the conversation column is ~600 with the rail open
+/// (column = width - ~252: notch paddings ~72, rail 178, spacing 12); at least max(520, 60% of the height) tall.
+/// Both clamped to the screen with a margin; never narrower than the open notch.
+func expandedSize(screen: CGSize, openWidth: CGFloat = 640) -> CGSize {
+    CGSize(width: max(openWidth, min(850, screen.width - 80)),
+           height: min(max(520, (0.6 * screen.height).rounded()), screen.height - 40))
+}
 
 enum OrchShortcut: Equatable { case deeper, back, terminal, toggleRail }
 
@@ -202,8 +239,12 @@ func workingCount(chatWorking: Bool, runs: [OrchestratorRun]) -> Int {
 
 /// Elapsed of the longest-working agent: the chat's own timer or a running run's startedAt.
 func longestWorking(chatElapsed: TimeInterval?, runs: [OrchestratorRun], now: Date) -> TimeInterval? {
-    let r = runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt).map { now.timeIntervalSince($0) } }
-    return (r + [chatElapsed].compactMap { $0 }).max()
+    longestWorking(chatElapsed: chatElapsed, starts: runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt) }, now: now)
+}
+
+/// `starts`: startedAt of the running runs.
+func longestWorking(chatElapsed: TimeInterval?, starts: [Date], now: Date) -> TimeInterval? {
+    (starts.map { now.timeIntervalSince($0) } + [chatElapsed].compactMap { $0 }).max()
 }
 
 func wingLabel(promptTitle: String?, waitingDenials: [String]?) -> String {
@@ -212,13 +253,5 @@ func wingLabel(promptTitle: String?, waitingDenials: [String]?) -> String {
     return "Needs you"
 }
 
-// ponytail: character-count width estimate for 11pt text, upgrade = measure with NSFont if UAT shows clipping.
-func wingSideWidth(_ kind: WingKind, notchWidth: CGFloat, elapsed: String = "") -> CGFloat {
-    let outer: CGFloat, est: CGFloat
-    switch kind {
-    case .working(let n): outer = 285; est = CGFloat(elapsed.count) * 6.7 + (n > 1 ? 18 : 0)
-    case .needsYou(let l): outer = 305; est = CGFloat(l.count) * 6.5 + 8
-    case .finished(let p, _): outer = 285; est = CGFloat(p.count) * 6.2
-    }
-    return max(((outer - 28 - notchWidth) / 2), est).rounded(.up)
-}
+/// Horizontal offset that keeps the middle notch rect centred over the hardware notch when the wings differ in width.
+func wingShift(left: CGFloat, right: CGFloat) -> CGFloat { ((right - left) / 2).rounded() }

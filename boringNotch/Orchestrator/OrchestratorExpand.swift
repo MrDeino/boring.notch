@@ -1,4 +1,9 @@
 import SwiftUI
+import os
+
+/// Perf probes for the click->collapse path (Instruments > os_signpost; `log stream --predicate 'subsystem == "boringnotch.orch"'`).
+let orchPerf = OSSignposter(subsystem: "boringnotch.orch", category: "perf")
+private let orchLog = Logger(subsystem: "boringnotch.orch", category: "perf")
 
 /// Per-screen expand-down state for the Orchestrator tab (Phase 3).
 /// While expanded, one SharingStateManager interaction keeps the notch from auto-closing.
@@ -9,7 +14,9 @@ final class OrchestratorExpand: ObservableObject {
     @Published private(set) var expanded: Set<ObjectIdentifier> = []
     /// Per-vm terminal flag, always a subset of `expanded`.
     @Published private(set) var terminal: Set<ObjectIdentifier> = []
-    private var extra: [ObjectIdentifier: CGFloat] = [:]
+    private var sizes: [ObjectIdentifier: CGSize] = [:]
+    /// Extra open-level height asked for by content (composer lines, notes text, prompt context), per source.
+    private var fits: [ObjectIdentifier: [String: CGFloat]] = [:]
     private var windows: [ObjectIdentifier: WeakWindow] = [:]
     private var shrinkTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var globalMonitor: Any?
@@ -24,7 +31,67 @@ final class OrchestratorExpand: ObservableObject {
     func isExpanded(_ vm: BoringViewModel) -> Bool { expanded.contains(key(vm)) }
 
     func openSize(for vm: BoringViewModel) -> CGSize {
-        CGSize(width: openNotchSize.width, height: openNotchSize.height + (extra[key(vm)] ?? 0))
+        let k = key(vm)
+        return sizes[k] ?? CGSize(width: openNotchSize.width, height: openNotchSize.height + fitHeight(k))
+    }
+
+    /// Current extra height of one source (so a view can exclude its own fit when measuring).
+    func fit(_ source: String, vm: BoringViewModel) -> CGFloat { fits[key(vm)]?[source] ?? 0 }
+
+    private func fitHeight(_ k: ObjectIdentifier) -> CGFloat {
+        let screen = windows[k]?.w?.screen?.frame.size ?? CGSize(width: 1440, height: 900)
+        let maxFit = expandedSize(screen: screen, openWidth: openNotchSize.width).height - openNotchSize.height
+        return min(maxFit, fits[k]?.values.max() ?? 0)
+    }
+
+    /// Content at the open level asks for `extra` more height than openNotchSize (capped at the expanded height).
+    /// The window grows first, the notch springs after; shrinking waits for the spring.
+    func setFit(_ source: String, extra: CGFloat, vm: BoringViewModel, window: NSWindow?) {
+        let k = key(vm)
+        let e = max(0, extra.rounded())
+        guard fits[k]?[source] ?? 0 != e else { return }
+        fits[k, default: [:]][source] = e
+        if let window { windows[k] = WeakWindow(window) }
+        vms[k] = WeakVM(vm)
+        guard level(for: vm) == .open, vm.notchState == .open else { return }
+        let target = openSize(for: vm)
+        guard target.height != vm.notchSize.height else { return }
+        animate(vm, to: target)
+    }
+
+    /// The one notch-size change: model first, then the window (grow now so the spring has room; shrink is deferred in syncWindow).
+    private func animate(_ vm: BoringViewModel, to target: CGSize) {
+        // Window first (outside the animation): a window resize that lands in the spring's transaction makes SwiftUI
+        // animate the root from the centre of the new window to the top (the "fills in from the middle" regression).
+        syncWindow(vm: vm, size: target)
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = target }
+        syncWindow(vm: vm)
+    }
+
+    /// The only place the panel is resized: it follows vm.notchSize (never below windowSize), top edge and centre pinned.
+    /// Growing is immediate; shrinking waits for the spring, then re-reads the current target.
+    func syncWindow(vm: BoringViewModel, window: NSWindow? = nil, now: Bool = false, size: CGSize? = nil) {
+        let k = key(vm)
+        if let window { windows[k] = WeakWindow(window) }
+        guard let w = window ?? windows[k]?.w ?? anchors[k]?.view.v?.window else { return }
+        if windows[k]?.w == nil { windows[k] = WeakWindow(w) }
+        func target() -> CGSize { panelSize(notch: vm.notchSize, base: windowSize, openHeight: openNotchSize.height) }
+        let t = size.map { panelSize(notch: $0, base: windowSize, openHeight: openNotchSize.height) } ?? target(), f = w.frame.size
+        if size != nil { // pre-spring call: only ever grows; the shrink is scheduled by the call after the model change
+            if t.width > f.width || t.height > f.height { w.setFrame(pinnedFrame(current: w.frame, newSize: CGSize(width: max(t.width, f.width), height: max(t.height, f.height))), display: true) }
+            return
+        }
+        shrinkTasks[k]?.cancel()
+        if now { if t != f { w.setFrame(pinnedFrame(current: w.frame, newSize: t), display: true) }; return }
+        if t.width > f.width || t.height > f.height {
+            w.setFrame(pinnedFrame(current: w.frame, newSize: CGSize(width: max(t.width, f.width), height: max(t.height, f.height))), display: true)
+        }
+        guard t.width < f.width || t.height < f.height else { return }
+        shrinkTasks[k] = Task { [weak w] in
+            try? await Task.sleep(for: .milliseconds(650))
+            guard !Task.isCancelled, let w else { return }
+            w.setFrame(pinnedFrame(current: w.frame, newSize: target()), display: true)
+        }
     }
 
     func level(for vm: BoringViewModel) -> ExpandLevel {
@@ -59,6 +126,19 @@ final class OrchestratorExpand: ObservableObject {
 
     /// Lets ⌘↓ find the notch window while still at level .open.
     func register(vm: BoringViewModel, anchor: NSView) { anchors[key(vm)] = (WeakVM(vm), WeakView(anchor)) }
+
+    /// The notch is open on the Orchestrator tab: an outside click closes it at once, even while the composer holds a
+    /// typing interaction (which makes the upstream hover-exit close refuse). Other tabs keep the upstream behaviour.
+    private var openTabs: [ObjectIdentifier: WeakVM] = [:]
+    func tabOpened(vm: BoringViewModel, anchor: NSView) {
+        register(vm: vm, anchor: anchor)
+        openTabs[key(vm)] = WeakVM(vm)
+        installMonitors()
+    }
+    func tabClosed(vm: BoringViewModel) {
+        openTabs[key(vm)] = nil
+        if expanded.isEmpty && openTabs.isEmpty { removeMonitors() }
+    }
 
     private init() {
         // ⌘↓/⌘↑/⌘T/⌘\ only while the notch panel is key (typing or terminal); a level change remounts the chat and ends typing (Phase 4 shell swap).
@@ -95,58 +175,65 @@ final class OrchestratorExpand: ObservableObject {
     private func grow(_ vm: BoringViewModel, _ window: NSWindow?) {
         let k = key(vm)
         guard !expanded.contains(k), let window else { return }
-        let e = expandedHeight(screenHeight: window.screen?.frame.height ?? 900) - openNotchSize.height
-        extra[k] = e
+        let size = expandedSize(screen: window.screen?.frame.size ?? CGSize(width: 1440, height: 900), openWidth: openNotchSize.width)
+        sizes[k] = size
         windows[k] = WeakWindow(window)
-        shrinkTasks[k]?.cancel()
-        window.setFrame(pinnedFrame(current: window.frame, newHeight: windowHeight(base: windowSize.height, notchHeight: openNotchSize.height + e, openHeight: openNotchSize.height)), display: true)
         expanded.insert(k)
         vms[k] = WeakVM(vm)
         installMonitors()
         SharingStateManager.shared.beginInteraction()
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = openSize(for: vm) }
+        let sp = orchPerf.beginInterval("expand")
+        animate(vm, to: openSize(for: vm))
+        Task { try? await Task.sleep(for: .milliseconds(450)); orchPerf.endInterval("expand", sp) }
     }
 
     func collapse(vm: BoringViewModel, refocus: Bool = true) {
         let k = key(vm)
         guard expanded.contains(k) else { return }
-        let win = windows[k]?.w
         finish(k, refocus: refocus)
-        if vm.notchState == .open { withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) { vm.notchSize = openNotchSize } }
-        shrinkTasks[k]?.cancel()
-        // Let the spring finish before the window stops covering the expanded area.
-        shrinkTasks[k] = Task { [weak win] in
-            try? await Task.sleep(for: .milliseconds(650))
-            guard !Task.isCancelled, let win else { return }
-            win.setFrame(pinnedFrame(current: win.frame, newHeight: windowSize.height), display: true)
-        }
+        if vm.notchState == .open { animate(vm, to: openSize(for: vm)) }
     }
 
     /// Notch closed or tab left: collapse everything now, no animation.
     func reset() {
+        // Fits belong to the open notch; a closed notch starts from openNotchSize again.
+        let fitted = fits.filter { $0.value.values.contains { $0 > 0 } }.keys
+        fits = [:]
+        for k in fitted where !expanded.contains(k) {
+            if let vm = vms[k]?.vm {
+                if vm.notchState == .open { vm.notchSize = openNotchSize }
+                syncWindow(vm: vm, now: true)
+            }
+        }
         guard !expanded.isEmpty else { return }
         for k in Array(expanded) {
-            shrinkTasks[k]?.cancel()
-            let win = windows[k]?.w
             let vm = vms[k]?.vm
             finish(k)
-            if let vm, vm.notchState == .open { vm.notchSize = openNotchSize }
-            win?.setFrame(pinnedFrame(current: win?.frame ?? .zero, newHeight: windowSize.height), display: true)
+            if let vm {
+                if vm.notchState == .open { vm.notchSize = openNotchSize }
+                syncWindow(vm: vm, now: true)
+            }
         }
     }
 
     private func installMonitors() {
         guard globalMonitor == nil else { return }
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        // Both handlers run on the main thread: act in the same event turn, a Task hop would queue behind any SwiftUI render.
         // Global = click in another app, which takes focus itself; don't hand it back to previousApp.
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] _ in
-            Task { @MainActor in self?.collapseIfOutside(refocus: false) }
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] e in
+            let p = e.locationInWindow, t = e.timestamp // window-less event: already screen coordinates
+            MainActor.assumeIsolated { self?.collapseIfOutside(at: p, timestamp: t, refocus: false) }
         }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] e in
-            Task { @MainActor in self?.collapseIfOutside(refocus: true) }
+            let p = e.window.map { $0.convertPoint(toScreen: e.locationInWindow) } ?? NSEvent.mouseLocation, t = e.timestamp
+            MainActor.assumeIsolated { self?.collapseIfOutside(at: p, timestamp: t, refocus: true) }
             return e
         }
     }
+
+    /// Harness check: the click monitors must not outlive the open tab / expanded level.
+    var monitorsActive: Bool { globalMonitor != nil }
 
     private func removeMonitors() {
         if let m = globalMonitor { NSEvent.removeMonitor(m) }
@@ -154,17 +241,28 @@ final class OrchestratorExpand: ObservableObject {
         globalMonitor = nil; localMonitor = nil
     }
 
-    /// Outside click: collapse, then close the notch (keep-open is released by collapse).
-    private func collapseIfOutside(refocus: Bool) {
-        let p = NSEvent.mouseLocation
-        let outside = expanded.compactMap { k -> BoringViewModel? in
-            guard let vm = vms[k]?.vm, let w = windows[k]?.w,
-                  isOutsideNotch(point: p, windowFrame: w.frame, notchWidth: vm.notchSize.width, notchHeight: vm.notchSize.height) else { return nil }
-            return vm
+    /// Outside click: collapse, end typing, then close the notch (keep-open is released by collapse/endTyping).
+    private func collapseIfOutside(at p: CGPoint, timestamp: TimeInterval, refocus: Bool) {
+        func ms() -> Double { (ProcessInfo.processInfo.systemUptime - timestamp) * 1000 }
+        orchLog.info("outsideClick handler \(ms(), format: .fixed(precision: 1)) ms after the event")
+        orchPerf.emitEvent("outsideClick", "\(ms(), format: .fixed(precision: 1))ms")
+        func outside(_ vm: BoringViewModel, _ k: ObjectIdentifier) -> Bool {
+            guard let w = windows[k]?.w ?? anchors[k]?.view.v?.window else { return false }
+            return isOutsideNotch(point: p, windowFrame: w.frame, notchWidth: vm.notchSize.width, notchHeight: vm.notchSize.height)
         }
-        // Collapse all first: close() is blocked while any keep-open session is still active.
-        for vm in outside { collapse(vm: vm, refocus: refocus) }
-        for vm in outside { vm.close() }
+        let hit = expanded.compactMap { k in vms[k]?.vm.flatMap { outside($0, k) ? $0 : nil } }
+        let openHit = BoringViewCoordinator.shared.currentView == .orchestrator
+            ? openTabs.compactMap { k, v in v.vm.flatMap { $0.notchState == .open && outside($0, k) ? $0 : nil } } : []
+        let targets = hit + openHit.filter { o in !hit.contains { $0 === o } }
+        guard !targets.isEmpty else { return }
+        // Collapse and end typing first: close() is blocked while any keep-open session is still active.
+        for vm in targets {
+            orchPerf.emitEvent("collapseStart", "\(ms(), format: .fixed(precision: 1))ms")
+            collapse(vm: vm, refocus: refocus)
+            releaseKey(windows[key(vm)]?.w ?? anchors[key(vm)]?.view.v?.window, refocus: refocus)
+        }
+        OrchestratorManager.shared.endTyping()
+        for vm in targets { orchPerf.emitEvent("closeStart", "\(ms(), format: .fixed(precision: 1))ms"); vm.close() }
     }
 
     /// Shared bookkeeping: exactly one endInteraction per expand.
@@ -172,8 +270,8 @@ final class OrchestratorExpand: ObservableObject {
         expanded.remove(k)
         terminal.remove(k)
         releaseKey(windows[k]?.w, refocus: refocus)
-        extra[k] = nil
-        if expanded.isEmpty { removeMonitors() }
+        sizes[k] = nil
+        if expanded.isEmpty && openTabs.isEmpty { removeMonitors() }
         SharingStateManager.shared.endInteraction()
     }
 
@@ -191,9 +289,10 @@ extension View {
     /// ContentView's root frame. The expanded window is resized at once (top pinned) while the notch
     /// height springs, so the root must fill the window top-aligned: a root shorter than the window is
     /// centred by NSHostingView, which slides the notch's top edge down mid-animation. When the window
-    /// is windowSize tall (stock open/close) this is the same as the upstream frame.
-    func notchRootFrame(notchHeight: CGFloat) -> some View {
-        frame(maxWidth: windowSize.width, maxHeight: windowSize.height + max(0, notchHeight - openNotchSize.height), alignment: .top)
-            .frame(maxHeight: .infinity, alignment: .top)
+    /// is windowSize tall (stock open/close) this is the same as the upstream frame. The width follows the
+    /// animated notch width too (the expanded window is wider) and stays centred in the window.
+    func notchRootFrame(notchSize: CGSize) -> some View {
+        frame(maxWidth: max(windowSize.width, notchSize.width), maxHeight: windowSize.height + max(0, notchSize.height - openNotchSize.height), alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }

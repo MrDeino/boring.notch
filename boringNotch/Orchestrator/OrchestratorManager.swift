@@ -3,7 +3,11 @@ import AppKit
 @MainActor
 final class OrchestratorManager: ObservableObject {
     static let shared = OrchestratorManager()
+    #if ORCH_SNAPSHOT
+    static let baseURL = URL(string: ProcessInfo.processInfo.environment["ORCH_BASE"] ?? "http://127.0.0.1:4777")! // mock-server tests only
+    #else
     static let baseURL = URL(string: "http://127.0.0.1:4777")!
+    #endif
 
     @Published private(set) var offline = false
     @Published private(set) var chatRunning = false
@@ -23,6 +27,56 @@ final class OrchestratorManager: ObservableObject {
     @Published var notesOpen = false
     @Published private(set) var prompt: PromptCard? = nil
     @Published private(set) var liveStatus: LiveStatus? = nil
+    @Published private(set) var chatLive: Bool? = nil
+    // Phase 8
+    /// serve's context.percent while the chat runs; nil on old serve.
+    @Published private(set) var contextPercent: Int? = nil
+    /// True while the SSE stream is healthy; polling and the notch-open refresh stand down.
+    @Published private(set) var streaming = false
+    private var streamTask: Task<Void, Never>?
+    private var lastStreamLine = Date.distantPast
+    private func makeStreamSession() -> URLSession {
+        let c = URLSessionConfiguration.ephemeral
+        c.timeoutIntervalForRequest = 45
+        c.timeoutIntervalForResource = .greatestFiniteMagnitude
+        c.waitsForConnectivity = false
+        return URLSession(configuration: c)
+    }
+    // Phase 9
+    /// Pending tool approval from serve (hook-driven), minus the one we just answered. Never inferred from screen text.
+    @Published private(set) var approval: OrchestratorApproval? = nil
+    private var rawApproval: OrchestratorApproval?
+    private var ignoredApprovalId: String?
+    private var ignoredUntil = Date.distantPast
+
+    func applyApproval(_ a: OrchestratorApproval?) {
+        rawApproval = a
+        recomputeApproval()
+    }
+
+    private func recomputeApproval() {
+        let v = chatRunning ? visibleApproval(rawApproval, ignoredId: ignoredApprovalId, until: ignoredUntil, now: Date()) : nil
+        if approval != v { approval = v }
+    }
+
+    /// Re-reads the screen, then answers only if the same approval is still pending (see approvalAnswer).
+    /// Hides the panel before posting so the post's own refresh cannot flash it back.
+    @discardableResult
+    func answerApproval(allow: Bool) async -> ApprovalAnswer {
+        guard let a = approval, !sending else { return .skip }
+        await refresh(fresh: true)
+        let ans = approvalAnswer(allow: allow, pendingId: approval?.id, answeringId: a.id, options: promptOptions)
+        guard case .send(let k) = ans else { return ans }
+        ignoredApprovalId = a.id
+        ignoredUntil = Date() + 3
+        approval = nil
+        if !(await post(.key(k))) {
+            ignoredApprovalId = nil
+            await refresh()
+        }
+        return ans
+    }
+
     var capsuleStatus: CapsuleState {
         capsuleState(hasLoaded: hasLoaded, offline: offline, chatRunning: chatRunning, needsAttention: needsAttention, working: liveStatus != nil)
     }
@@ -31,7 +85,7 @@ final class OrchestratorManager: ObservableObject {
     var notchOpen = false {
         didSet {
             // Typing teardown is owned by OrchestratorView (close() is blocked while typing).
-            if notchOpen && !oldValue { Task { await refresh() } }
+            if notchOpen && !oldValue && !streaming { Task { await refresh() } }
             if !notchOpen { OrchestratorExpand.shared.reset(); statusMenuOpen = false; notesOpen = false }
         }
     }
@@ -71,8 +125,8 @@ final class OrchestratorManager: ObservableObject {
 
     private func postNow(_ p: OrchestratorPost) async -> Bool {
         let code = (try? await sendOrchestratorPost(p, base: Self.baseURL, session: session)) ?? nil
-        if code == 200 { await refresh(); return true }
-        if code == 409 { await refresh() }
+        if code == 200 { await refresh(fresh: true); return true }
+        if code == 409 { await refresh(fresh: true) }
         return false
     }
 
@@ -101,9 +155,9 @@ final class OrchestratorManager: ObservableObject {
         sending = true
         defer { sending = false }
         for k in keys {
-            guard (try? await sendOrchestratorPost(.key(k), base: Self.baseURL, session: session)) == 200 else { await refresh(); return false }
+            guard (try? await sendOrchestratorPost(.key(k), base: Self.baseURL, session: session)) == 200 else { await refresh(fresh: true); return false }
         }
-        await refresh()
+        await refresh(fresh: true)
         return true
     }
 
@@ -119,14 +173,73 @@ final class OrchestratorManager: ObservableObject {
     private init() {}
 
     func start() {
+        startStream()
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
+                if self.streaming { try? await Task.sleep(for: .seconds(2)); continue }
                 await self.refresh()
                 let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning || self.runs.contains { $0.state == "running" }, offline: self.offline)
                 try? await Task.sleep(for: .seconds(secs))
             }
+        }
+    }
+
+    // ponytail: fixed 30 s retry, no backoff.
+    private func startStream() {
+        guard streamTask == nil else { return }
+        streamTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.runStream()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
+    }
+
+    /// Returns when the stream ends: 404 (old serve), error, or 20 s with no line. Polling resumes within ~2 s.
+    private func runStream() async {
+        var req = URLRequest(url: Self.baseURL.appendingPathComponent("api/events"))
+        req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        let streamSession = makeStreamSession() // per stream: invalidateAndCancel() on watchdog trip guarantees the iterator ends
+        defer { streamSession.finishTasksAndInvalidate() }
+        guard let (bytes, resp) = try? await streamSession.bytes(for: req), (resp as? HTTPURLResponse)?.statusCode == 200 else { return }
+        lastStreamLine = Date()
+        streaming = true
+        defer { streaming = false }
+        let watchdogTripped = { [weak self] in self?.streaming = false; streamSession.invalidateAndCancel() }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { @MainActor [weak self] in
+                var parser = SSELineParser()
+                var first = true
+                do {
+                    for try await line in bytes.lines {
+                        guard let self else { return }
+                        self.lastStreamLine = Date()
+                        guard let ev = parser.feed(line) else { continue }
+                        switch ev {
+                        case .state(let st): self.applyState(st)
+                        case .chat(let r):
+                            await self.applyChat(r)
+                            if r.running == false { OrchestratorTranscriptStore.shared.ingestBlocks(running: false, blocks: [], reset: true) }
+                        case .blocks(let running, let blocks, let reset):
+                            // First blocks event of a connection replaces; pending rows survive (store keeps them).
+                            OrchestratorTranscriptStore.shared.ingestBlocks(running: running, blocks: blocks, reset: first || reset)
+                            first = false
+                        case .approval(let a): self.applySeq += 1; self.applyApproval(a) // joins the sequence so an older poll cannot overwrite it
+                        }
+                        if !self.hasLoaded { self.hasLoaded = true }
+                    }
+                } catch {}
+            }
+            group.addTask { @MainActor [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(5))
+                    guard let self, streamHealthy(lastLineAt: self.lastStreamLine, now: Date()) else { watchdogTripped(); return }
+                }
+            }
+            await group.next()
+            group.cancelAll()
         }
     }
 
@@ -153,41 +266,67 @@ final class OrchestratorManager: ObservableObject {
     }
 
     private func load() async {
+        let started = applySeq
         do {
             async let chat: ChatResponse = get("api/chat")
             async let state: StateResponse = get("api/state")
             let (r, st) = try await (chat, state)
-            await apply(r, st)
+            applyState(st)
+            await applyChat(r, polledAt: started)
         } catch {
             applyOffline()
         }
         if !hasLoaded { hasLoaded = true }
     }
 
-    private func apply(_ r: ChatResponse, _ st: StateResponse) async {
+    private func applyState(_ st: StateResponse) {
         if offline { offline = false }
-        let running = r.running ?? false
-        if chatRunning != running { chatRunning = running }
-        let s = r.screen ?? ""
-        if screen != s { screen = s }
         let rs = st.runs ?? []
         if runs != rs { runs = rs }
         if usage != st.usage { usage = st.usage }
+    }
+
+    /// Reused by the SSE stream (08-02): screen/input first, then blocks, then the prompt that needs them.
+    private var applySeq = 0
+    private func applyChat(_ r: ChatResponse, polledAt: Int? = nil) async {
+        let approvalFresh = approvalApplyIsFresh(startedAt: polledAt, current: applySeq)
+        applySeq += 1
+        let mine = applySeq
+        if offline { offline = false }
+        let running = r.running ?? false
+        if chatRunning != running { chatRunning = running }
+        if !approvalFresh { recomputeApproval() } else if r.hasApproval { applyApproval(r.approval) } else if !running { applyApproval(nil) } else { recomputeApproval() }
+        let s = r.screen ?? ""
+        if screen != s { screen = s }
+        let cp = running ? r.context?.percent.flatMap { $0 >= 0 ? $0 : nil } : nil
+        if contextPercent != cp { contextPercent = cp }
+        OrchestratorTranscriptStore.shared.applyScreen(r)
         let po = running ? detectPrompt(screen: s) : []
-        if promptOptions != po { promptOptions = po }
         let pc = running ? detectPromptCard(screen: s) : nil
+        // Blocks first: a new card must appear with its context (Phase 8: ingest blocks before publishing a prompt).
+        // While streaming, blocks arrive as events, except a chat event with a new prompt, which fetches them first.
+        let newPrompt = pc != nil && pc != prompt || !po.isEmpty && po != promptOptions
+        if shouldFetchBlocks(streaming: streaming, running: running, newPrompt: newPrompt) {
+            await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, chatRunning: running)
+            guard mine == applySeq else { return } // a newer chat payload applied while we were suspended
+        }
+        if promptOptions != po { promptOptions = po }
         if prompt != pc { prompt = pc }
-        let ls = running ? parseLiveStatus(screen: s) : nil
+        let ls = running ? liveStatusFor(screen: s, live: r.live) : nil
         if liveStatus != ls { liveStatus = ls }
-        await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, screen: s, chatRunning: running)
+        let cl = running ? r.live : nil
+        if chatLive != cl { chatLive = cl }
     }
 
     private func applyOffline() {
         if !offline { offline = true }
         if !runs.isEmpty { runs = [] }
+        if rawApproval != nil || approval != nil { applyApproval(nil) }
         if !promptOptions.isEmpty { promptOptions = [] }
         if prompt != nil { prompt = nil }
         if liveStatus != nil { liveStatus = nil }
+        if chatLive != nil { chatLive = nil }
+        if contextPercent != nil { contextPercent = nil }
         statusMenuOpen = false
         notesOpen = false
     }
@@ -198,10 +337,10 @@ extension OrchestratorManager {
     /// Snapshot harness only (Orchestrator/Snapshots): fixture responses through the real apply path.
     /// loaded false = connecting; chat nil = offline.
     func snapshotApply(loaded: Bool, chat: ChatResponse?, state: StateResponse, runsBoard: Bool = false) async {
-        hasLoaded = loaded
-        showRunsBoard = runsBoard
+        if hasLoaded != loaded { hasLoaded = loaded } // like the real path: an unchanged value must not publish
+        if showRunsBoard != runsBoard { showRunsBoard = runsBoard }
         guard loaded else { return }
-        if let chat { await apply(chat, state) } else { applyOffline() }
+        if let chat { applyState(state); await applyChat(chat) } else { applyOffline() }
     }
 }
 #endif

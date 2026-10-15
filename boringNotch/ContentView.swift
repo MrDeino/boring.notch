@@ -20,6 +20,7 @@ struct ContentView: View {
 
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject private var wings = OrchestratorWingsModel.shared
+    @ObservedObject private var approvals = OrchestratorApprovalCenter.shared
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
@@ -55,7 +56,7 @@ struct ContentView: View {
             topCornerRadius: topCornerRadius,
             bottomCornerRadius: ((vm.notchState == .open) && Defaults[.cornerRadiusScaling])
                 ? (vm.notchSize.height > openNotchSize.height + 1 ? OT.R.notchExpanded : cornerRadiusInsets.opened.bottom)
-                : cornerRadiusInsets.closed.bottom
+                : (approvals.approval != nil && vm.notchState == .closed ? OT.R.approvalPanel : cornerRadiusInsets.closed.bottom)
         )
     }
 
@@ -120,6 +121,7 @@ struct ContentView: View {
                     )
                 
                 mainLayout
+                    .offset(x: vm.notchState == .closed ? wings.shiftX : 0)
                     .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
                     .conditionalModifier(true) { view in
                         let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
@@ -205,7 +207,10 @@ struct ContentView: View {
             }
         }
         .padding(.bottom, 8)
-        .notchRootFrame(notchHeight: vm.notchSize.height)
+        .notchRootFrame(notchSize: vm.notchSize)
+        .onChange(of: vm.notchSize) { _, _ in OrchestratorExpand.shared.syncWindow(vm: vm) }
+        .onChange(of: approvals.approval != nil && approvalVisibleToUser(pending: true, notchClosed: vm.notchState == .closed, hideOnClosed: vm.hideOnClosed, orchestratorTab: coordinator.currentView == .orchestrator), initial: true) { _, v in approvals.surfaceShown = v }
+        .onChange(of: approvals.cardRequest) { _, _ in OrchestratorManager.shared.showRunsBoard = false; coordinator.currentView = .orchestrator; if vm.notchState == .closed { doOpen() } }
         .compositingGroup()
         .scaleEffect(
             x: gestureScale,
@@ -289,6 +294,8 @@ struct ContentView: View {
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
+                      } else if vm.notchState == .closed && !vm.hideOnClosed && approvals.approval != nil {
+                          OrchestratorApprovalPanel(onMore: { OrchestratorManager.shared.showRunsBoard = false; coordinator.currentView = .orchestrator; doOpen() })
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed && (musicManager.isPlaying || wings.kind == nil) {
                           MusicLiveActivity()
                               .frame(alignment: .center)
@@ -531,6 +538,7 @@ struct ContentView: View {
             }
             
             guard vm.notchState == .closed,
+                  approvals.approval == nil,
                   !coordinator.sneakPeek.show,
                   Defaults[.openNotchOnHover] else { return }
             

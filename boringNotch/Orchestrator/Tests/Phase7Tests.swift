@@ -84,11 +84,15 @@ func runPhase7Tests() {
     precondition(pollInterval(notchOpen: false, chatRunning: true) == 3 && pollInterval(notchOpen: false, chatRunning: false) == 10)
     precondition(pollInterval(notchOpen: false, chatRunning: true, offline: true) == 10 && pollInterval(notchOpen: true, chatRunning: true, offline: true) == 10)
 
-    // nextLevel, expandedHeight, shortcut
+    // nextLevel, expandedSize, shortcut
     precondition(nextLevel(.open, .deeper) == .expanded && nextLevel(.expanded, .deeper) == .expanded && nextLevel(.terminal, .deeper) == .terminal)
     precondition([ExpandLevel.open, .expanded, .terminal].allSatisfy { nextLevel($0, .terminal) == .terminal })
     precondition(nextLevel(.terminal, .back) == .expanded && nextLevel(.expanded, .back) == .open && nextLevel(.open, .back) == .open)
-    precondition(expandedHeight(screenHeight: 982) == 440 && expandedHeight(screenHeight: 900) == 405 && expandedHeight(screenHeight: 1440) == 440 && expandedHeight(screenHeight: 400) == 300)
+    precondition(expandedSize(screen: CGSize(width: 1440, height: 900)) == CGSize(width: 850, height: 540))
+    precondition(expandedSize(screen: CGSize(width: 1512, height: 982)) == CGSize(width: 850, height: 589))
+    precondition(expandedSize(screen: CGSize(width: 1024, height: 600)) == CGSize(width: 850, height: 520))
+    precondition(expandedSize(screen: CGSize(width: 800, height: 500)) == CGSize(width: 720, height: 460))
+    precondition(expandedSize(screen: CGSize(width: 600, height: 500)).width == 640)
     precondition(shortcut(keyCode: 125, chars: nil, commandOnly: true) == .deeper && shortcut(keyCode: 126, chars: nil, commandOnly: true) == .back)
     precondition(shortcut(keyCode: 17, chars: "t", commandOnly: true) == .terminal && shortcut(keyCode: 0, chars: "T", commandOnly: true) == .terminal)
     precondition(shortcut(keyCode: 42, chars: "\\", commandOnly: true) == .toggleRail)
@@ -145,11 +149,6 @@ func runPhase7Tests() {
     precondition(longestWorking(chatElapsed: nil, runs: notRunning, now: now) == nil)
     precondition(wingLabel(promptTitle: "Bash command", waitingDenials: nil) == "Bash?" && wingLabel(promptTitle: "Edit file?", waitingDenials: nil) == "Edit?")
     precondition(wingLabel(promptTitle: nil, waitingDenials: ["Write"]) == "Write?" && wingLabel(promptTitle: nil, waitingDenials: nil) == "Needs you" && wingLabel(promptTitle: "", waitingDenials: []) == "Needs you")
-    precondition(wingSideWidth(.working(1), notchWidth: 185, elapsed: "0:41") == 36 && wingSideWidth(.needsYou("Bash?"), notchWidth: 185) == 46)
-    precondition(wingSideWidth(.finished("notch-dd", failed: false), notchWidth: 185) >= 36 && wingSideWidth(.finished("notch-dd", failed: false), notchWidth: 185) >= 8 * 6.2)
-    precondition(wingSideWidth(.needsYou("A much longer label"), notchWidth: 185) > wingSideWidth(.needsYou("Bash?"), notchWidth: 185))
-    precondition(wingSideWidth(.finished("a-very-long-project-name", failed: false), notchWidth: 185) > wingSideWidth(.finished("notch-dd", failed: false), notchWidth: 185))
-    precondition(wingSideWidth(.working(3), notchWidth: 185, elapsed: "1:02:41") > wingSideWidth(.working(1), notchWidth: 185, elapsed: "1:02:41"))
-    precondition(wingSideWidth(.working(1), notchWidth: 185, elapsed: "1:02:41") >= 7 * 6.7)
-    precondition(2 * wingSideWidth(.working(1), notchWidth: 185, elapsed: "0:41") + 185 + 28 == 285 && 2 * wingSideWidth(.needsYou("Bash?"), notchWidth: 185) + 185 + 28 == 305)
+    precondition(wingShift(left: 23, right: 35) == 6 && wingShift(left: 16, right: 56) == 20 && wingShift(left: 30, right: 30) == 0)
+    precondition(wingShift(left: 40, right: 20) == -10 && wingShift(left: 20, right: 25) == 3)
 }

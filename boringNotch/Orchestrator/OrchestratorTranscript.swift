@@ -19,8 +19,9 @@ struct ChatBlock: Decodable, Equatable, Identifiable {
     let added: Int?
     let removed: Int?
     let diff: [ChatDiffHunk]?
+    let description: String?
 
-    private enum CodingKeys: String, CodingKey { case id, kind, text, name, target, result, added, removed, diff }
+    private enum CodingKeys: String, CodingKey { case id, kind, text, name, target, result, added, removed, diff, description }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -38,7 +39,15 @@ struct ChatBlock: Decodable, Equatable, Identifiable {
         added = try? c.decodeIfPresent(Int.self, forKey: .added)
         removed = try? c.decodeIfPresent(Int.self, forKey: .removed)
         diff = try? c.decodeIfPresent([ChatDiffHunk].self, forKey: .diff)
+        description = try? c.decodeIfPresent(String.self, forKey: .description)
     }
+}
+
+/// Serve's one-line tool description (first line, trimmed); nil for non-tools, missing or blank.
+func toolDescription(_ b: ChatBlock) -> String? {
+    guard b.kind == .tool, let d = b.description else { return nil }
+    let first = d.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
+    return first
 }
 
 private struct LossyChatBlock: Decodable {
@@ -158,6 +167,15 @@ func toolMarker(result: String?) -> ToolMarker {
     return toolResultIsError(result) ? .error : .done
 }
 
+/// The assistant's prose since the last user message (all of it when there is none), trimmed, blanks dropped,
+/// joined by blank lines: the context a question/permission card refers to. nil when there is none.
+func latestAssistantProse(_ blocks: [ChatBlock]) -> String? {
+    let since = blocks.lastIndex { $0.kind == .user }.map { blocks.index(after: $0) } ?? blocks.startIndex
+    let parts = blocks[since...].filter { $0.kind == .prose }
+        .compactMap { $0.text?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+}
+
 /// Transcript text is untrusted: truncated, inline markdown only, links stripped (T-05-01/02).
 func proseAttributed(_ s: String) -> AttributedString {
     let plain = String(s.prefix(2000))
@@ -200,6 +218,13 @@ struct PendingMessage: Equatable, Identifiable {
     let text: String
     var state: State
     var sentAt: Date?
+    var images: [Data] = []   // PNG bytes
+    var paths: [String] = []  // server paths uploaded so far; Retry reuses them
+    var wireText: String { chatTextWithImages(text, paths: paths) }
+}
+
+func chatTextWithImages(_ text: String, paths: [String]) -> String {
+    ([text.trimmingCharacters(in: .whitespacesAndNewlines)] + paths.map { "[image: \($0)]" }).filter { !$0.isEmpty }.joined(separator: " ")
 }
 
 func normalizeChatText(_ s: String) -> String {
@@ -211,13 +236,13 @@ func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: S
     var out: [PendingMessage] = []
     for p in pending {
         if p.state != .queued {
-            let want = normalizeChatText(p.text)
+            let want = normalizeChatText(p.wireText)
             if let b = blocks.last(where: { $0.kind == .user && !known.contains($0.id) && normalizeChatText($0.text ?? "") == want }) {
                 known.insert(b.id)
                 continue
             }
             // ponytail: a sent message whose block text differs (e.g. a slash command) is dropped after staleAfter;
-            // upgrade = serve echoing a client id.
+            // upgrade = serve echoing a client id. Same for images if Claude Code rewrites the path (e.g. [Image #1]).
             if p.state == .sent, let t = p.sentAt, now.timeIntervalSince(t) > staleAfter { continue }
         }
         out.append(p)
@@ -228,6 +253,6 @@ func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: S
 extension ChatBlock {
     init(pendingID: String, text: String) {
         id = pendingID; kind = .user; self.text = text
-        name = nil; target = nil; result = nil; added = nil; removed = nil; diff = nil
+        name = nil; target = nil; result = nil; added = nil; removed = nil; diff = nil; description = nil
     }
 }

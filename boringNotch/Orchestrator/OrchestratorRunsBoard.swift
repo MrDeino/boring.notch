@@ -13,7 +13,7 @@ struct OrchestratorRunsBoard: View {
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 8) {
-                        ForEach(runs, id: \.stableID) { OrchestratorRunCard(run: $0) }
+                        ForEach(runs, id: \.stableID) { OrchestratorRunCard(run: $0).equatable() }
                     }
                 }
                 .frame(maxHeight: .infinity)
@@ -37,9 +37,10 @@ struct OrchestratorRunsBoard: View {
     }
 }
 
-struct OrchestratorRunCard: View {
+struct OrchestratorRunCard: View, Equatable {
     let run: OrchestratorRun
     var compact = false
+    static func == (a: Self, b: Self) -> Bool { a.run == b.run && a.compact == b.compact }
 
     private var state: String { run.state ?? "" }
     private var isWaiting: Bool { state == "waiting" }
@@ -77,6 +78,10 @@ struct OrchestratorRunCard: View {
                         Text(verbatim: runElapsed(run, now: now)).font(.system(size: 10)).foregroundStyle(OT.C.text5)
                     }
                 }
+                if let act = runActivityLine(run.activity) {
+                    Text(verbatim: act).font(.system(size: 11)).foregroundStyle(OT.C.run)
+                        .lineLimit(compact ? 1 : 2).truncationMode(.tail)
+                }
                 Text(verbatim: compact && state == "stuck" ? latestAction(run, now: now) : run.shortPrompt)
                     .font(.system(size: 11)).foregroundStyle(OT.C.text5).lineLimit(1)
                 if isWaiting {
@@ -96,6 +101,8 @@ struct OrchestratorRunCard: View {
             .frame(width: compact ? nil : 196) // frame 05 card width: 196
             .frame(maxHeight: compact ? nil : .infinity, alignment: .top)
             .background(OT.C.raised, in: shape)
+            .contentShape(shape)
+            .onTapGesture { OrchestratorRunLog.shared.open(run) }
             .overlay { if isWaiting { shape.strokeBorder(OT.C.orange, lineWidth: 1) } }
             .opacity(isFinished ? 0.75 : 1)
         }
@@ -137,5 +144,157 @@ struct OrchestratorAskInChatButton: View {
         .buttonStyle(.plain)
         .disabled(disabled)
         .help("Sends this run's question to the orchestrator chat")
+    }
+}
+
+// MARK: - Run log overlay (GET /api/log/<id> only)
+
+/// The open run log: lines of the one run being read, re-fetched every 2s while the run is live.
+@MainActor final class OrchestratorRunLog: ObservableObject {
+    static let shared = OrchestratorRunLog()
+    @Published private(set) var runID: String?
+    @Published private(set) var lines: [String] = []
+    @Published private(set) var loaded = false
+    @Published private(set) var failed = false
+    private var task: Task<Void, Never>?
+
+    func open(_ run: OrchestratorRun) {
+        guard let id = run.id, isRunID(id) else { return }
+        task?.cancel()
+        runID = id; lines = []; loaded = false; failed = false
+        #if ORCH_SNAPSHOT
+        return
+        #else
+        task = Task { await poll(id) }
+        #endif
+    }
+
+    func close() { task?.cancel(); task = nil; runID = nil }
+
+    private func poll(_ id: String) async {
+        let url = OrchestratorManager.baseURL.appendingPathComponent("api/log/" + id)
+        while !Task.isCancelled {
+            let got = try? await OrchestratorManager.shared.session.data(from: url)
+            guard !Task.isCancelled, runID == id else { return }
+            if let (data, resp) = got, (resp as? HTTPURLResponse)?.statusCode == 200,
+               let l = try? JSONDecoder().decode([String].self, from: data) {
+                if l != lines { lines = l }
+                failed = false
+            } else { failed = lines.isEmpty }
+            loaded = true
+            let state = OrchestratorManager.shared.runs.first { $0.id == id }?.state
+            guard ["running", "waiting", "stuck"].contains(state ?? "") else { return }
+            try? await Task.sleep(for: .seconds(2))
+        }
+    }
+
+    #if ORCH_SNAPSHOT
+    func snapshotSet(runID: String?, lines: [String], failed: Bool = false) {
+        self.runID = runID; self.lines = lines; self.failed = failed; loaded = runID != nil
+    }
+    #endif
+}
+
+struct OrchestratorRunLogOverlay: View {
+    @ObservedObject var log = OrchestratorRunLog.shared
+    @ObservedObject var manager = OrchestratorManager.shared
+    @State private var stick = true
+    @State private var contentHeight: CGFloat = 0
+
+    private var run: OrchestratorRun? { manager.runs.first { $0.id == log.runID } }
+    private let shape = RoundedRectangle(cornerRadius: OT.R.cardL)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            header
+            if let act = runActivityLine(run?.activity) {
+                Text(verbatim: act).font(.system(size: 11)).foregroundStyle(OT.C.run).lineLimit(2).truncationMode(.tail)
+            }
+            bodyView
+        }
+        .padding(.top, 10).padding(.horizontal, 12).padding(.bottom, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(OT.C.raised, in: shape)
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Circle().fill(runDotColor(run?.state)).frame(width: 6, height: 6)
+            Text(verbatim: run?.project ?? "?").font(.system(size: 12, weight: .semibold)).foregroundStyle(OT.C.text).lineLimit(1)
+            Text(verbatim: log.runID ?? "").font(OT.F.monoChip).foregroundStyle(OT.C.text5).lineLimit(1)
+            Spacer(minLength: 4)
+            if let run {
+                TimelineView(.periodic(from: .now, by: 30)) { ctx in
+                    Text(verbatim: runElapsed(run, now: ctx.date)).font(.system(size: 10)).foregroundStyle(OT.C.text5)
+                }
+            }
+            Button { log.close() } label: {
+                Image(systemName: "xmark").font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(OT.C.text).frame(width: 20, height: 20)
+                    .background(OT.C.selected, in: Circle())
+            }.buttonStyle(.plain).help("Close the log (esc)")
+        }
+    }
+
+    @ViewBuilder private var bodyView: some View {
+        if log.failed {
+            note("Couldn't load the log")
+        } else if !log.loaded {
+            note("Loading…")
+        } else if log.lines.isEmpty {
+            note("No output yet.")
+        } else {
+            GeometryReader { g in
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(Array(log.lines.enumerated()), id: \.offset) { _, l in row(l) }
+                            Color.clear.frame(height: 0).id("bottom")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(GeometryReader { c in
+                            Color.clear
+                                .onAppear { geometry(c.frame(in: .named("orchRunLog")), viewport: g.size.height, proxy: proxy) }
+                                .onChange(of: c.frame(in: .named("orchRunLog"))) { _, f in geometry(f, viewport: g.size.height, proxy: proxy) }
+                        })
+                    }
+                    .defaultScrollAnchor(.bottom)
+                }
+            }
+            .coordinateSpace(name: "orchRunLog")
+        }
+    }
+
+    private func geometry(_ f: CGRect, viewport: CGFloat, proxy: ScrollViewProxy) {
+        let r = chatScrollStep(stick: stick, oldHeight: contentHeight, newHeight: f.height, contentMinY: f.minY, viewport: viewport)
+        contentHeight = f.height
+        if r.stick != stick { stick = r.stick }
+        if r.scrollToBottom {
+            Task { @MainActor in
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
+        }
+    }
+
+    private func note(_ s: String) -> some View {
+        Text(s).font(.system(size: 11)).foregroundStyle(OT.C.text5).frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder private func row(_ l: String) -> some View {
+        if let t = logToolLine(l) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(verbatim: t.tool).font(OT.F.monoChip.weight(.medium)).foregroundStyle(OT.C.text3)
+                    .padding(.vertical, 2).padding(.horizontal, 6)
+                    .background(OT.C.selected, in: RoundedRectangle(cornerRadius: 5))
+                if !t.summary.isEmpty {
+                    Text(verbatim: t.summary).font(OT.F.monoPath).foregroundStyle(OT.C.text2)
+                        .lineLimit(2).truncationMode(l.contains("/") && t.summary.hasPrefix("/") ? .middle : .tail)
+                }
+            }
+        } else {
+            Text(verbatim: l).font(OT.F.monoPath).foregroundStyle(OT.C.text2)
+                .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }

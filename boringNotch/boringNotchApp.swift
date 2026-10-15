@@ -21,8 +21,13 @@ struct DynamicNotchApp: App {
     let updaterController: SPUStandardUpdaterController
 
     init() {
+        #if ORCH_NO_SPARKLE
+        let startUpdater = false // local ad-hoc builds must not self-update
+        #else
+        let startUpdater = true
+        #endif
         updaterController = SPUStandardUpdaterController(
-            startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+            startingUpdater: startUpdater, updaterDelegate: nil, userDriverDelegate: nil)
 
         // Initialize the settings window controller with the updater controller
         SettingsWindowController.shared.setUpdaterController(updaterController)
@@ -244,10 +249,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.disableSkyLight()
         }
 
-        window.contentView = NSHostingView(
+        let hosting = NSHostingView(
             rootView: ContentView()
                 .environmentObject(viewModel)
         )
+        // The panel frame is owned by OrchestratorExpand.syncWindow; the default sizingOptions would push the content's
+        // min size (the expanded height) onto the window and clamp every shrink.
+        hosting.sizingOptions = []
+        window.contentView = hosting
 
         window.orderFrontRegardless()
         NotchSpaceManager.shared.notchSpace.windows.insert(window)

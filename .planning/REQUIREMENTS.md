@@ -75,18 +75,18 @@
 
 ### Phase B live data (Phase 8)
 
-- [ ] **LIVE-01**: The manager consumes serve's SSE stream for blocks and state, falling back to polling
-- [ ] **LIVE-02**: Streaming assistant text shows the caret
-- [ ] **LIVE-03**: ▸ diff expands an Edit row into the diff card
-- [ ] **LIVE-04**: Input-box ghost text uses serve's `suggested` flag (`capture-pane -e`)
-- [ ] **LIVE-05**: The Running capsule shows context %
+- [x] **LIVE-01**: The manager consumes serve's SSE stream for blocks and state, falling back to polling
+- [x] **LIVE-02**: Streaming assistant text shows the caret
+- [x] **LIVE-03**: ▸ diff expands an Edit row into the diff card
+- [x] **LIVE-04**: Input-box ghost text uses serve's `suggested` flag (`capture-pane -e`)
+- [x] **LIVE-05**: The Running capsule shows context %
 
 ### Phase B approvals (Phase 9)
 
-- [ ] **APR-01**: A Claude Code PreToolUse/Notification hook posts pending approvals to serve
-- [ ] **APR-02**: The closed notch drops down the approval panel (Allow ⌥⏎ / Deny ⌥⎋ / More…)
-- [ ] **APR-03**: ⌥⏎ / ⌥⎋ answer the pending approval globally via a sandbox-safe hotkey API
-- [ ] **APR-04**: The panel frame is sized to its content instead of the fixed `windowSize` plus an expand step
+- [x] **APR-01**: A Claude Code PreToolUse/Notification hook posts pending approvals to serve
+- [x] **APR-02**: The closed notch drops down the approval panel (Allow ⌥⏎ / Deny ⌥⎋ / More…)
+- [x] **APR-03**: ⌥⏎ / ⌥⎋ answer the pending approval globally via a sandbox-safe hotkey API
+- [x] **APR-04**: The panel frame is sized to its content instead of the fixed `windowSize` plus an expand step
 
 ## v2 Requirements
 
@@ -153,15 +153,15 @@
 | RUN-03 | Phase 7 | Complete |
 | RUN-04 | Phase 7 | Complete |
 | RUN-05 | Phase 7 | Complete |
-| LIVE-01 | Phase 8 | Pending |
-| LIVE-02 | Phase 8 | Pending |
-| LIVE-03 | Phase 8 | Pending |
-| LIVE-04 | Phase 8 | Pending |
-| LIVE-05 | Phase 8 | Pending |
-| APR-01 | Phase 9 | Pending |
-| APR-02 | Phase 9 | Pending |
-| APR-03 | Phase 9 | Pending |
-| APR-04 | Phase 9 | Pending |
+| LIVE-01 | Phase 8 | Complete |
+| LIVE-02 | Phase 8 | Complete |
+| LIVE-03 | Phase 8 | Complete |
+| LIVE-04 | Phase 8 | Complete |
+| LIVE-05 | Phase 8 | Complete |
+| APR-01 | Phase 9 | Complete |
+| APR-02 | Phase 9 | Complete |
+| APR-03 | Phase 9 | Complete |
+| APR-04 | Phase 9 | Complete |
 
 **Coverage:** 20/20 v1 and 31/31 v1.1 requirements mapped, no orphans. BLD-02 and BLD-03 are cross-cutting: mapped to Phase 1, re-checked by a music criterion in every phase.
 

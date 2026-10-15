@@ -16,8 +16,16 @@ final class BoringViewModel: NSObject, ObservableObject {
     @Published var hideOnClosed = false
     @Published var notchSize = openNotchSize
     @Published var closedNotchSize = CGSize(width: 185, height: 34)
+    @Published var screenUUID: String? = nil
     var effectiveClosedNotchHeight: CGFloat { closedNotchSize.height }
-    func close() {}
+    var closeCount = 0
+    var closedAt: TimeInterval?
+    var refused = 0
+    /// Like the real one: refused while a keep-open interaction (typing, expand) is active.
+    func close() {
+        if SharingStateManager.shared.preventNotchClose { refused += 1; return }
+        closeCount += 1; closedAt = ProcessInfo.processInfo.systemUptime
+    }
 }
 
 final class BoringViewCoordinator: ObservableObject {
@@ -35,6 +43,12 @@ final class MusicManager: ObservableObject {
 
 final class SharingStateManager {
     static let shared = SharingStateManager()
-    func beginInteraction() {}
-    func endInteraction() {}
+    private(set) var sessions = 0
+    var preventNotchClose: Bool { sessions > 0 }
+    func beginInteraction() { sessions += 1 }
+    func endInteraction() { if sessions > 0 { sessions -= 1 } }
+}
+
+extension NSScreen {
+    @MainActor static func screen(withUUID uuid: String) -> NSScreen? { nil }
 }
