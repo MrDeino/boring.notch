@@ -198,27 +198,95 @@ func screenLeadIn(screen: String) -> String? {
         let isTool = first.range(of: #"^⏺ [^\s(]+\("#, options: .regularExpression) != nil
         if isTool { if paragraphs.isEmpty { continue } else { break } }
         let end = k + 1 < starts.count ? starts[k + 1] : top
-        var text = "", prevLen = 0
-        for (i, l) in lines[s..<end].enumerated() {
-            let body = i == 0 ? String(l.dropFirst(2)) : String(l.drop { $0 == " " })
-            if body.isEmpty { if !text.isEmpty, !text.hasSuffix("\n\n") { text += "\n\n" }; prevLen = 0; continue }
-            let word = body.prefix { $0 != " " }.count
-            if !text.isEmpty && !text.hasSuffix("\n\n") { text += prevLen + 1 + word > width - 1 ? " " : "\n" }
-            text += body
-            prevLen = l.count
-        }
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = rejoinElement(lines[s..<end], width: width, firstIsMark: true)
         if !t.isEmpty { paragraphs.insert(t, at: 0) }
     }
     return paragraphs.isEmpty ? nil : paragraphs.joined(separator: "\n\n")
 }
 
+/// One screen element's lines as text: soft wraps (line filled to the terminal width) re-joined, blank lines kept as paragraph breaks.
+private func rejoinElement(_ els: ArraySlice<String>, width: Int, firstIsMark: Bool) -> String {
+    var text = "", prevLen = 0
+    for (i, l) in els.enumerated() {
+        let body = i == 0 && firstIsMark ? String(l.dropFirst(2)) : String(l.drop { $0 == " " })
+        if body.isEmpty { if !text.isEmpty, !text.hasSuffix("\n\n") { text += "\n\n" }; prevLen = 0; continue }
+        let word = body.prefix { $0 != " " }.count
+        if !text.isEmpty && !text.hasSuffix("\n\n") { text += prevLen + 1 + word > width - 1 ? " " : "\n" }
+        text += body
+        prevLen = l.count
+    }
+    return text.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+private func proseKey(_ s: String) -> String { String(s.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains).map(Character.init)) }
+
 /// The screen lead-in while the transcript doesn't hold it yet (nil once its prose block has arrived).
 func heldLeadIn(screen: String, blocks: [ChatBlock]) -> String? {
     guard let lead = screenLeadIn(screen: screen) else { return nil }
-    func key(_ s: String) -> String { String(s.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains).map(Character.init)) }
-    let probe = String(key(lead).prefix(40))
-    return (latestAssistantProse(blocks).map { key($0).contains(probe) } ?? false) ? nil : lead
+    let probe = String(proseKey(lead).prefix(40))
+    return (latestAssistantProse(blocks).map { proseKey($0).contains(probe) } ?? false) ? nil : lead
+}
+
+/// The reply being written right now, read off the tmux screen: every `⏺` prose element of the turn above the
+/// input box that the transcript doesn't hold yet (tool rows and the spinner are skipped). headCut = the first
+/// `⏺` scrolled out of the capture, so the head must come from an earlier screen (see mergeLiveReply).
+/// nil while a dialog is up (no input box under the text) or when there is nothing.
+func screenLiveReply(screen: String, blocks: [ChatBlock]) -> (text: String, headCut: Bool)? {
+    let lines = screen.split(separator: "\n", omittingEmptySubsequences: false).map {
+        String($0.replacingOccurrences(of: "\u{a0}", with: " ").reversed().drop { $0 == " " }.reversed())
+    }
+    func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespaces) }
+    guard let top = lines.indices.last(where: { i in
+        guard lines[i].hasPrefix("───"), i + 1 < lines.count else { return false }
+        let n = trimmed(lines[i + 1])
+        return n.hasPrefix("❯") && n.range(of: #"^❯\s*\d+\."#, options: .regularExpression) == nil
+    }) else { return nil }
+    let width = lines[top].count
+    let starts = lines.indices.filter { $0 < top && !lines[$0].isEmpty && !lines[$0].hasPrefix(" ") }
+    var parts: [String] = [], headCut = false, stopped = false
+    for (k, s) in starts.enumerated().reversed() {
+        let first = lines[s]
+        let end = k + 1 < starts.count ? starts[k + 1] : top
+        if parts.isEmpty, let c = first.first, "✻✢✳✶✽✺✹·*".contains(c) { continue }
+        guard first.hasPrefix("⏺") else { stopped = true; break }
+        let isTool = first.range(of: #"^⏺ [^\s(]+\("#, options: .regularExpression) != nil
+            || lines[(s + 1)..<end].contains { trimmed($0).hasPrefix("⎿") }
+        if isTool { continue }
+        let t = rejoinElement(lines[s..<end], width: width, firstIsMark: true)
+        if !t.isEmpty { parts.insert(t, at: 0) }
+    }
+    if !stopped {
+        // Whatever sits above the first column-0 element is the tail of a ⏺ element that scrolled off.
+        let cutEnd = starts.first ?? top
+        let region = lines[0..<cutEnd]
+        if region.contains(where: { !$0.isEmpty }), !region.contains(where: { trimmed($0).hasPrefix("⎿") }) {
+            let t = rejoinElement(region, width: width, firstIsMark: false)
+            if !t.isEmpty { parts.insert(t, at: 0); headCut = true }
+        }
+    }
+    let held = latestAssistantProse(blocks).map(proseKey) ?? ""
+    parts = parts.filter { !held.contains(String(proseKey($0).prefix(40))) }
+    return parts.isEmpty ? nil : (parts.joined(separator: "\n\n"), headCut)
+}
+
+/// Joins a head that scrolled off the capture back on: current's first line is located in the accumulated text and
+/// the two must agree from there on.
+// ponytail: splices by first-line match; a reply whose first visible line repeats earlier text can splice at the wrong
+// place, and anything that scrolled off between two captures (more than ~250 lines in 0.5 s) is lost.
+func mergeLiveReply(previous: String?, current: String, headCut: Bool) -> String {
+    guard headCut, let previous else { return current }
+    let first = String(current.prefix { $0 != "\n" }.prefix(80))
+    guard !first.isEmpty, let at = previous.range(of: first, options: .backwards) else { return current }
+    let tail = previous[at.lowerBound...]
+    return tail.hasPrefix(current) || current.hasPrefix(tail) ? String(previous[..<at.lowerBound]) + current : current
+}
+
+/// The live reply for the next screen. Idle with nothing showing does no parsing; idle with a row showing keeps it
+/// (end-of-turn grace) until the transcript block arrives and screenLiveReply drops it.
+func nextLiveReply(previous: String?, screen: String, blocks: [ChatBlock], working: Bool) -> String? {
+    if !working && previous == nil { return nil }
+    guard let r = screenLiveReply(screen: screen, blocks: blocks) else { return nil }
+    return mergeLiveReply(previous: previous, current: r.text, headCut: r.headCut)
 }
 
 /// Transcript text is untrusted: inline markdown only, links stripped (T-05-01/02). The size cap only bounds a hostile

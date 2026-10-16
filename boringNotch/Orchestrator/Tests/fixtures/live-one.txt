@@ -1,0 +1,53 @@
+❯ explain the notch
+
+
+✻ Working… (12s · ↑ 1.2k tokens · esc to interrupt)
+  ⎿  Tip: use /help to see commands
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 (1M context) │ orchestrator ██░░░░░░░░ 23%
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent
+<<<FRAME>>>
+❯ explain the notch
+
+⏺ The notch is a camera
+
+✻ Working… (12s · ↑ 1.2k tokens · esc to interrupt)
+  ⎿  Tip: use /help to see commands
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 (1M context) │ orchestrator ██░░░░░░░░ 23%
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent
+<<<FRAME>>>
+❯ explain the notch
+
+⏺ The notch is a camera cutout in the top of the screen that Apple added
+
+✻ Working… (12s · ↑ 1.2k tokens · esc to interrupt)
+  ⎿  Tip: use /help to see commands
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 (1M context) │ orchestrator ██░░░░░░░░ 23%
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent
+<<<FRAME>>>
+❯ explain the notch
+
+⏺ The notch is a camera cutout in the top of the screen that Apple added to the MacBook Pro so the display could reach the edges while the webcam keeps a small place to sit, and this app
+  turns that dead space into a small control surface.
+
+  Second paragraph here.
+
+✻ Working… (12s · ↑ 1.2k tokens · esc to interrupt)
+  ⎿  Tip: use /help to see commands
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 (1M context) │ orchestrator ██░░░░░░░░ 23%
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

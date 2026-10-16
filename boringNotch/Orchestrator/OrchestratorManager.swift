@@ -28,6 +28,9 @@ final class OrchestratorManager: ObservableObject {
     @Published private(set) var prompt: PromptCard? = nil
     @Published private(set) var liveStatus: LiveStatus? = nil
     @Published private(set) var chatLive: Bool? = nil
+    /// Quick e1d: the reply being written, read off the screen until its transcript block arrives.
+    @Published private(set) var liveReply: String? = nil
+    private var liveEnd: Task<Void, Never>?
     // Phase 8
     /// serve's context.percent while the chat runs; nil on old serve.
     @Published private(set) var contextPercent: Int? = nil
@@ -207,7 +210,8 @@ final class OrchestratorManager: ObservableObject {
                 guard let self else { return }
                 if self.streaming { try? await Task.sleep(for: .seconds(2)); continue }
                 await self.refresh()
-                let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning || self.runs.contains { $0.state == "running" }, offline: self.offline)
+                let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning || self.runs.contains { $0.state == "running" }, offline: self.offline,
+                                    turnLive: (self.chatLive ?? (self.liveStatus != nil)) && BoringViewCoordinator.shared.currentView == .orchestrator)
                 try? await Task.sleep(for: .seconds(secs))
             }
         }
@@ -346,6 +350,24 @@ final class OrchestratorManager: ObservableObject {
         if liveStatus != ls { liveStatus = ls }
         let cl = running ? r.live : nil
         if chatLive != cl { chatLive = cl }
+        updateLiveReply()
+    }
+
+    /// Recomputes the live reply from the current screen and transcript (called after either changes).
+    func updateLiveReply() {
+        let working = chatLive ?? (liveStatus != nil)
+        let next = nextLiveReply(previous: liveReply, screen: screen, blocks: OrchestratorTranscriptStore.shared.blocks, working: working)
+        if liveReply != next { liveReply = next }
+        if working || liveReply == nil { liveEnd?.cancel(); liveEnd = nil }
+        else if liveEnd == nil {
+            // Turn over but its block never matched the screen text: drop the row after a grace.
+            liveEnd = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled, let self else { return }
+                self.liveEnd = nil
+                if !(self.chatLive ?? (self.liveStatus != nil)) { self.liveReply = nil }
+            }
+        }
     }
 
     private func applyOffline() {
@@ -356,6 +378,7 @@ final class OrchestratorManager: ObservableObject {
         if prompt != nil { prompt = nil }
         if liveStatus != nil { liveStatus = nil }
         if chatLive != nil { chatLive = nil }
+        if liveReply != nil { liveReply = nil }
         if contextPercent != nil { contextPercent = nil }
         statusMenuOpen = false
         notesOpen = false

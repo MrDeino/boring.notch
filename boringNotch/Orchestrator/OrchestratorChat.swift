@@ -81,7 +81,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
         }
         let m = mergeChatBlocks(blocks, incoming, reset: reset)
         if m.blocks != blocks {
-            if m.appended && !reset {
+            if m.appended && !reset && OrchestratorManager.shared.liveReply == nil {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { blocks = m.blocks }
             } else {
                 blocks = m.blocks
@@ -91,6 +91,8 @@ final class OrchestratorTranscriptStore: ObservableObject {
         needsFull = false
         failures = 0
         reconcile()
+        // Quick e1d: the block that replaces the live row and the row's removal publish together.
+        OrchestratorManager.shared.updateLiveReply()
     }
 
     private func reconcile() {
@@ -229,7 +231,7 @@ final class ModelSlice: ObservableObject {
     static var runs: ModelSlice { .init([changes(m.$runs), changes(m.$usage)]) }
     /// The chat view's manager fields (it observes the transcript store directly).
     static var chat: ModelSlice {
-        .init([changes(m.$chatLive), changes(m.$chatRunning), changes(m.$liveStatus), changes(m.$notesOpen), changes(m.$offline),
+        .init([changes(m.$chatLive), changes(m.$liveReply), changes(m.$chatRunning), changes(m.$liveStatus), changes(m.$notesOpen), changes(m.$offline),
                changes(m.$prompt), changes(m.$promptOptions), changes(m.$screen), changes(m.$statusMenuOpen), changes(m.$wantsKeyboard)])
     }
 }
@@ -364,13 +366,18 @@ struct OrchestratorChatView: View {
                 }
             } else {
                 ForEach(store.blocks.suffix(maxRows)) { b in
-                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, caret: caretVisible(live: manager.chatLive, working: manager.liveStatus != nil, kind: b.kind, id: b.id, newestID: store.blocks.last?.id) && store.pending.isEmpty, onClick: expandChat, onCopied: showCopied)
+                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, caret: caretVisible(live: manager.chatLive, working: manager.liveStatus != nil, kind: b.kind, id: b.id, newestID: store.blocks.last?.id) && store.pending.isEmpty && manager.liveReply == nil, onClick: expandChat, onCopied: showCopied)
                         .equatable()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 // Claude Code writes the turn to the transcript only after the prompt is answered: show its screen text meanwhile.
                 if manager.prompt != nil, let lead = heldLeadIn(screen: manager.screen, blocks: store.blocks) {
                     ChatBlockRow(block: ChatBlock(pendingID: "lead-in", text: lead, kind: .prose), proseLineLimit: proseLineLimit, expanded: expanded, onClick: expandChat, onCopied: showCopied)
+                        .equatable()
+                }
+                // Quick e1d: the reply as it is being written; the transcript block takes this row's place with no animation.
+                if manager.prompt == nil, let live = manager.liveReply {
+                    ChatBlockRow(block: ChatBlock(pendingID: "live-reply", text: live, kind: .prose), proseLineLimit: proseLineLimit, expanded: expanded, caret: manager.chatLive ?? (manager.liveStatus != nil), plain: true, onClick: expandChat, onCopied: showCopied)
                         .equatable()
                 }
             }
@@ -451,7 +458,7 @@ struct OrchestratorChatView: View {
     private static let bottomID = "bottom"
     /// Changes whenever a row is added or the status row appears/disappears.
     private var pinKey: String {
-        "\(store.fallback ? fallbackLines.count : store.blocks.count)|\(store.blocks.last?.id ?? "")|\(manager.liveStatus != nil)|\(store.pending.count)|\(store.idleStatus ?? "")"
+        "\(store.fallback ? fallbackLines.count : store.blocks.count)|\(store.blocks.last?.id ?? "")|\(manager.liveStatus != nil)|\(manager.liveReply != nil)|\(store.pending.count)|\(store.idleStatus ?? "")"
     }
 
     /// chatTail lines minus spinner lines (the status row shows those).
@@ -773,13 +780,15 @@ var orchSnapDiffOpen = false
 /// or a new block re-lays-out only the rows whose block changed.
 private struct ChatBlockRow: View, Equatable {
     static func == (a: ChatBlockRow, b: ChatBlockRow) -> Bool {
-        a.block == b.block && a.proseLineLimit == b.proseLineLimit && a.expanded == b.expanded && a.caret == b.caret
+        a.block == b.block && a.proseLineLimit == b.proseLineLimit && a.expanded == b.expanded && a.caret == b.caret && a.plain == b.plain
     }
 
     let block: ChatBlock
     let proseLineLimit: Int?
     var expanded = false
     var caret = false
+    /// Live reply row: screen text, shown as is (no markdown parsing).
+    var plain = false
     var onClick: () -> Void = {}
     var onCopied: () -> Void = {}
     @State private var folded = false
@@ -916,7 +925,7 @@ private struct ChatBlockRow: View, Equatable {
             toolRow
         case .prose:
             // lineSpacing 2 on 13pt text ~ line-height 1.35 (13 * 1.35 = 17.5 vs ~15.5 natural).
-            OrchestratorSelectableText(orchestratorProseNS(proseAttributed(block.text ?? ""), size: 13, color: NSColor(OT.C.text), lineSpacing: 2),
+            OrchestratorSelectableText(orchestratorProseNS(plain ? AttributedString(plainTail(block.text ?? "")) : proseAttributed(block.text ?? ""), size: 13, color: NSColor(OT.C.text), lineSpacing: 2),
                                        maxLines: proseLineLimit ?? 0, lineBreak: proseLineLimit == nil ? .byWordWrapping : .byTruncatingTail, onClick: onClick, onCopied: onCopied)
                 .caret(caret)
                 .baselineAligned()
@@ -1285,3 +1294,6 @@ func orchestratorProseNS(_ a: AttributedString, size: CGFloat, color: NSColor, l
     }
     return out
 }
+
+/// Live reply text capped like proseAttributed, keeping the newest end of a huge reply.
+func plainTail(_ s: String) -> String { s.count > proseCharCap ? "…" + s.suffix(proseCharCap) : s }

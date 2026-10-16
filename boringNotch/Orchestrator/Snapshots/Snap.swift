@@ -156,6 +156,9 @@ private let questionBlocks = blocks(#"""
 ]}
 """#)
 
+/// Quick e1d: last recorded frame of a reply being written (spinner below it, text above the input box).
+private let liveChat = ChatResponse(running: true, screen: fixture("live-one.txt").components(separatedBy: "<<<FRAME>>>\n").last ?? "", live: true)
+
 private let shortNote = "Remember to ask about the Railway migration.\n\n- notch: back-nav for question chips\n- notes drop-down autosaves after 1s\n- check usage ring colour at 90%"
 private let wordyDraft = "Please look at how the composer grows while I type a long message that wraps over several lines in the notch, and make sure the send button stays on the last line even when the text keeps going well past two full lines of the pill"
 private let tenLineDraft = (1...10).map { "Line \($0) of a very long draft that keeps going and going" }.joined(separator: "\n")
@@ -304,6 +307,8 @@ struct Snap {
             Scene(name: "51-ask-2q-multiselect", chat: askChat("multiselect-1.txt"), expanded: true),
             Scene(name: "58-ask-leadin-long-2q", chat: askChat("leadin-long-2q.txt"), blocks: heldBlocks, expanded: true),
             Scene(name: "59-ask-leadin-real-2q", chat: askChat("leadin-2q.txt"), blocks: heldBlocks, expanded: true),
+            Scene(name: "60-live-reply-open", chat: liveChat, blocks: heldBlocks),
+            Scene(name: "61-live-reply-expanded", chat: liveChat, blocks: heldBlocks, expanded: true),
             Scene(name: "57-runlog-open", chat: chat(""), blocks: longBlocks, logRun: "261014024541-r002"),
         ]
 
