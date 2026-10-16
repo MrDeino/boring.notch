@@ -2,9 +2,9 @@
 import Foundation
 import CoreGraphics
 
-/// Poll cadence in seconds: 2 open, 3 closed while the chat or a run is going, else 10.
-func pollInterval(notchOpen: Bool, chatRunning: Bool, offline: Bool = false) -> TimeInterval {
-    offline ? 10 : notchOpen ? 2 : chatRunning ? 3 : 10
+/// Poll cadence in seconds: 0.5 open while a turn is live on the chat, 2 open, 3 closed while the chat or a run is going, else 10.
+func pollInterval(notchOpen: Bool, chatRunning: Bool, offline: Bool = false, turnLive: Bool = false) -> TimeInterval {
+    offline ? 10 : notchOpen && turnLive ? 0.5 : notchOpen ? 2 : chatRunning ? 3 : 10
 }
 
 // MARK: - Run card helpers (RUN-01)
