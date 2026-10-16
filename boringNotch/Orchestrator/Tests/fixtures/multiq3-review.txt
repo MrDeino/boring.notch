@@ -1,0 +1,54 @@
+
+ ▐▛███▛█   Claude Code v2.1.299
+▝▜██████▀  Opus 5.5 (1M context) · Claude Max
+ ▝▝   ▝▝   /private/var/folders/fb/mb8cnk7s78zb5zxh_d3qjqvc0000gn/T/tmp.tEZk1pnCYZ
+
+
+❯ Use the AskUserQuestion tool once with three single-select questions: Fruit, Color, Size, and do nothing else.
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Fruit  ☒ Color  ☒ Size  ✔ Submit  →
+
+Review your answers
+
+ ● Which fruit do you want?
+   → apple  
+
+ ● Which color do you want?
+   → red  
+
+ ● Which size do you want?
+   → small  
+
+Ready to submit your answers?
+         
+❯ 1. Submit answers                                                                                                                                                                                     
+  2. Cancel         
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                        
+
+
+
+                                        
+                                                     
