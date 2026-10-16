@@ -9,6 +9,9 @@ extension Defaults.Keys {
 private let railSpring = Animation.spring(response: 0.3, dampingFraction: 0.85)
 // Level-change fade, tuned to OrchestratorExpand's notch spring (response 0.4): out, then in once the shape is near final.
 private let fadeOut = 0.08, fadeInDelay = 0.28, fadeIn = 0.15
+// The hidden swap re-lays the whole column out in one 40-60 ms main-thread block. Right after fadeOut (80 ms) that hit the
+// spring at peak speed (the shape held, then jumped 0.15-0.3 of its travel); at 240 ms the shape is in its tail (~0.02).
+private let swapAt = 0.24
 
 extension AnyTransition {
     /// The tab on notch open/close, same timing as a level change. Its AppKit text is not clipped to the notch shape by
@@ -179,11 +182,11 @@ struct OrchestratorExpandedView: View {
         let gen = fadeGen
         withAnimation(.easeOut(duration: fadeOut)) { contentOpacity = 0 }
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(fadeOut))
+            try? await Task.sleep(for: .seconds(swapAt))
             guard gen == fadeGen, vm.notchState == .open else { return }
             var t = Transaction(); t.disablesAnimations = true
             withTransaction(t) { shown = expand.level(for: vm); held = slot }
-            try? await Task.sleep(for: .seconds(fadeInDelay - fadeOut))
+            try? await Task.sleep(for: .seconds(fadeInDelay - swapAt))
             guard gen == fadeGen else { return }
             withAnimation(.easeOut(duration: fadeIn)) { contentOpacity = 1 }
         }
