@@ -74,7 +74,6 @@ struct OrchestratorView: View {
                 }
             }
         }
-        .overlay(alignment: .top) { if runLog.runID == nil { OrchestratorUpdateBadge().padding(.top, 4) } }
         .background(WindowAnchor(view: anchor))
         .onAppear { expand.tabOpened(vm: vm, anchor: anchor) }
         .onChange(of: runLog.runID) { _, id in logChanged(id) }
