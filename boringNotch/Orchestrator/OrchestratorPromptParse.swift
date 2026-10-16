@@ -252,3 +252,9 @@ func promptKey(keyCode: UInt16, characters: String?, commandLike: Bool, editingT
     }
     return .pass
 }
+
+/// False when answering with `keys` only moves to another step of the same prompt (next question, review), so the card stays up.
+func hidesOnAnswer(_ c: PromptCard, keys: [String]) -> Bool {
+    if keys.contains("Tab") || keys.contains(promptBackKey) { return false }
+    return !(c.kind == .question && !c.review && c.tabs.filter { $0.label != "Submit" }.count > 1)
+}
