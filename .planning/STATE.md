@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-14)
 Phase: 9
 Plan: Not started
 Status: Milestone complete
-Last activity: 2026-10-16 - Completed quick task 261016-e1d: live reply streaming
+Last activity: 2026-10-16 - Completed quick task 261016-e2u: expand without midway stall (jump gate met, 20 ms frame gate not)
 
 Progress: [██████████] 100%
 
@@ -121,4 +121,6 @@ Resume file: None
 | 261015-me5 | "Claude update ready · Restart" badge under the tab header + closed dot; confirmed POST /api/chat/restart, 409 busy -> Restart anyway (force), restarting until running | 2026-10-15 | .planning/quick/261015-me5-claude-update-ready-restart |
 | 261015-tsp | App renamed to Clive (product, bundle name, menu bar, Settings, onboarding); bundle id and Swift module unchanged | 2026-10-15 | .planning/quick/261015-tsp-rename-app-to-clive |
 | 261015-jym | One-motion expand: per-frame width/height together gate (passes, gap 0.000), root-read guard, Orchestrator tab kept built while closed tried and reverted 2026-10-16 (no gain, +2-3% closed idle); merged main #5-#11. Partly met: expand still stalls ~50 ms at the content swap (even gate and 20 ms gate fail) | 2026-10-15 | .planning/quick/261015-jym-one-motion-expand-and-keep-tab-built |
+| 261016-ck9 | Notch open/close clean: Orchestrator tab fades in after the shape opens and out at once, no level swap while closing (shape froze then jumped), update badge under contentOpacity; run.sh --paint composited-window gate (FAIL before, OK after) | 2026-10-16 | .planning/quick/261016-ck9-notch-open-close-clean |
 | 261016-e1d | Live reply row: assistant text grows from `screen` while a turn runs (0.5 s fallback poll), swapped in place for the transcript block; tests on recorded screen sequences, snapshot scene 60. QuickMe4 focus test flaky on this machine (fails before this change too) | 2026-10-16 | .planning/quick/261016-e1d-live-reply-streaming |
+| 261016-e2u | Expand without the midway stall: the hidden level swap (40-60 ms column re-layout) moved from 80 ms (spring peak) to 240 ms (spring tail); expand jump 0.155-0.386 -> 0.022-0.024, collapse 0.063-0.166 -> 0.022-0.031; --frames even gate 0.05 for expand. Partly met: the swap frame is still 43-64 ms (20 ms frame gate FAIL), needs row-view work | 2026-10-16 | .planning/quick/261016-e2u-expand-no-midway-stall |

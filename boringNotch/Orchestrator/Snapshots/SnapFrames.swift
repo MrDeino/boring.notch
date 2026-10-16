@@ -8,8 +8,8 @@ import QuartzCore
 // FRAMES_MARK=1 marks each trigger for xctrace Time Profiler (framesMarker).
 // Together gate: the notch shape's width and height progress must stay within 0.08 of each other on every layout
 // sample of expand, collapse and close (and no frame where one moves while the other holds). FRAMES_TRACE=1 prints
-// the per-sample shape / tab-body / window sizes. Even gate: no mid-spring jump over 0.12 of the travel (a stall that
-// splits the motion). Content gate: the transcript frame is steady once it fades back in. Root-read gate: the root body
+// the per-sample shape / tab-body / window sizes. Even gate: no mid-spring jump over evenLimit of the travel (expand 0.05,
+// about one 120 Hz frame at the spring's peak speed; collapse/close 0.12) (a stall that splits the motion). Content gate: the transcript frame is steady once it fades back in. Root-read gate: the root body
 // reads the new notch size within 50 ms (a stale read inside @Published's willSet loses the spring). FRAMES_PIXELS=1:
 // drawn-shape pass.
 
@@ -34,7 +34,7 @@ struct FramesRoot: View {
                     if open {
                         VStack { OrchestratorView() }
                             .background(SizeProbe(shape: false))
-                            .transition(.opacity.animation(.smooth(duration: 0.35))) // ContentView: the Orchestrator tab fades only
+                            .transition(.orchestratorTab) // ContentView: the Orchestrator tab fades only
                             .zIndex(1)
                     }
                 }
@@ -159,9 +159,12 @@ func together(_ raw: [(t: Double, s: CGSize)], start a: CGSize) -> TogetherResul
     }
     return r
 }
+/// Even gate limit per transition: expand must drop no frame at peak speed; collapse/close keep the old 0.12.
+let evenLimit: [String: Double] = ["expand": 0.05]
 extension TogetherResult {
     var ok: Bool { maxGap <= 0.08 && stuck == 0 }
-    var even: Bool { jump <= 0.12 }
+    var even: Bool { even(0.12) }
+    func even(_ limit: Double) -> Bool { jump <= limit }
 }
 
 /// Self-check of `together`: one spring for both passes; width first, then height fails.
@@ -292,8 +295,9 @@ extension Snap {
                         gaps[name, default: []].append((r.maxGap, r.stuck, r.jump))
                         let gated = ["expand", "collapse", "close"].contains(name)
                         if !r.ok && gated { apart.insert(name) }
-                        if !r.even && gated { uneven.insert(name) }
-                        print(String(format: "together %@ maxGap=%.3f at=%.0f stuck=%d jump=%.3f at=%.0f samples=%d %@ %@", name, r.maxGap, r.at * 1000, r.stuck, r.jump, r.jumpAt * 1000, r.samples, r.worst, r.ok ? (r.even ? "ok" : "UNEVEN") : "APART"))
+                        let lim = evenLimit[name] ?? 0.12, even = r.even(lim)
+                        if !even && gated { uneven.insert(name) }
+                        print(String(format: "together %@ maxGap=%.3f at=%.0f stuck=%d jump=%.3f at=%.0f samples=%d %@ %@", name, r.maxGap, r.at * 1000, r.stuck, r.jump, r.jumpAt * 1000, r.samples, r.worst, r.ok ? (even ? "ok" : String(format: "UNEVEN (limit %.2f)", lim)) : "APART"))
                     }
                     // Stale read: SwiftUI can run the update synchronously inside @Published's willSet (before the new size is
                         // stored); the root then keeps the old size and the spring never starts until something else
@@ -353,7 +357,8 @@ extension Snap {
         }
         print(bad.isEmpty ? "OK: frames (no interval over 20 ms in open, expand, collapse, close)" : "\(report ? "REPORT" : "FAIL"): frames over 20 ms in " + bad.joined(separator: ", "))
         print(apart.isEmpty ? "OK: together (width and height move as one in expand, collapse, close)" : "\(report ? "REPORT" : "FAIL"): width/height apart in " + apart.sorted().joined(separator: ", "))
-        print(uneven.isEmpty ? "OK: even (no mid-spring jump over 0.12 of the travel in expand, collapse, close)" : "\(report ? "REPORT" : "FAIL"): shape jumps mid-spring in " + uneven.sorted().joined(separator: ", "))
+        print(uneven.isEmpty ? "OK: even (no mid-spring jump over 0.05 of the travel in expand, 0.12 in collapse, close)"
+              : "\(report ? "REPORT" : "FAIL"): shape jumps mid-spring in " + uneven.sorted().map { "\($0) (limit " + String(format: "%.2f", evenLimit[$0] ?? 0.12) + ")" }.joined(separator: ", "))
         print(moving.isEmpty ? "OK: content laid out once (steady once it shows) in expand, collapse" : "\(report ? "REPORT" : "FAIL"): content moves after it shows in " + moving.sorted().joined(separator: ", "))
         print(lost.isEmpty ? "OK: root reads the new notch size within 50 ms (expand, collapse, close)" : "\(report ? "REPORT" : "FAIL"): size change lost (stale root) in " + lost.sorted().joined(separator: ", "))
         if (!bad.isEmpty || !apart.isEmpty || !uneven.isEmpty || !moving.isEmpty || !lost.isEmpty) && !report { exit(1) }

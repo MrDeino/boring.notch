@@ -9,8 +9,10 @@
 #        boringNotch/Orchestrator/Snapshots/run.sh --fulltext     ->  long multi-paragraph row keeps its whole text and last line (widths, growth)
 #        ORCH_BASE=http://127.0.0.1:47999 boringNotch/Orchestrator/Snapshots/run.sh --sendmock  ->  composer send path vs Tests/send-mock.py (~75 s)
 #        OPT=-O boringNotch/Orchestrator/Snapshots/run.sh --idle  ->  optimized harness (what a Release build costs)
+#        boringNotch/Orchestrator/Snapshots/run.sh --paint        ->  panel bitmap through open/expand/close: nothing drawn outside the notch shape, no held black box, badge fades with content
 #        OPT=-O boringNotch/Orchestrator/Snapshots/run.sh --frames  ->  frame intervals per transition (open/expand/collapse/close), FAIL over 20 ms;
-#                                                                   width/height together check (FAIL when the shape grows one way first) (FRAMES_REPORT=1: never fail, FRAMES_TRACE=1: per-sample sizes)
+#                                                                   width/height together check (FAIL when the shape grows one way first); even check (FAIL on a
+#                                                                   mid-spring jump over 0.05 of the travel in expand, 0.12 in collapse/close) (FRAMES_REPORT=1: never fail, FRAMES_TRACE=1: per-sample sizes)
 #        Redirect output to a file (> log) rather than piping: --hittest can leave a pipe open after it exits.
 set -e
 cd "$(dirname "$0")/../../.."
