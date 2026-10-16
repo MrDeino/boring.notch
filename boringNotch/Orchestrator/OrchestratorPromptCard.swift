@@ -96,17 +96,21 @@ final class PromptCardController: ObservableObject {
         let t0 = Date()
         note = nil
         pressed = n
+        let hides = hidesOnAnswer(displayed, keys: keys)
         Task {
             let m = OrchestratorManager.shared
-            try? await Task.sleep(for: .milliseconds(120))
-            withAnimation(spring) { dismissed = id }
+            if hides {
+                try? await Task.sleep(for: .milliseconds(120))
+                withAnimation(spring) { dismissed = id }
+            }
             guard await stillCurrent(displayed) else { restore(note: nil); return }
             let ok = await m.pressKeys(keys)
             guard ok else { restore(note: "Didn't go through"); return }
             try? await Task.sleep(for: .seconds(max(0, 2 - Date().timeIntervalSince(t0))))
             await m.refresh(fresh: true)
             if !m.offline, let cur = m.prompt, promptIdentity(cur) == id { restore(note: "Didn't go through"); return }
-            release()
+            // ponytail: identity-equal first redraw (chip flips before the question text) just shows this step a moment longer; a 2 s no-move still says "Didn't go through".
+            if hides { release() } // else the next question is on screen: keep the card and its key focus
         }
     }
 
