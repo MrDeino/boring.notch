@@ -210,6 +210,11 @@ struct Snap {
             while !finished { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
             return
         }
+        if CommandLine.arguments.contains("--qlevel") {
+            _ = NSApplication.shared
+            NSApp.setActivationPolicy(.accessory)
+            exit(await questionLevelPass() ? 0 : 1)
+        }
         if CommandLine.arguments.contains("--closed") { await closed(); return }
         if CommandLine.arguments.contains("--askmock") { await askMock(); return }
         if CommandLine.arguments.contains("--sendmock") { await sendMock(); return }
@@ -305,6 +310,8 @@ struct Snap {
             Scene(name: "56-runlog-empty", chat: chat(""), blocks: longBlocks, expanded: true, logRun: "261014024541-s003", logLines: false),
             Scene(name: "50-ask-1q", chat: askChat("question.txt"), expanded: true),
             Scene(name: "51-ask-2q-multiselect", chat: askChat("multiselect-1.txt"), expanded: true),
+            Scene(name: "62-ask-3opt-open", chat: askChat("question.txt")),
+            Scene(name: "63-ask-6opt-open", chat: askChat("question6.txt")),
             Scene(name: "58-ask-leadin-long-2q", chat: askChat("leadin-long-2q.txt"), blocks: heldBlocks, expanded: true),
             Scene(name: "59-ask-leadin-real-2q", chat: askChat("leadin-2q.txt"), blocks: heldBlocks, expanded: true),
             Scene(name: "60-live-reply-open", chat: liveChat, blocks: heldBlocks),
@@ -1041,4 +1048,40 @@ extension Snap {
 /// The app panel's key rule (BoringNotchSkyLightWindow.canBecomeKey).
 final class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { OrchestratorManager.shared.keyboardWindow === self || OrchestratorKeyGate.terminalWantsKey }
+}
+
+extension Snap {
+    /// A question arriving leaves the level alone: open stays open, expanded stays expanded, closed opens to open.
+    static func questionLevelPass() async -> Bool {
+        let m = OrchestratorManager.shared
+        let q = ChatResponse(running: true, screen: fixture("question.txt"))
+        let idle = ChatResponse(running: true, screen: "")
+        var ok = true
+        for start in ["open", "expanded", "closed"] {
+            await m.snapshotApply(loaded: true, chat: idle, state: StateResponse(runs: [], usage: nil))
+            let vm = BoringViewModel()
+            let window = KeyablePanel(contentRect: NSRect(x: -20000, y: -20000, width: windowSize.width, height: windowSize.height),
+                                      styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            window.isOpaque = false; window.backgroundColor = .clear
+            if start == "expanded" { OrchestratorExpand.shared.setLevel(.expanded, vm: vm, window: window) }
+            if start == "closed" { vm.notchSize = vm.closedNotchSize; vm.notchState = .closed }
+            let root = NotchReplica(vm: vm).core.environmentObject(vm)
+            let host = NSHostingView(rootView: root)
+            window.contentView = host
+            window.orderFrontRegardless()
+            try? await Task.sleep(for: .milliseconds(500))
+            await m.snapshotApply(loaded: true, chat: q, state: StateResponse(runs: [], usage: nil))
+            try? await Task.sleep(for: .milliseconds(900))
+            if start == "closed" { vm.notchSize = OrchestratorExpand.shared.openSize(for: vm); vm.notchState = .open; try? await Task.sleep(for: .milliseconds(500)) }
+            let level = OrchestratorExpand.shared.level(for: vm)
+            let want: ExpandLevel = start == "expanded" ? .expanded : .open
+            print("question level \(start): prompt \(m.prompt?.kind == .question), level \(level)")
+            ok = ok && m.prompt?.kind == .question && level == want
+            OrchestratorExpand.shared.reset()
+            window.contentView = nil
+            window.orderOut(nil)
+        }
+        print(ok ? "OK: question card keeps the level" : "FAIL: question card changed the level")
+        return ok
+    }
 }

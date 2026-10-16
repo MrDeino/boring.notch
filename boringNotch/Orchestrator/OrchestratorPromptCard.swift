@@ -13,8 +13,6 @@ final class PromptCardController: ObservableObject {
     @Published var highlighted: Int?
     @Published var flash = false
     private var shown: PromptCard?
-    private struct Raised { weak var vm: BoringViewModel?; weak var window: NSWindow? }
-    private var raised: [Raised] = [] // one per display panel the question card expanded
     private weak var hoverWindow: NSWindow?
     private var bag = Set<AnyCancellable>()
     private weak var keyWindow: NSWindow?
@@ -50,23 +48,12 @@ final class PromptCardController: ObservableObject {
         let id = card.map(promptIdentity)
         if id != lastId { lastId = id; pressed = nil; dismissed = nil; note = nil; pending = [:]; busy = false }
         if card == nil { release() } else if hovering, let w = hoverWindow { hover(true, window: w) }
-        guard card?.kind != .question else { return }
-        for r in raised {
-            if let vm = r.vm, OrchestratorExpand.shared.level(for: vm) == .expanded {
-                OrchestratorExpand.shared.setLevel(.open, vm: vm, window: r.window)
-            }
-        }
-        raised = []
     }
 
     func sync(_ card: PromptCard?, vm: BoringViewModel, window: NSWindow?) {
         if card != shown {
             shown = card
             highlighted = card?.highlighted ?? card?.items.first?.number
-        }
-        if card?.kind == .question, OrchestratorExpand.shared.level(for: vm) == .open {
-            OrchestratorExpand.shared.setLevel(.expanded, vm: vm, window: window)
-            if !raised.contains(where: { $0.vm === vm }) { raised.append(Raised(vm: vm, window: window)) }
         }
     }
 
@@ -424,10 +411,14 @@ private struct QuestionCard: View {
     @ObservedObject private var manager = OrchestratorManager.shared
     @ObservedObject private var ctl = PromptCardController.shared
     @Environment(\.promptWindow) private var anchor
+    @EnvironmentObject private var vm: BoringViewModel
+    @ObservedObject private var expand = OrchestratorExpand.shared
     @FocusState private var fieldFocused: Bool
+    /// The open level is short: rows drop to one line (label + description) so more of the list shows before it scrolls.
+    private var compact: Bool { expand.level(for: vm) == .open }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: compact ? 5 : 8) {
             PromptNote()
             if card.tabs.count > 1 {
                 tabRow
@@ -443,7 +434,7 @@ private struct QuestionCard: View {
             }
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: compact ? 4 : 5) {
                         Text(card.question ?? "").font(OT.F.title).foregroundStyle(OT.C.text)
                             .lineSpacing(14 * 0.35).fixedSize(horizontal: false, vertical: true)
                         if card.review, let b = card.body {
@@ -490,20 +481,30 @@ private struct QuestionCard: View {
                     Image(systemName: box ? "checkmark.square.fill" : "square").font(.system(size: 13))
                         .foregroundStyle(hi ? Color.black : box ? OT.C.text : OT.C.text5)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.label).font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(hi ? Color.black : OT.C.text)
-                        .lineSpacing(12 * 0.3).fixedSize(horizontal: false, vertical: true)
-                    if let d = item.detail {
-                        Text(d).font(OT.F.meta).foregroundStyle(hi ? darkDesc : OT.C.text5)
-                            .lineSpacing(11 * 0.4).fixedSize(horizontal: false, vertical: true)
+                if compact {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(item.label).font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(hi ? Color.black : OT.C.text).lineLimit(1)
+                        if let d = item.detail {
+                            Text(d).font(OT.F.meta).foregroundStyle(hi ? darkDesc : OT.C.text5).lineLimit(1)
+                        }
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.label).font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(hi ? Color.black : OT.C.text)
+                            .lineSpacing(12 * 0.3).fixedSize(horizontal: false, vertical: true)
+                        if let d = item.detail {
+                            Text(d).font(OT.F.meta).foregroundStyle(hi ? darkDesc : OT.C.text5)
+                                .lineSpacing(11 * 0.4).fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
                 Spacer(minLength: 8)
                 PromptKeycap(text: "\(item.number)", light: hi)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8).padding(.horizontal, 10)
+            .padding(.vertical, compact ? 5 : 8).padding(.horizontal, 10)
             .background(hi ? OT.C.text : OT.C.raised, in: RoundedRectangle(cornerRadius: OT.R.cardM))
             .contentShape(Rectangle())
         }
