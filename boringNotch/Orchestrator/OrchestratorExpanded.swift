@@ -9,6 +9,18 @@ extension Defaults.Keys {
 private let railSpring = Animation.spring(response: 0.3, dampingFraction: 0.85)
 // Level-change fade, tuned to OrchestratorExpand's notch spring (response 0.4): out, then in once the shape is near final.
 private let fadeOut = 0.08, fadeInDelay = 0.28, fadeIn = 0.15
+// The hidden swap re-lays the whole column out in one 40-60 ms main-thread block. Right after fadeOut (80 ms) that hit the
+// spring at peak speed (the shape held, then jumped 0.15-0.3 of its travel); at 240 ms the shape is in its tail (~0.02).
+private let swapAt = 0.24
+
+extension AnyTransition {
+    /// The tab on notch open/close, same timing as a level change. Its AppKit text is not clipped to the notch shape by
+    /// the window server, so it shows only once the shape is (nearly) open and is gone before the shape shrinks under it.
+    static var orchestratorTab: AnyTransition {
+        .asymmetric(insertion: .opacity.animation(.easeOut(duration: fadeIn).delay(fadeInDelay)),
+                    removal: .opacity.animation(.easeOut(duration: fadeOut)))
+    }
+}
 
 /// Rail collapse state. Persisted choice lives in Defaults; auto-open is a transient reveal.
 /// Keeps its own waiting baseline (same idea as the wings model) so it does not depend on 07-03.
@@ -147,6 +159,7 @@ struct OrchestratorExpandedView: View {
     @ObservedObject var expand = OrchestratorExpand.shared
     @ObservedObject var rail = OrchestratorRailState.shared
     @ObservedObject var cards = PromptCardController.shared
+    @ObservedObject var runLog = OrchestratorRunLog.shared
     let store = OrchestratorTranscriptStore.shared
     @Default(.orchRunsRailCollapsed) var persisted
     @EnvironmentObject var vm: BoringViewModel
@@ -162,15 +175,18 @@ struct OrchestratorExpandedView: View {
 
     /// Fade out, lay out once at the new level while invisible, fade in near the end of the shape spring. Newest change wins.
     private func levelChanged() {
+        // Notch closing (reset() from onDisappear): the tab is leaving with its own fade. A level swap now re-lays the whole
+        // transcript out mid-close and stalls the shape's spring (it froze, then jumped shut).
+        guard vm.notchState == .open else { return }
         fadeGen += 1
         let gen = fadeGen
         withAnimation(.easeOut(duration: fadeOut)) { contentOpacity = 0 }
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(fadeOut))
-            guard gen == fadeGen else { return }
+            try? await Task.sleep(for: .seconds(swapAt))
+            guard gen == fadeGen, vm.notchState == .open else { return }
             var t = Transaction(); t.disablesAnimations = true
             withTransaction(t) { shown = expand.level(for: vm); held = slot }
-            try? await Task.sleep(for: .seconds(fadeInDelay - fadeOut))
+            try? await Task.sleep(for: .seconds(fadeInDelay - swapAt))
             guard gen == fadeGen else { return }
             withAnimation(.easeOut(duration: fadeIn)) { contentOpacity = 1 }
         }
@@ -198,6 +214,8 @@ struct OrchestratorExpandedView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, open ? 8 : 0)
         .padding(.top, open ? 0 : 6) // bottom comes only from ContentView's 12pt, same as at open
+        // Under contentOpacity: the badge fades out and in with the rest of the content on a level change.
+        .overlay(alignment: .top) { if runLog.runID == nil { OrchestratorUpdateBadge().padding(.top, 4) } }
         .opacity(contentOpacity)
         .animation(railSpring, value: collapsed)
         .frame(width: held?.width, height: held?.height)
