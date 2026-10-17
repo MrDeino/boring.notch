@@ -137,10 +137,69 @@ func chatTail(screen: String, maxLines: Int) -> [String] {
     return Array(lines.filter { !isRule($0) }.suffix(maxLines))
 }
 
-/// GET /api/state. Only runs and usage are decoded; everything else is ignored.
+/// GET /api/state. Only runs, usage and deploys are decoded; everything else is ignored.
 struct StateResponse: Decodable {
     let runs: [OrchestratorRun]?
     let usage: OrchestratorUsage?
+    /// nil = old serve (no `deploys` key).
+    let deploys: [Deploy]?
+
+    init(runs: [OrchestratorRun]?, usage: OrchestratorUsage?, deploys: [Deploy]? = nil) {
+        self.runs = runs; self.usage = usage; self.deploys = deploys
+    }
+
+    private enum CodingKeys: String, CodingKey { case runs, usage, deploys }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        runs = try c.decodeIfPresent([OrchestratorRun].self, forKey: .runs)
+        usage = try c.decodeIfPresent(OrchestratorUsage.self, forKey: .usage)
+        deploys = (try? c.decodeIfPresent([LenientDeploy].self, forKey: .deploys))?.compactMap { $0.deploy } // a malformed deploys never takes the tab offline
+    }
+}
+
+private struct LenientDeploy: Decodable {
+    let deploy: Deploy?
+    init(from decoder: Decoder) { deploy = Deploy(lenient: decoder) }
+}
+
+/// One entry of serve's `deploys`. Lenient like OrchestratorRun: a field of the wrong type becomes nil;
+/// an entry without a project or a known state decodes to nil and is dropped.
+struct Deploy: Decodable, Equatable {
+    struct PR: Equatable { let number: Int?; let title: String? }
+    let project: String
+    /// "building" | "live" | "failed"
+    let state: String
+    let sha: String?
+    let pr: PR?
+    let startedAt: String?
+    let finishedAt: String?
+    let url: String?
+
+    private enum CodingKeys: String, CodingKey { case project, state, sha, pr, startedAt, finishedAt, url }
+    private enum PRKeys: String, CodingKey { case number, title }
+
+    init?(lenient decoder: Decoder) {
+        guard let c = try? decoder.container(keyedBy: CodingKeys.self),
+              let p = try? c.decodeIfPresent(String.self, forKey: .project), !p.isEmpty,
+              let s = try? c.decodeIfPresent(String.self, forKey: .state), ["building", "live", "failed"].contains(s) else { return nil }
+        project = p; state = s
+        sha = try? c.decodeIfPresent(String.self, forKey: .sha)
+        startedAt = try? c.decodeIfPresent(String.self, forKey: .startedAt)
+        finishedAt = try? c.decodeIfPresent(String.self, forKey: .finishedAt)
+        url = try? c.decodeIfPresent(String.self, forKey: .url)
+        if let pc = try? c.nestedContainer(keyedBy: PRKeys.self, forKey: .pr) {
+            pr = PR(number: try? pc.decodeIfPresent(Int.self, forKey: .number), title: try? pc.decodeIfPresent(String.self, forKey: .title))
+        } else { pr = nil }
+    }
+
+    init(from decoder: Decoder) throws {
+        guard let d = Deploy(lenient: decoder) else { throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "bad deploy")) }
+        self = d
+    }
+
+    /// Same deploy across state changes.
+    var key: String { "\(project)|\(sha ?? pr?.number.map(String.init) ?? "")" }
 }
 
 struct OrchestratorRun: Decodable, Equatable {

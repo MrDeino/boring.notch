@@ -7,6 +7,7 @@ import SwiftUI
 struct ClosedReplica: View {
     @ObservedObject var vm: BoringViewModel
     var music = false
+    var wide = false
     @ObservedObject var wings = OrchestratorWingsModel.shared
     @ObservedObject var approvals = OrchestratorApprovalCenter.shared
 
@@ -36,7 +37,7 @@ struct ClosedReplica: View {
         .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: approvals.approval != nil ? OT.R.approvalPanel : 12, bottomTrailingRadius: approvals.approval != nil ? OT.R.approvalPanel : 12))
         .overlay { OrchestratorClosedIndicators() }
         .offset(x: music ? 0 : wings.shiftX)
-        .frame(width: approvals.approval != nil ? 520 : 440, height: approvals.approval != nil ? 190 : 56, alignment: .top)
+        .frame(width: approvals.approval != nil ? 520 : wide ? 640 : 440, height: approvals.approval != nil ? 190 : 56, alignment: .top)
         .overlay(alignment: .top) { // where the hardware notch is
             Rectangle().stroke(Color.red, lineWidth: 1).frame(width: vm.closedNotchSize.width, height: vm.closedNotchSize.height)
         }
@@ -57,21 +58,21 @@ extension Snap {
         func run(_ id: String, _ project: String, _ state: String, ago: TimeInterval) -> String {
             #"{"id":"\#(id)","project":"\#(project)","state":"\#(state)","startedAt":"\#(iso.string(from: Date().addingTimeInterval(-ago)))"}"#
         }
-        func state(_ runs: [String]) -> StateResponse {
-            try! JSONDecoder().decode(StateResponse.self, from: Data(#"{"runs":[\#(runs.joined(separator: ","))],"usage":{"five_hour":{"used_percentage":42,"resets_at":1791954000}}}"#.utf8))
+        func state(_ runs: [String], deploys: [String] = []) -> StateResponse {
+            try! JSONDecoder().decode(StateResponse.self, from: Data(#"{"runs":[\#(runs.joined(separator: ","))],"deploys":[\#(deploys.joined(separator: ","))],"usage":{"five_hour":{"used_percentage":42,"resets_at":1791954000}}}"#.utf8))
         }
         let working = ChatResponse(running: true, screen: "✻ Working… (41s · ↑ 1.2k tokens · esc to interrupt)\n")
         let idle = ChatResponse(running: true, screen: "")
-        func apply(_ c: ChatResponse, _ runs: [String]) async {
-            await m.snapshotApply(loaded: true, chat: c, state: state(runs))
+        func apply(_ c: ChatResponse, _ runs: [String], deploys: [String] = []) async {
+            await m.snapshotApply(loaded: true, chat: c, state: state(runs, deploys: deploys))
             try? await Task.sleep(for: .milliseconds(50)) // wings recompute on the next main-queue turn
         }
-        func shot(_ name: String, music: Bool = false, height: CGFloat = 32, panel: Bool = false) async {
-            let W: CGFloat = panel ? 520 : 440, H: CGFloat = panel ? 190 : 56
+        func shot(_ name: String, music: Bool = false, height: CGFloat = 32, panel: Bool = false, wide: Bool = false) async {
+            let W: CGFloat = panel ? 520 : wide ? 640 : 440, H: CGFloat = panel ? 190 : 56
             let vm = BoringViewModel()
             vm.notchState = .closed
             vm.closedNotchSize = CGSize(width: 185, height: height)
-            let host = NSHostingView(rootView: ClosedReplica(vm: vm, music: music))
+            let host = NSHostingView(rootView: ClosedReplica(vm: vm, music: music, wide: wide))
             let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: W, height: H),
                                   styleMask: .borderless, backing: .buffered, defer: false)
             host.frame = NSRect(x: 0, y: 0, width: W, height: H)
@@ -120,6 +121,26 @@ extension Snap {
         await apply(idle, [r1]); await apply(idle, [run("r1", "notch", "failed", ago: 4320)]); await shot("17-finished-failed-38", height: 38)
         try? await Task.sleep(for: .seconds(4))
         await apply(working, [r1, r2]); await shot("18-working-hour-count-38", height: 38)
+
+        // Deploys: building wing with elapsed, live flash (6s), failed sticky; needs-you beats it, it beats working.
+        func deploy(_ state: String, ago: TimeInterval, done: TimeInterval? = nil, sha: String = "abc1234") -> String {
+            #"{"project":"gg-app","state":"\#(state)","sha":"\#(sha)","pr":{"number":231,"title":"Tidy the widgets"},"startedAt":"\#(iso.string(from: Date().addingTimeInterval(-ago)))","finishedAt":\#(done.map { "\"\(iso.string(from: Date().addingTimeInterval(-$0)))\"" } ?? "null"),"url":"https://example.test/gg-app"}"#
+        }
+        await apply(idle, [], deploys: []); await shot("30-deploy-none", wide: true)
+        await apply(idle, [], deploys: [deploy("building", ago: 41)]); await shot("31-deploy-building", wide: true)
+        await apply(working, [r1], deploys: [deploy("building", ago: 41)]); await shot("32-deploy-beats-working", wide: true)
+        await apply(idle, [run("w", "notch", "waiting", ago: 60)], deploys: [deploy("building", ago: 41)]); await shot("33-needs-you-beats-deploy", wide: true)
+        await apply(idle, [], deploys: [deploy("building", ago: 41)])
+        await apply(idle, [], deploys: [deploy("live", ago: 95, done: 1)]); await shot("34-deploy-live", wide: true)
+        try? await Task.sleep(for: .seconds(6.2))
+        await shot("35-deploy-live-after-6s-nothing", wide: true)
+        await apply(idle, [], deploys: [deploy("building", ago: 20, sha: "d4")])
+        await apply(idle, [], deploys: [deploy("failed", ago: 50, done: 1, sha: "d4")]); await shot("36-deploy-failed", wide: true)
+        try? await Task.sleep(for: .seconds(7))
+        await shot("37-deploy-failed-sticky", wide: true)
+        OrchestratorWingsModel.shared.dismissDeployFailure()
+        try? await Task.sleep(for: .milliseconds(50)); await shot("38-deploy-failed-dismissed", wide: true)
+        await apply(idle, [], deploys: [])
 
         // Phase 9: approval drop-down. Over music, over wings (needs-you), over the bare notch; then back to music.
         let ap = ChatResponse.approvalFixture

@@ -21,6 +21,7 @@
 		0A1C00000000000000000459 /* OrchestratorRunsPure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000409 /* OrchestratorRunsPure.swift */; };
 		0A1C00000000000000000460 /* OrchestratorExpanded.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000410 /* OrchestratorExpanded.swift */; };
 		0A1C00000000000000000461 /* OrchestratorWings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000411 /* OrchestratorWings.swift */; };
+		0A1C0000000000000000A001 /* OrchestratorKeyQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C0000000000000000A002 /* OrchestratorKeyQueue.swift */; };
 		0A1C00000000000000000901 /* OrchestratorApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000902 /* OrchestratorApproval.swift */; };
 		0A1C00000000000000000462 /* OrchestratorStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000412 /* OrchestratorStream.swift */; };
 		0A1C00000000000000000463 /* OrchestratorComposerInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000413 /* OrchestratorComposerInput.swift */; };
@@ -216,6 +217,7 @@
 		0A1C00000000000000000409 /* OrchestratorRunsPure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorRunsPure.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000410 /* OrchestratorExpanded.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorExpanded.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000411 /* OrchestratorWings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorWings.swift; sourceTree = "<group>"; };
+		0A1C0000000000000000A002 /* OrchestratorKeyQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorKeyQueue.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000902 /* OrchestratorApproval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorApproval.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000412 /* OrchestratorStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorStream.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000413 /* OrchestratorComposerInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorComposerInput.swift; sourceTree = "<group>"; };
@@ -416,6 +418,7 @@
 				0A1C00000000000000000409 /* OrchestratorRunsPure.swift */,
 				0A1C00000000000000000410 /* OrchestratorExpanded.swift */,
 				0A1C00000000000000000411 /* OrchestratorWings.swift */,
+				0A1C0000000000000000A002 /* OrchestratorKeyQueue.swift */,
 				0A1C00000000000000000902 /* OrchestratorApproval.swift */,
 				0A1C00000000000000000412 /* OrchestratorStream.swift */,
 				0A1C00000000000000000413 /* OrchestratorComposerInput.swift */,
@@ -990,6 +993,7 @@
 				0A1C00000000000000000459 /* OrchestratorRunsPure.swift in Sources */,
 				0A1C00000000000000000460 /* OrchestratorExpanded.swift in Sources */,
 				0A1C00000000000000000461 /* OrchestratorWings.swift in Sources */,
+				0A1C0000000000000000A001 /* OrchestratorKeyQueue.swift in Sources */,
 				0A1C00000000000000000901 /* OrchestratorApproval.swift in Sources */,
 				0A1C00000000000000000462 /* OrchestratorStream.swift in Sources */,
 				0A1C00000000000000000463 /* OrchestratorComposerInput.swift in Sources */,

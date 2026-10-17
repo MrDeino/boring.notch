@@ -60,6 +60,13 @@ struct NotchReplica: View {
     }
 }
 
+/// A synthetic `deploys` entry started `ago` seconds ago (finished `done` seconds ago).
+func snapDeploy(_ state: String, ago: TimeInterval, done: TimeInterval? = nil, sha: String = "abc1234") -> String {
+    let iso = ISO8601DateFormatter()
+    let end = done.map { "\"\(iso.string(from: Date().addingTimeInterval(-$0)))\"" } ?? "null"
+    return #"{"project":"gg-app","state":"\#(state)","sha":"\#(sha)","pr":{"number":231,"title":"Tidy the widgets"},"startedAt":"\#(iso.string(from: Date().addingTimeInterval(-ago)))","finishedAt":\#(end),"url":"https://example.test/gg-app"}"#
+}
+
 func fixture(_ name: String) -> String {
     let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("Tests/fixtures")
@@ -172,6 +179,8 @@ struct Scene {
     var runsBoard = false
     var expanded = false
     var railCollapsed = false
+    /// serve `deploys` entries (JSON objects) for the state.
+    var deploys: [String] = []
     var pressed: Int?
     var note: String?
     var pending: [Int: Bool] = [:]
@@ -221,9 +230,15 @@ struct Snap {
             NSApp.setActivationPolicy(.accessory)
             exit(await cardFitPass() ? 0 : 1)
         }
+        if CommandLine.arguments.contains("--cardclick") {
+            _ = NSApplication.shared
+            NSApp.setActivationPolicy(.accessory)
+            exit(await cardClickPass() ? 0 : 1)
+        }
         if CommandLine.arguments.contains("--closed") { await closed(); return }
         if CommandLine.arguments.contains("--askmock") { await askMock(); return }
         if CommandLine.arguments.contains("--sendmock") { await sendMock(); return }
+        if CommandLine.arguments.contains("--keymock") { await keyMock(); return }
         if CommandLine.arguments.contains("--idle") { await idle(); return }
         if CommandLine.arguments.contains("--frames") { await frames(); return }
         if CommandLine.arguments.contains("--paint") { await paint(); return }
@@ -329,6 +344,9 @@ struct Snap {
             Scene(name: "59-ask-leadin-real-2q", chat: askChat("leadin-2q.txt"), blocks: heldBlocks, expanded: true),
             Scene(name: "60-live-reply-open", chat: liveChat, blocks: heldBlocks),
             Scene(name: "61-live-reply-expanded", chat: liveChat, blocks: heldBlocks, expanded: true),
+            Scene(name: "66-deploy-row-building-open", chat: chat(""), blocks: shortBlocks, deploys: [snapDeploy("building", ago: 41)]),
+            Scene(name: "67-deploy-row-live-expanded", chat: chat(""), blocks: shortBlocks, expanded: true, deploys: [snapDeploy("building", ago: 300, sha: "e5"), snapDeploy("live", ago: 140, done: 30)]),
+            Scene(name: "68-deploy-row-failed-open", chat: chat(""), blocks: shortBlocks, deploys: [snapDeploy("failed", ago: 75, done: 20)]),
             Scene(name: "57-runlog-open", chat: chat(""), blocks: longBlocks, logRun: "261014024541-r002"),
         ]
 
@@ -339,7 +357,7 @@ struct Snap {
             orchSnapDiffOpen = s.diffOpen
             let vm = BoringViewModel()
             let m = OrchestratorManager.shared
-            await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: s.calm ? StateResponse(runs: [], usage: nil) : state, runsBoard: s.runsBoard)
+            await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: s.calm ? StateResponse(runs: [], usage: nil) : StateResponse(runs: state.runs, usage: state.usage, deploys: s.deploys.isEmpty ? nil : try! JSONDecoder().decode([Deploy].self, from: Data("[\(s.deploys.joined(separator: ","))]".utf8))), runsBoard: s.runsBoard)
             OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends, attachments: s.attachments, draft: s.draft)
             OrchestratorFileQueue.shared.snapshotSet(s.files)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed

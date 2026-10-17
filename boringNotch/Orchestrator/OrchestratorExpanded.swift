@@ -197,7 +197,10 @@ struct OrchestratorExpandedView: View {
         let collapsed = persisted && !rail.autoOpened
         let open = level == .open
         HStack(alignment: .top, spacing: open ? 0 : 12) {
-            column(level).frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 4) {
+                OrchestratorDeployRows()
+                column(level).frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
             if !open {
                 // Pinned top/trailing by its own frame, so nothing in the column (a card leaving) can move it.
                 VStack(spacing: 8) {
@@ -260,6 +263,8 @@ struct OrchestratorExpandedView: View {
                 }
                 if promptVisible { OrchestratorPromptCard() }
             }
+            // Open with a card up: a click on anything that is not a control expands, like a click on the transcript.
+            .expandsOnTap(open && promptVisible)
         }
     }
 
@@ -309,4 +314,76 @@ private struct PromptContextView: View {
     }
 
     private func fit() { OrchestratorExpand.shared.setFit("prompt", extra: height + 6, vm: vm, window: anchor.window) }
+}
+
+
+extension View {
+    /// A click on this view's empty space expands the notch from the open level (what a click on the transcript does).
+    /// Buttons and the text field claim their own taps, so only non-controls reach it.
+    func expandsOnTap(_ on: Bool = true) -> some View { modifier(ExpandOnTap(on: on)) }
+}
+
+private struct ExpandOnTap: ViewModifier {
+    let on: Bool
+    @EnvironmentObject private var vm: BoringViewModel
+    @State private var anchor = NSView() // growing needs the panel
+    func body(content: Content) -> some View {
+        content.background {
+            if on {
+                // A plain Button, not onTapGesture: a bare tap gesture on empty space does not fire next to the question's AppKit scroll view.
+                Button { OrchestratorExpand.shared.transcriptTapped(vm: vm, window: anchor.window) } label: { Color.clear.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+                    .background(WindowAnchor(view: anchor).allowsHitTesting(false))
+            }
+        }
+    }
+}
+
+/// Open/expanded notch: one small line per recent deploy (project · PR, title, state, elapsed). Click opens its URL.
+/// Hidden while a prompt card needs the room, offline, or on the terminal.
+struct OrchestratorDeployRows: View {
+    @ObservedObject var manager = OrchestratorManager.shared
+    @ObservedObject var expand = OrchestratorExpand.shared
+    @EnvironmentObject var vm: BoringViewModel
+
+    var body: some View {
+        if manager.hasLoaded && !manager.offline && manager.prompt == nil && expand.level(for: vm) != .terminal && !manager.deploys.isEmpty {
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                let rows = deployRows(manager.deploys, now: ctx.date)
+                VStack(spacing: 2) { ForEach(rows, id: \.key) { DeployRow(deploy: $0, now: ctx.date) } }
+            }
+        }
+    }
+}
+
+struct DeployRow: View {
+    let deploy: Deploy
+    let now: Date
+
+    private var color: Color { deploy.state == "live" ? OT.C.green : deploy.state == "failed" ? OT.C.red : OT.C.claude }
+
+    var body: some View {
+        let state = deploy.state == "building" ? "deploying…" : deploy.state == "live" ? "live ✓" : "✗ deploy failed"
+        let url = deployURL(deploy)
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(verbatim: deployLabel(deploy)).font(.system(size: 11, weight: .medium)).foregroundStyle(OT.C.text)
+            if let t = deploy.pr?.title, !t.isEmpty {
+                Text(verbatim: t).font(.system(size: 11)).foregroundStyle(OT.C.text4).lineLimit(1).truncationMode(.tail)
+            }
+            Spacer(minLength: 4)
+            Text(verbatim: state).font(.system(size: 11)).foregroundStyle(color)
+            if let e = deployElapsed(deploy, now: now) {
+                Text(verbatim: formatElapsed(e)).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(OT.C.text4)
+            }
+        }
+        .lineLimit(1)
+        .padding(.horizontal, 8).frame(height: 20)
+        .background(OT.C.raised, in: RoundedRectangle(cornerRadius: 6))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if let url { NSWorkspace.shared.open(url) }
+            OrchestratorWingsModel.shared.dismissDeployFailure()
+        }
+    }
 }

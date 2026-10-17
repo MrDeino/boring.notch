@@ -245,13 +245,86 @@ struct FinishedWings {
     }
 }
 
-/// working = agents at work (chat + running runs).
-enum WingKind: Equatable { case working(Int), needsYou(String), finished(String, failed: Bool) }
+/// working = agents at work (chat + running runs). deploying/deployed = a project deploy (building; live or failed).
+enum WingKind: Equatable { case working(Int), needsYou(String), finished(String, failed: Bool), deploying(String), deployed(String, failed: Bool) }
 
-func wingKind(needsYou: Bool, needsLabel: String, finished: (project: String, failed: Bool)?, workingCount: Int) -> WingKind? {
+/// needs-you > finished run (4s) > deploy > working count.
+func wingKind(needsYou: Bool, needsLabel: String, finished: (project: String, failed: Bool)?, workingCount: Int, deploy: WingKind? = nil) -> WingKind? {
     if needsYou { return .needsYou(needsLabel) }
     if let f = finished { return .finished(f.project, failed: f.failed) }
+    if let d = deploy { return d }
     return workingCount > 0 ? .working(workingCount) : nil
+}
+
+// MARK: - Deploys
+
+/// "gg-app · #231", or just the project without a PR.
+func deployLabel(_ d: Deploy) -> String { d.pr?.number.map { "\(d.project) · #\($0)" } ?? d.project }
+
+/// Building deploys first (newest start first), then the newest finished one if it ended within `recent` seconds. At most `limit`.
+func deployRows(_ deploys: [Deploy], now: Date, recent: TimeInterval = 600, limit: Int = 2) -> [Deploy] {
+    func started(_ d: Deploy) -> Date { parseRunDate(d.startedAt) ?? .distantPast }
+    let building = deploys.filter { $0.state == "building" }.sorted { started($0) > started($1) }
+    let done = deploys.filter { $0.state != "building" && (parseRunDate($0.finishedAt).map { now.timeIntervalSince($0) <= recent } ?? false) }
+        .max { (parseRunDate($0.finishedAt) ?? .distantPast) < (parseRunDate($1.finishedAt) ?? .distantPast) }
+    return Array((building + [done].compactMap { $0 }).prefix(limit))
+}
+
+/// Seconds a deploy has run: to `finishedAt` once finished, else to `now`.
+func deployElapsed(_ d: Deploy, now: Date) -> TimeInterval? {
+    parseRunDate(d.startedAt).map { (d.state == "building" ? now : parseRunDate(d.finishedAt) ?? now).timeIntervalSince($0) }
+}
+
+/// The deploy URL if it is a web link (the row opens it in the browser).
+func deployURL(_ d: Deploy) -> URL? {
+    guard let s = d.url, let u = URL(string: s), ["http", "https"].contains(u.scheme?.lowercased() ?? ""), u.host != nil else { return nil }
+    return u
+}
+
+/// The closed-notch deploy wing: the newest building deploy; a 6s "live" flash when one turns live (wins over building);
+/// a failed deploy stays until `dismissFailed()` or the next deploy starts.
+struct DeployWings {
+    private var seen: [String: String]?
+    private var stale = true
+    private var building: Deploy?
+    private var flash: (label: String, failed: Bool)?
+    /// Bumps with every flash, so a stale 6s timer can tell it no longer owns the flash.
+    private(set) var flashGen = 0
+
+    var kind: WingKind? {
+        if let f = flash, !f.failed { return .deployed(f.label, failed: false) }
+        if let b = building { return .deploying(deployLabel(b)) }
+        if let f = flash { return .deployed(f.label, failed: true) }
+        return nil
+    }
+    var buildingStart: Date? { building.flatMap { parseRunDate($0.startedAt) } }
+
+    /// Feeds the latest deploys. True when a live flash just started (the caller arms the 6s expiry).
+    /// No baseline until loaded and online, nor from the empty list offline leaves behind: deploys already finished then show nothing.
+    mutating func ingest(_ deploys: [Deploy], offline: Bool, loaded: Bool) -> Bool {
+        if !loaded || offline { seen = nil; stale = true; building = nil; flash = nil; return false }
+        if stale && deploys.isEmpty { return false }
+        let old = seen
+        stale = false
+        seen = Dictionary(deploys.map { ($0.key, $0.state) }, uniquingKeysWith: { _, b in b })
+        building = deploys.filter { $0.state == "building" }.max { (parseRunDate($0.startedAt) ?? .distantPast) < (parseRunDate($1.startedAt) ?? .distantPast) }
+        guard let old else { return false }
+        var live = false
+        for d in deploys where old[d.key] != d.state {
+            switch d.state {
+            case "building": if flash?.failed == true { flash = nil } // the next deploy
+            case "failed": flash = (deployLabel(d), true); flashGen += 1
+            default: flash = (deployLabel(d), false); flashGen += 1; live = true
+            }
+        }
+        return live
+    }
+    /// The 6s are up for flash `gen`; a failed flash never expires this way.
+    mutating func expire(gen: Int) {
+        if gen == flashGen, flash?.failed == false { flash = nil }
+    }
+    /// The user clicked / opened the notch: a failed flash goes.
+    mutating func dismissFailed() { if flash?.failed == true { flash = nil } }
 }
 
 func workingCount(chatWorking: Bool, runs: [OrchestratorRun]) -> Int {
