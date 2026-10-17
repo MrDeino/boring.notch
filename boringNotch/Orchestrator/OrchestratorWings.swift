@@ -6,6 +6,8 @@ import Combine
 struct WingTiming: Equatable {
     var chatElapsed: TimeInterval?
     var starts: [Date]
+    /// startedAt of the building deploy wing.
+    var deployStart: Date? = nil
 }
 
 /// The small inputs of the closed-notch views, split from `OrchestratorWingsModel` because ContentView observes that
@@ -35,6 +37,8 @@ final class OrchestratorWingsModel: ObservableObject {
     private let inputs = OrchestratorWingsInputs.shared
     private let manager = OrchestratorManager.shared
     private var wings = FinishedWings()
+    private var deployWings = DeployWings()
+    private var deploys: [Deploy] = []
     /// The runs as last published. `$runs` fires in willSet, when `manager.runs` is still the old value.
     private var runs: [OrchestratorRun] = []
     private var cancellables = Set<AnyCancellable>()
@@ -43,6 +47,9 @@ final class OrchestratorWingsModel: ObservableObject {
         _ = OrchestratorRailState.shared // eager, so its waiting baseline exists before the first expand (WR-02)
         manager.$runs.combineLatest(manager.$offline, manager.$hasLoaded)
             .sink { [weak self] runs, offline, loaded in self?.runsChanged(runs, offline, loaded) }
+            .store(in: &cancellables)
+        manager.$deploys.combineLatest(manager.$offline, manager.$hasLoaded)
+            .sink { [weak self] deploys, offline, loaded in self?.deploysChanged(deploys, offline, loaded) }
             .store(in: &cancellables)
         // Chat status, prompt and attention publish through the manager; read after the change has landed.
         manager.objectWillChange.receive(on: DispatchQueue.main)
@@ -54,6 +61,22 @@ final class OrchestratorWingsModel: ObservableObject {
         self.runs = runs
         if wings.ingest(runs, offline: offline, loaded: loaded) { armExpiry() } // the manager's own publish recomputes
     }
+
+    private func deploysChanged(_ deploys: [Deploy], _ offline: Bool, _ loaded: Bool) {
+        self.deploys = deploys
+        if deployWings.ingest(deploys, offline: offline, loaded: loaded) {
+            let gen = deployWings.flashGen
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(6))
+                self?.deployWings.expire(gen: gen)
+                self?.recompute()
+            }
+        }
+        recompute() // $deploys fires in willSet: the manager's own publish may not follow
+    }
+
+    /// The notch was opened (or the deploy row clicked): a failed-deploy wing goes.
+    func dismissDeployFailure() { deployWings.dismissFailed(); recompute() }
 
     private func armExpiry() {
         Task { [weak self] in
@@ -72,14 +95,15 @@ final class OrchestratorWingsModel: ObservableObject {
     private func recompute() {
         let dot = (manager.needsAttention || manager.claudeUpdateReady) && !manager.offline
         if dot != inputs.attentionDot { inputs.attentionDot = dot }
-        let t = WingTiming(chatElapsed: manager.liveStatus?.elapsed, starts: runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt) })
+        let t = WingTiming(chatElapsed: manager.liveStatus?.elapsed, starts: runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt) }, deployStart: deployWings.buildingStart)
         if t != inputs.timing { inputs.timing = t }
         var k: WingKind? = nil
         if manager.hasLoaded && !manager.offline {
             let label = wingLabel(promptTitle: manager.prompt?.title,
                                   waitingDenials: runs.first { $0.state == "waiting" }?.denials)
             k = wingKind(needsYou: manager.needsAttention, needsLabel: label, finished: wings.current,
-                         workingCount: workingCount(chatWorking: manager.chatRunning && manager.liveStatus != nil, runs: runs))
+                         workingCount: workingCount(chatWorking: manager.chatRunning && manager.liveStatus != nil, runs: runs),
+                         deploy: deployWings.kind)
         }
         if k != kind {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { kind = k }
@@ -112,6 +136,7 @@ struct OrchestratorWingsView: View {
     }
 
     private func elapsedText(_ now: Date) -> String {
+        if case .deploying = model.kind { return inputs.timing.deployStart.map { formatElapsed(now.timeIntervalSince($0)) } ?? "" }
         guard case .working = model.kind else { return "" }
         let chat = inputs.timing.chatElapsed.map { $0 + now.timeIntervalSince(inputs.chatAt) }
         return longestWorking(chatElapsed: chat, starts: inputs.timing.starts, now: now).map(formatElapsed) ?? ""
@@ -123,8 +148,10 @@ struct OrchestratorWingsView: View {
             WingSpinner(size: 15)
         case .needsYou:
             WingGlowDot()
-        case .finished(_, let failed):
+        case .finished(_, let failed), .deployed(_, let failed):
             FinishedMark(failed: failed, size: 13)
+        case .deploying:
+            WingSpinner(size: 15)
         }
     }
 
@@ -147,6 +174,17 @@ struct OrchestratorWingsView: View {
                 .padding(.vertical, 2).padding(.horizontal, 8)
                 .background(OT.C.orangeBg, in: RoundedRectangle(cornerRadius: 9))
                 .lineLimit(1).fixedSize()
+        case .deploying(let label):
+            HStack(spacing: 4) {
+                Text(verbatim: "\(label) deploying…").font(.system(size: 11)).foregroundStyle(OT.C.text4).lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: 200, alignment: .leading).fixedSize(horizontal: true, vertical: false)
+                Text(verbatim: elapsed).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(OT.C.text4)
+            }
+            .lineLimit(1).fixedSize()
+        case .deployed(let label, let failed):
+            Text(verbatim: failed ? "\(label) ✗ deploy failed" : "\(label) live ✓").font(.system(size: 11))
+                .foregroundStyle(failed ? OT.C.red : OT.C.green).lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: 220, alignment: .leading).fixedSize(horizontal: true, vertical: false)
         case .finished(let project, _):
             Text(verbatim: project).font(.system(size: 11)).foregroundStyle(OT.C.text4).lineLimit(1).truncationMode(.tail)
                 .frame(maxWidth: 200, alignment: .leading).fixedSize(horizontal: true, vertical: false)

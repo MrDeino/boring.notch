@@ -14,6 +14,8 @@ final class OrchestratorManager: ObservableObject {
     @Published private(set) var screen = ""
     @Published private(set) var runs: [OrchestratorRun] = []
     @Published private(set) var usage: OrchestratorUsage?
+    /// serve's `deploys`; empty on an old serve.
+    @Published private(set) var deploys: [Deploy] = []
     @Published private(set) var promptOptions: [PromptOption] = []
     /// A run is waiting or the chat shows a prompt. Deliberately independent of music/tab/notch state.
     var needsAttention: Bool { runs.contains { $0.state == "waiting" } || !promptOptions.isEmpty }
@@ -116,6 +118,7 @@ final class OrchestratorManager: ObservableObject {
         didSet {
             // Typing teardown is owned by OrchestratorView (close() is blocked while typing).
             if notchOpen && !oldValue && !streaming { Task { await refresh() } }
+            if notchOpen && !oldValue { OrchestratorWingsModel.shared.dismissDeployFailure() }
             if !notchOpen { OrchestratorExpand.shared.reset(); statusMenuOpen = false; notesOpen = false }
         }
     }
@@ -210,7 +213,7 @@ final class OrchestratorManager: ObservableObject {
                 guard let self else { return }
                 if self.streaming { try? await Task.sleep(for: .seconds(2)); continue }
                 await self.refresh()
-                let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning || self.runs.contains { $0.state == "running" }, offline: self.offline,
+                let secs = pollInterval(notchOpen: self.notchOpen, chatRunning: self.chatRunning || self.runs.contains { $0.state == "running" } || self.deploys.contains { $0.state == "building" }, offline: self.offline,
                                     turnLive: (self.chatLive ?? (self.liveStatus != nil)) && BoringViewCoordinator.shared.currentView == .orchestrator)
                 try? await Task.sleep(for: .seconds(secs))
             }
@@ -257,6 +260,8 @@ final class OrchestratorManager: ObservableObject {
                             // First blocks event of a connection replaces; pending rows survive (store keeps them).
                             OrchestratorTranscriptStore.shared.ingestBlocks(running: running, blocks: blocks, reset: first || reset)
                             first = false
+                        case .deploys(let list): if self.deploys != list { self.deploys = list }
+                        case .deploy(let d): self.upsertDeploy(d)
                         case .approval(let a): self.applySeq += 1; self.applyApproval(a) // joins the sequence so an older poll cannot overwrite it
                         }
                         if !self.hasLoaded { self.hasLoaded = true }
@@ -310,7 +315,14 @@ final class OrchestratorManager: ObservableObject {
         if !hasLoaded { hasLoaded = true }
     }
 
+    private func upsertDeploy(_ d: Deploy) {
+        var l = deploys
+        if let i = l.firstIndex(where: { $0.project == d.project }) { l[i] = d } else { l.append(d) }
+        if deploys != l { deploys = l }
+    }
+
     private func applyState(_ st: StateResponse) {
+        if let ds = st.deploys, deploys != ds { deploys = ds } // before `offline` clears, so the wings never see a reconnect with stale deploys
         if offline { offline = false }
         let rs = st.runs ?? []
         if runs != rs { runs = rs }
@@ -373,6 +385,7 @@ final class OrchestratorManager: ObservableObject {
     private func applyOffline() {
         if !offline { offline = true }
         if !runs.isEmpty { runs = [] }
+        if !deploys.isEmpty { deploys = [] }
         if rawApproval != nil || approval != nil { applyApproval(nil) }
         if !promptOptions.isEmpty { promptOptions = [] }
         if prompt != nil { prompt = nil }
