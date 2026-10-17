@@ -179,6 +179,11 @@ final class OrchestratorManager: ObservableObject {
     func startChat() async { await post(.start) }
     func stopChat() async { await post(.stop) }
 
+    /// One key outside the `sending` window: the prompt card's queue sends back-to-back while the rest of the UI stays live.
+    func postKey(_ k: String) async -> Bool {
+        (try? await sendOrchestratorPost(.key(k), base: Self.baseURL, session: session)) == 200
+    }
+
     /// A key sequence in one `sending` window. Stops at the first non-200; true only if every key landed.
     func pressKeys(_ keys: [String]) async -> Bool {
         guard !sending else { return false }
