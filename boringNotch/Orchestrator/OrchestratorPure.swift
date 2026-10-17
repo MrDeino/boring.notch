@@ -217,3 +217,14 @@ func approvalSummary(_ a: OrchestratorApproval) -> ApprovalSummary {
     if lines.count > 4 { let n = lines.count - 4; lines = Array(lines.prefix(4)) + ["+\(n) more"] }
     return ApprovalSummary(caption: desc.isEmpty ? nil : desc, lines: lines, mono: false)
 }
+
+/// Card region height at the open notch with no fit asked (measured by run.sh --cardfit, which fails when it drifts).
+let promptCardBase: CGFloat = 136
+
+/// Extra notch height a prompt card needs so `need` (its content plus its fixed chrome) shows without scrolling.
+func promptFitExtra(need: CGFloat, base: CGFloat = promptCardBase) -> CGFloat { max(0, (need - base).rounded()) }
+
+/// Tallest notch a prompt card may ask for: most of the screen below the menu bar (the card scrolls past this).
+func promptCardMaxHeight(screen: CGSize) -> CGFloat {
+    max(expandedSize(screen: screen).height, screen.height - 80)
+}

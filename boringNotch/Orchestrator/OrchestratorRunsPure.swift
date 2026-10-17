@@ -224,6 +224,27 @@ func finishedTransitions(old: [String: String]?, new: [OrchestratorRun]) -> [Orc
         .sorted { (parseRunDate($0.startedAt) ?? .distantPast) < (parseRunDate($1.startedAt) ?? .distantPast) }
 }
 
+/// The finished-wing queue: each running/stuck -> done/failed run gets its own 4s wing, in turn.
+struct FinishedWings {
+    private var baseline = RunsBaseline()
+    private var queue: [(project: String, failed: Bool)] = []
+    private(set) var current: (project: String, failed: Bool)?
+    /// Feeds the latest runs. True when a wing just started (the caller arms the 4s expiry).
+    mutating func ingest(_ runs: [OrchestratorRun], offline: Bool, loaded: Bool) -> Bool {
+        for r in finishedTransitions(old: baseline.advance(runs, offline: offline, loaded: loaded), new: runs) {
+            queue.append((r.project ?? "Run", r.state == "failed"))
+        }
+        return current == nil && advance()
+    }
+    /// The 4s are up: drops the shown wing and starts the next. True when another started.
+    mutating func expire() -> Bool { current = nil; return advance() }
+    private mutating func advance() -> Bool {
+        guard !queue.isEmpty else { return false }
+        current = queue.removeFirst()
+        return true
+    }
+}
+
 /// working = agents at work (chat + running runs).
 enum WingKind: Equatable { case working(Int), needsYou(String), finished(String, failed: Bool) }
 

@@ -324,6 +324,43 @@ private extension EnvironmentValues {
     var promptWindow: NSView { get { self[PromptWindowKey.self] } set { self[PromptWindowKey.self] = newValue } }
 }
 
+extension View {
+    fileprivate func measureHeight(_ h: Binding<CGFloat>) -> some View {
+        onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h.wrappedValue = $0 }
+    }
+    /// At the open level the notch grows to the card's natural height (see promptFitExtra); the scroll only takes over past the cap.
+    fileprivate func promptFit(content: CGFloat, viewport: CGFloat, card: CGFloat) -> some View {
+        modifier(PromptFit(need: content > 0 && viewport > 0 && card > 0 ? (content + card - viewport).rounded() : 0))
+    }
+}
+
+/// Reports the card's need once per change (a short settle filters the mid-layout readings), asks 0 when it leaves.
+private struct PromptFit: ViewModifier {
+    let need: CGFloat
+    @EnvironmentObject private var vm: BoringViewModel
+    @ObservedObject private var expand = OrchestratorExpand.shared
+    @Environment(\.promptWindow) private var anchor
+
+    func body(content: Content) -> some View {
+        content
+            .task(id: "\(need)\(expand.level(for: vm) == .open)") {
+                try? await Task.sleep(for: .milliseconds(40))
+                guard !Task.isCancelled else { return }
+                #if ORCH_SNAPSHOT
+                PromptFitProbe.last = need
+                #endif
+                let extra = need > 0 && expand.level(for: vm) == .open ? promptFitExtra(need: need) : 0
+                expand.setFit("card", extra: extra, vm: vm, window: anchor.window)
+            }
+            .onDisappear { expand.setFit("card", extra: 0, vm: vm, window: anchor.window) }
+    }
+}
+
+#if ORCH_SNAPSHOT
+/// Snapshot harness only: the last settled need reported by a card (content + its fixed chrome).
+@MainActor enum PromptFitProbe { static var last: CGFloat = 0 }
+#endif
+
 private let darkDesc = Color(red: 0x48 / 255, green: 0x48 / 255, blue: 0x4A / 255) // #48484A, not an OT token
 
 private struct PromptKeycap: View {
@@ -351,6 +388,9 @@ private struct PermissionCard: View {
     let card: PromptCard
     @ObservedObject private var manager = OrchestratorManager.shared
     @ObservedObject private var ctl = PromptCardController.shared
+    @State private var contentH: CGFloat = 0
+    @State private var viewportH: CGFloat = 0
+    @State private var cardH: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -362,16 +402,17 @@ private struct PermissionCard: View {
                 }
             }
             if let body = card.body {
-                let first = body.split(separator: "\n", omittingEmptySubsequences: true).first.map(String.init) ?? body
-                HStack(spacing: 0) {
-                    Text("$ ").foregroundStyle(OT.C.text6)
-                    Text(first).foregroundStyle(OT.C.text1)
+                ScrollView(.vertical, showsIndicators: false) {
+                    (Text("$ ").foregroundColor(OT.C.text6) + Text(body).foregroundColor(OT.C.text1))
+                        .font(OT.F.monoCommand)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, 8).padding(.horizontal, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(OT.C.raised, in: RoundedRectangle(cornerRadius: 8))
+                        .measureHeight($contentH)
                 }
-                .font(OT.F.monoCommand).lineLimit(1).truncationMode(.tail)
-                .padding(.vertical, 8).padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(OT.C.raised, in: RoundedRectangle(cornerRadius: 8))
-                .help(body)
+                .scrollBounceBehavior(.basedOnSize)
+                .measureHeight($viewportH)
             }
             Spacer(minLength: 0)
             HStack(spacing: 6) {
@@ -380,6 +421,8 @@ private struct PermissionCard: View {
                 ForEach(card.items.filter { $0.role == .deny }, id: \.number) { pill($0) }
             }
         }
+        .measureHeight($cardH)
+        .promptFit(content: contentH, viewport: viewportH, card: cardH)
     }
 
     private func pill(_ item: PromptCardOption) -> some View {
@@ -412,13 +455,13 @@ private struct QuestionCard: View {
     @ObservedObject private var ctl = PromptCardController.shared
     @Environment(\.promptWindow) private var anchor
     @EnvironmentObject private var vm: BoringViewModel
-    @ObservedObject private var expand = OrchestratorExpand.shared
     @FocusState private var fieldFocused: Bool
-    /// The open level is short: rows drop to one line (label + description) so more of the list shows before it scrolls.
-    private var compact: Bool { expand.level(for: vm) == .open }
+    @State private var contentH: CGFloat = 0
+    @State private var viewportH: CGFloat = 0
+    @State private var cardH: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? 5 : 8) {
+        VStack(alignment: .leading, spacing: 8) {
             PromptNote()
             if card.tabs.count > 1 {
                 tabRow
@@ -434,7 +477,7 @@ private struct QuestionCard: View {
             }
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: compact ? 4 : 5) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(card.question ?? "").font(OT.F.title).foregroundStyle(OT.C.text)
                             .lineSpacing(14 * 0.35).fixedSize(horizontal: false, vertical: true)
                         if card.review, let b = card.body {
@@ -443,14 +486,18 @@ private struct QuestionCard: View {
                         }
                         ForEach(card.items.filter { $0.role == .normal }, id: \.number) { row($0) }
                     }
+                    .measureHeight($contentH)
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                .measureHeight($viewportH)
                 .onChange(of: ctl.highlighted) { _, h in
                     if let h { withAnimation { proxy.scrollTo(h) } }
                 }
             }
             footer
         }
+        .measureHeight($cardH)
+        .promptFit(content: contentH, viewport: viewportH, card: cardH)
     }
 
     private var tabRow: some View {
@@ -481,30 +528,20 @@ private struct QuestionCard: View {
                     Image(systemName: box ? "checkmark.square.fill" : "square").font(.system(size: 13))
                         .foregroundStyle(hi ? Color.black : box ? OT.C.text : OT.C.text5)
                 }
-                if compact {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(item.label).font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(hi ? Color.black : OT.C.text).lineLimit(1)
-                        if let d = item.detail {
-                            Text(d).font(OT.F.meta).foregroundStyle(hi ? darkDesc : OT.C.text5).lineLimit(1)
-                        }
-                    }
-                } else {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.label).font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(hi ? Color.black : OT.C.text)
-                            .lineSpacing(12 * 0.3).fixedSize(horizontal: false, vertical: true)
-                        if let d = item.detail {
-                            Text(d).font(OT.F.meta).foregroundStyle(hi ? darkDesc : OT.C.text5)
-                                .lineSpacing(11 * 0.4).fixedSize(horizontal: false, vertical: true)
-                        }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.label).font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(hi ? Color.black : OT.C.text)
+                        .lineSpacing(12 * 0.3).fixedSize(horizontal: false, vertical: true)
+                    if let d = item.detail {
+                        Text(d).font(OT.F.meta).foregroundStyle(hi ? darkDesc : OT.C.text5)
+                            .lineSpacing(11 * 0.4).fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: 8)
                 PromptKeycap(text: "\(item.number)", light: hi)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, compact ? 5 : 8).padding(.horizontal, 10)
+            .padding(.vertical, 8).padding(.horizontal, 10)
             .background(hi ? OT.C.text : OT.C.raised, in: RoundedRectangle(cornerRadius: OT.R.cardM))
             .contentShape(Rectangle())
         }
