@@ -14,6 +14,7 @@
 #                                                                   width/height together check (FAIL when the shape grows one way first); even check (FAIL on a
 #                                                                   mid-spring jump over 0.05 of the travel in expand, 0.12 in collapse/close) (FRAMES_REPORT=1: never fail, FRAMES_TRACE=1: per-sample sizes)
 #        boringNotch/Orchestrator/Snapshots/run.sh --qlevel       ->  a question card arriving leaves the level alone (open stays open, expanded stays expanded, closed opens to open)
+#        boringNotch/Orchestrator/Snapshots/run.sh --cardfit      ->  question/permission card at the open level: notch grows to the content, stops at the cap, shrinks on dismiss, follows multi-question steps
 #        Redirect output to a file (> log) rather than piping: --hittest can leave a pipe open after it exits.
 set -e
 cd "$(dirname "$0")/../../.."

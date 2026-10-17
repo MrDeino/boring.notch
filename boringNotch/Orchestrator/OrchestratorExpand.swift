@@ -40,8 +40,11 @@ final class OrchestratorExpand: ObservableObject {
 
     private func fitHeight(_ k: ObjectIdentifier) -> CGFloat {
         let screen = windows[k]?.w?.screen?.frame.size ?? CGSize(width: 1440, height: 900)
-        let maxFit = expandedSize(screen: screen, openWidth: openNotchSize.width).height - openNotchSize.height
-        return min(maxFit, fits[k]?.values.max() ?? 0)
+        let f = fits[k] ?? [:], card = f["card"] ?? 0
+        // A prompt card is measured against the zero-fit open notch, so it adds to the lead-in's fit instead of competing with it.
+        let top = card > 0 ? promptCardMaxHeight(screen: screen) : expandedSize(screen: screen, openWidth: openNotchSize.width).height
+        let others = f.filter { $0.key != "prompt" && $0.key != "card" }.values.max() ?? 0
+        return min(top - openNotchSize.height, max(others, (f["prompt"] ?? 0) + card))
     }
 
     /// Content at the open level asks for `extra` more height than openNotchSize (capped at the expanded height).

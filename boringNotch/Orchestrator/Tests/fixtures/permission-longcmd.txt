@@ -1,0 +1,20 @@
+SYNTHETIC fixture (ASSUMED layout, not captured from Claude Code) - a Bash permission with a multi-line command
+⏺ Bash(sync-assets)
+────────────────────────────────────────────────────────────
+ Bash command
+ Sync the sample assets
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  set -e
+  for f in assets/*.png assets/*.svg; do
+    echo "copying $f to the staging folder before the nightly build picks it up"
+    cp "$f" staging/
+  done
+  tar -czf staging.tar.gz staging/ && echo "archive written: staging.tar.gz"
+  ls -l staging.tar.gz
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for sync-assets commands
+   3. No, and tell Claude what to do differently (esc)
+
+ Esc to cancel

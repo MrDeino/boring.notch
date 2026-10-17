@@ -215,6 +215,11 @@ struct Snap {
             NSApp.setActivationPolicy(.accessory)
             exit(await questionLevelPass() ? 0 : 1)
         }
+        if CommandLine.arguments.contains("--cardfit") {
+            _ = NSApplication.shared
+            NSApp.setActivationPolicy(.accessory)
+            exit(await cardFitPass() ? 0 : 1)
+        }
         if CommandLine.arguments.contains("--closed") { await closed(); return }
         if CommandLine.arguments.contains("--askmock") { await askMock(); return }
         if CommandLine.arguments.contains("--sendmock") { await sendMock(); return }
@@ -312,6 +317,8 @@ struct Snap {
             Scene(name: "51-ask-2q-multiselect", chat: askChat("multiselect-1.txt"), expanded: true),
             Scene(name: "62-ask-3opt-open", chat: askChat("question.txt")),
             Scene(name: "63-ask-6opt-open", chat: askChat("question6.txt")),
+            Scene(name: "64-ask-12opt-capped", chat: askChat("question-long.txt")),
+            Scene(name: "65-permission-longcmd-open", chat: chat(fixture("permission-longcmd.txt"))),
             Scene(name: "58-ask-leadin-long-2q", chat: askChat("leadin-long-2q.txt"), blocks: heldBlocks, expanded: true),
             Scene(name: "59-ask-leadin-real-2q", chat: askChat("leadin-2q.txt"), blocks: heldBlocks, expanded: true),
             Scene(name: "60-live-reply-open", chat: liveChat, blocks: heldBlocks),
