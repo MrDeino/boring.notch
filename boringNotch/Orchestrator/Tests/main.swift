@@ -102,9 +102,11 @@ runQuickCardFitTests()
 runQuickClaudeTests()
 runQuickMe4Tests()
 runQuickE1dTests()
+runQuickFilesTests()
 if ProcessInfo.processInfo.environment["ORCH_APPROVAL_MOCK"] != nil { await runPhase9Mock() }
 if ProcessInfo.processInfo.environment["ORCH_NOTES_MOCK"] != nil { await runQuickR8wMock() }
 if ProcessInfo.processInfo.environment["ORCH_IMAGE_MOCK"] != nil { await runQuickRm9Mock() }
+if ProcessInfo.processInfo.environment["ORCH_FILE_MOCK"] != nil { await runQuickFilesMock() }
 if ProcessInfo.processInfo.environment["ORCH_RESTART_MOCK"] != nil { await runQuickClaudeMock() }
 if ProcessInfo.processInfo.environment["ORCH_RETRY_MOCK"] != nil { await runQuickMe4Mock() }
 runQuickMe4SelectionTest()

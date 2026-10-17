@@ -4,6 +4,17 @@ import UniformTypeIdentifiers
 
 // Phase 5 owns this file.
 
+extension OrchestratorFileQueue {
+    // Own session: a 200 MB body outlasts the manager session's short request timeout.
+    static let shared = OrchestratorFileQueue(base: { OrchestratorManager.baseURL }, session: { uploadSession })
+    private static let uploadSession: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.timeoutIntervalForRequest = 60
+        c.timeoutIntervalForResource = 3600
+        return URLSession(configuration: c)
+    }()
+}
+
 @MainActor
 final class OrchestratorTranscriptStore: ObservableObject {
     static let shared = OrchestratorTranscriptStore()
@@ -111,12 +122,12 @@ final class OrchestratorTranscriptStore: ObservableObject {
     }
     func takeAttachments() -> [Data] { defer { attachments = [] }; return attachments }
 
-    func enqueue(_ text: String, images: [Data] = []) {
+    func enqueue(_ text: String, images: [Data] = [], files: [FileChip] = []) {
         // Older identical messages must not claim the new row.
         for b in blocks where b.kind == .user { knownUserIDs.insert(b.id) }
         nextPendingID += 1
         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-            pending.append(PendingMessage(id: nextPendingID, text: text, state: .queued, sentAt: nil, images: images))
+            pending.append(PendingMessage(id: nextPendingID, text: text, state: .queued, sentAt: nil, images: images, files: files))
         }
         drain()
     }
@@ -162,6 +173,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
         guard let i = pending.firstIndex(where: { $0.id == id }) else { return nil }
         let m = withAnimation { pending.remove(at: i) }
         attachments.insert(contentsOf: m.images, at: 0)
+        OrchestratorFileQueue.shared.restore(m.files)
         return (m.text, m.images)
     }
 
@@ -252,6 +264,7 @@ struct OrchestratorChatView: View {
     @State private var copyGen = 0
     @State private var tag: (text: String, error: Bool)?
     @ObservedObject var store = OrchestratorTranscriptStore.shared
+    @ObservedObject var files = OrchestratorFileQueue.shared
     private let showComposer: Bool
     private let proseLineLimit: Int?
     private let maxRows: Int
@@ -416,6 +429,10 @@ struct OrchestratorChatView: View {
                 .padding(.leading, expanded || textBlank ? 0 : 16) // text rows: past the marker column (10 + 6)
                 .opacity(0.5)
             }
+            if !p.files.isEmpty {
+                Text(verbatim: p.files.map { "📎 " + $0.name }.joined(separator: "  ")).font(OT.F.meta).foregroundStyle(OT.C.text5).lineLimit(1)
+                    .padding(.leading, expanded ? 0 : 16).opacity(0.5)
+            }
             if p.state == .failed {
                 HStack(spacing: 8) {
                     Text("Not sent").foregroundStyle(OT.C.redText)
@@ -477,7 +494,7 @@ struct OrchestratorChatView: View {
 
     private var composer: some View {
         VStack(spacing: 4) {
-            if !store.attachments.isEmpty { chipRow }
+            if !store.attachments.isEmpty || !files.isEmpty { chipRow }
             HStack(alignment: .bottom, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 0) {
                     if store.draftFromTerminal && !store.draft.isEmpty {
@@ -511,7 +528,7 @@ struct OrchestratorChatView: View {
                 if fieldFocused || dropTargeted { RoundedRectangle(cornerRadius: OT.R.pill30).stroke(OT.C.claude, lineWidth: 1.5) }
             }
         }
-        .onDrop(of: [.image, .fileURL], isTargeted: $dropTargeted) { providers in handleDrop(providers) }
+        .onDrop(of: [.image, .fileURL, .data], isTargeted: $dropTargeted) { providers in handleDrop(providers) }
         .onDisappear { OrchestratorExpand.shared.setFit("composer", extra: 0, vm: vm, window: anchor.window) }
     }
 
@@ -542,38 +559,44 @@ struct OrchestratorChatView: View {
                         .offset(x: 4, y: -4)
                     }
                 }
+                ForEach(files.chips) { fileChip($0) }
             }
             .padding(.leading, 14).padding(.trailing, 6).padding(.top, 4)
         }
         .frame(height: 38)
     }
 
-    private func attachImage(_ image: NSImage) {
-        guard let png = orchestratorPNG(from: image) else { flashTag("Couldn't paste image", error: true, ms: 1800); return }
-        guard png.count <= 10 * 1024 * 1024 else { flashTag("Image too big", error: true, ms: 1800); return }
-        store.attach(png)
+    /// Name, size and progress; a failed chip retries on click.
+    private func fileChip(_ c: FileChip) -> some View {
+        let status: String
+        switch c.state {
+        case .queued: status = "waiting"
+        case .uploading(let p): status = "\(Int((p * 100).rounded()))%"
+        case .done: status = orchestratorSizeLabel(c.size)
+        case .failed(let m): status = m
+        }
+        return HStack(spacing: 5) {
+            switch c.state {
+            case .done: Image(systemName: "checkmark.circle.fill").font(.system(size: 11)).foregroundStyle(OT.C.green)
+            case .failed: Image(systemName: "exclamationmark.circle.fill").font(.system(size: 11)).foregroundStyle(OT.C.redText)
+            case .uploading(let p): ProgressView(value: p).progressViewStyle(.circular).controlSize(.mini).frame(width: 11, height: 11)
+            case .queued: Image(systemName: "doc").font(.system(size: 11)).foregroundStyle(OT.C.text5)
+            }
+            Text(verbatim: c.name).font(OT.F.meta).foregroundStyle(OT.C.text2).lineLimit(1).truncationMode(.middle).frame(maxWidth: 110)
+            Text(verbatim: status).font(OT.F.hint)
+                .foregroundStyle(c.isFailed ? OT.C.redText : OT.C.text5).lineLimit(1)
+            Button { files.remove(c.id) } label: { Image(systemName: "xmark").font(.system(size: 7, weight: .bold)).foregroundStyle(OT.C.text4) }
+                .buttonStyle(.plain)
+        }
+        .padding(.vertical, 5).padding(.horizontal, 8)
+        .background(RoundedRectangle(cornerRadius: 8).fill(OT.C.raised))
+        .contentShape(Rectangle())
+        .onTapGesture { if c.isFailed { files.retry(c.id) } }
     }
 
-    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        var took = false
-        for p in providers {
-            if p.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                took = true
-                _ = p.loadObject(ofClass: URL.self) { url, _ in
-                    guard let url, UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true,
-                          let img = NSImage(contentsOf: url) else { return }
-                    DispatchQueue.main.async { attachImage(img) }
-                }
-            } else if p.canLoadObject(ofClass: NSImage.self) {
-                took = true
-                _ = p.loadObject(ofClass: NSImage.self) { obj, _ in
-                    guard let img = obj as? NSImage else { return }
-                    DispatchQueue.main.async { attachImage(img) }
-                }
-            }
-        }
-        return took
-    }
+    private func attachImage(_ image: NSImage) { orchestratorAttachImage(image) { flashTag($0, error: true, ms: 1800) } }
+    private func attachImageFile(_ url: URL) { orchestratorAttachImageFile(url) { flashTag($0, error: true, ms: 1800) } }
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool { orchestratorHandleDrop(providers) { flashTag($0, error: true, ms: 1800) } }
 
     @ViewBuilder private var ghostLayer: some View {
         if let g = suggestion {
@@ -603,7 +626,7 @@ struct OrchestratorChatView: View {
     }
 
     private var sendButton: some View {
-        let blank = store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.attachments.isEmpty
+        let blank = store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.attachments.isEmpty && files.isEmpty
         return Button { submit() } label: {
             ZStack {
                 Circle().fill(fieldFocused ? OT.C.claude : OT.C.selected2)
@@ -613,7 +636,7 @@ struct OrchestratorChatView: View {
             .frame(width: 20, height: 20)
         }
         .buttonStyle(.plain)
-        .disabled(blank)
+        .disabled(blank || files.blocksSend)
     }
 
     /// Terminal store.draft -> field on focus; key monitor lifecycle.
@@ -655,11 +678,17 @@ struct OrchestratorChatView: View {
                 flashTag("line cleared", error: false, ms: 1200)
                 return nil
             }
-            // Cmd-V with an image on the pasteboard attaches it; text-only pastes fall through untouched.
-            if event.keyCode == 9, mods == .command, NSPasteboard.general.canReadObject(forClasses: [NSImage.self], options: nil),
-               let img = NSImage(pasteboard: .general) {
-                attachImage(img)
-                return nil
+            // Cmd-V: files copied in Finder first (their pasteboard also carries the file's icon as an image),
+            // then a real image; text-only pastes fall through untouched.
+            if event.keyCode == 9, mods == .command {
+                if let urls = NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+                    orchestratorHandleURLs(urls, files: files) { attachImageFile($0) }
+                    return nil
+                }
+                if NSPasteboard.general.canReadObject(forClasses: [NSImage.self], options: nil), let img = NSImage(pasteboard: .general) {
+                    attachImage(img)
+                    return nil
+                }
             }
             return event
         }
@@ -758,7 +787,8 @@ struct OrchestratorChatView: View {
 
     private func submit() {
         let t = store.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty || !store.attachments.isEmpty else { stopTyping(); return }
+        guard !t.isEmpty || !store.attachments.isEmpty || !files.isEmpty else { stopTyping(); return }
+        if files.blocksSend { flashTag(files.chips.contains { $0.isActive } ? "Uploading…" : "Retry or remove the failed file", error: !files.chips.contains { $0.isActive }, ms: 1800); return }
         // A terminal draft not pulled in on focus would be C-u'd unseen: pull it in front and wait for a second Enter.
         if !store.draftFromTerminal, store.boxIsDraft, let l = store.inputLine, !l.isEmpty {
             store.draft = l + " " + store.draft
@@ -766,7 +796,7 @@ struct OrchestratorChatView: View {
             return
         }
         stick = true; unseen = false
-        store.enqueue(t, images: store.takeAttachments())
+        store.enqueue(t, images: store.takeAttachments(), files: files.take())
         store.draft = ""
         store.draftFromTerminal = false
     }
@@ -1297,3 +1327,51 @@ func orchestratorProseNS(_ a: AttributedString, size: CGFloat, color: NSColor, l
 
 /// Live reply text capped like proseAttributed, keeping the newest end of a huge reply.
 func plainTail(_ s: String) -> String { s.count > proseCharCap ? "…" + s.suffix(proseCharCap) : s }
+
+// MARK: - Drops (shared by the composer and the whole Orchestrator tab)
+
+@MainActor func orchestratorAttachImage(_ image: NSImage, onError: (String) -> Void) {
+    guard let png = orchestratorPNG(from: image) else { onError("Couldn't paste image"); return }
+    guard png.count <= 10 * 1024 * 1024 else { onError("Image too big"); return }
+    OrchestratorTranscriptStore.shared.attach(png)
+}
+
+@MainActor func orchestratorAttachImageFile(_ url: URL, onError: (String) -> Void) {
+    guard let img = NSImage(contentsOf: url) else { onError("Couldn't read image"); return }
+    orchestratorAttachImage(img, onError: onError)
+}
+
+/// Files go to /api/chat/file, real images to /api/chat/image. Providers load off-main and hop back.
+func orchestratorHandleDrop(_ providers: [NSItemProvider], onError: @escaping @MainActor (String) -> Void) -> Bool {
+    var took = false
+    for p in providers {
+        if p.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            took = true
+            _ = p.loadObject(ofClass: URL.self) { url, _ in
+                guard let url else { return }
+                DispatchQueue.main.async { MainActor.assumeIsolated {
+                    orchestratorHandleURLs([url], files: .shared) { orchestratorAttachImageFile($0, onError: onError) }
+                } }
+            }
+        } else if p.canLoadObject(ofClass: NSImage.self) {
+            took = true
+            _ = p.loadObject(ofClass: NSImage.self) { obj, _ in
+                guard let img = obj as? NSImage else { return }
+                DispatchQueue.main.async { MainActor.assumeIsolated { orchestratorAttachImage(img, onError: onError) } }
+            }
+        } else if p.hasItemConformingToTypeIdentifier(UTType.data.identifier), !p.hasItemConformingToTypeIdentifier(UTType.text.identifier),
+                  !p.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
+            // File promise: the provider's copy only lives inside the callback, so keep our own.
+            took = true
+            p.loadFileRepresentation(forTypeIdentifier: UTType.data.identifier) { url, _ in
+                guard let url else { return }
+                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("orch-drop-\(UUID().uuidString)")
+                let copy = dir.appendingPathComponent(url.lastPathComponent)
+                guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil,
+                      (try? FileManager.default.copyItem(at: url, to: copy)) != nil else { return }
+                DispatchQueue.main.async { MainActor.assumeIsolated { OrchestratorFileQueue.shared.add([copy], temp: true) } }
+            }
+        }
+    }
+    return took
+}

@@ -178,6 +178,7 @@ struct Scene {
     var sends: [PendingMessage] = []
     var notes: (String, NotesStatus)?
     var attachments: [Data] = []
+    var files: [FileChip] = []
     var dismissed = false
     var draft = ""
     var diffOpen = false
@@ -276,6 +277,11 @@ struct Snap {
                 PendingMessage(id: 1, text: "ok", state: .sending, sentAt: nil),
                 PendingMessage(id: 2, text: "Please also go through every remaining file in the Orchestrator folder and tidy the comments so they match the new naming, then summarise", state: .failed, sentAt: nil)]),
             Scene(name: "31-composer-chips", chat: chat(""), blocks: markerBlocks, attachments: [pngA, pngB]),
+            Scene(name: "58-composer-file-chips", chat: chat(""), blocks: markerBlocks, files: [
+                FileChip(id: 1, url: URL(fileURLWithPath: "/x/data.csv"), name: "data.csv", size: 2_400, state: .done("/f/data.csv")),
+                FileChip(id: 2, url: URL(fileURLWithPath: "/x/clip-with-a-long-name.mov"), name: "clip-with-a-long-name.mov", size: 52_000_000, state: .uploading(0.42)),
+                FileChip(id: 3, url: URL(fileURLWithPath: "/x/next.txt"), name: "next.txt", size: 10, state: .queued),
+                FileChip(id: 4, url: URL(fileURLWithPath: "/x/boom.bin"), name: "boom.bin", size: 8, state: .failed("Upload failed"))]),
             Scene(name: "32-chat-pending-images", chat: chat(""), blocks: markerBlocks, sends: [
                 PendingMessage(id: 1, text: "what do you make of these", state: .queued, sentAt: nil, images: [pngA, pngB]),
                 PendingMessage(id: 2, text: "", state: .failed, sentAt: nil, images: [pngB])]),
@@ -335,6 +341,7 @@ struct Snap {
             let m = OrchestratorManager.shared
             await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: s.calm ? StateResponse(runs: [], usage: nil) : state, runsBoard: s.runsBoard)
             OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends, attachments: s.attachments, draft: s.draft)
+            OrchestratorFileQueue.shared.snapshotSet(s.files)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
             PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending, dismissCurrent: s.dismissed)
             if let n = s.notes { OrchestratorNotesStore.shared.snapshotSet(text: n.0, status: n.1); m.notesOpen = true }

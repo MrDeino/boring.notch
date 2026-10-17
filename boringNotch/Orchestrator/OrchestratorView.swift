@@ -75,6 +75,11 @@ struct OrchestratorView: View {
             }
         }
         .background(WindowAnchor(view: anchor))
+        // The tab takes file drops anywhere (the composer's own onDrop wins over it); the shelf never sees them here.
+        .onDrop(of: [.image, .fileURL, .data], isTargeted: $vm.dragDetectorTargeting) { providers in
+            vm.dropEvent = true
+            return orchestratorHandleDrop(providers) { _ in }
+        }
         .onAppear { expand.tabOpened(vm: vm, anchor: anchor) }
         .onChange(of: runLog.runID) { _, id in logChanged(id) }
         // The log lives on the expanded level: leaving it (outside click, back) must not strand an overlay whose

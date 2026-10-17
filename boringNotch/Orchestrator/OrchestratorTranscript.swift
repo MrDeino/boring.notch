@@ -335,11 +335,12 @@ struct PendingMessage: Equatable, Identifiable {
     var sentAt: Date?
     var images: [Data] = []   // PNG bytes
     var paths: [String] = []  // server paths uploaded so far; Retry reuses them
-    var wireText: String { chatTextWithImages(text, paths: paths) }
+    var files: [FileChip] = [] // uploaded via /api/chat/file
+    var wireText: String { chatTextWithImages(text, paths: paths, files: files.compactMap(\.path)) }
 }
 
-func chatTextWithImages(_ text: String, paths: [String]) -> String {
-    ([text.trimmingCharacters(in: .whitespacesAndNewlines)] + paths.map { "[image: \($0)]" }).filter { !$0.isEmpty }.joined(separator: " ")
+func chatTextWithImages(_ text: String, paths: [String], files: [String] = []) -> String {
+    ([text.trimmingCharacters(in: .whitespacesAndNewlines)] + paths.map { "[image: \($0)]" } + files.map { "[file: \($0)]" }).filter { !$0.isEmpty }.joined(separator: " ")
 }
 
 func normalizeChatText(_ s: String) -> String {

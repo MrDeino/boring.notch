@@ -229,7 +229,8 @@ struct ContentView: View {
 
             if isTargeted {
                 if vm.notchState == .closed {
-                    coordinator.currentView = .shelf
+                    // A drag onto the closed notch opens the shelf, unless the Orchestrator tab is selected (it takes the file).
+                    if !orchestratorOwnsDrops(orchestratorIsCurrentTab: coordinator.currentView == .orchestrator) { coordinator.currentView = .shelf }
                     doOpen()
                 }
                 return
@@ -513,6 +514,9 @@ struct ContentView: View {
                 .contentShape(Rectangle())
         .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], isTargeted: $vm.dragDetectorTargeting) { providers in
             vm.dropEvent = true
+            if orchestratorOwnsDrops(orchestratorIsCurrentTab: coordinator.currentView == .orchestrator) {
+                return orchestratorHandleDrop(providers) { _ in }
+            }
             ShelfStateViewModel.shared.load(providers)
             return true
         }
