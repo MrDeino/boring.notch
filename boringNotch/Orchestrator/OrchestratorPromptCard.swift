@@ -30,8 +30,10 @@ final class PromptCardController: ObservableObject {
     /// Optimistic answer: the card with this identity is hidden at once; restored if the screen never moved on.
     @Published private(set) var dismissed: PromptIdentity?
     @Published private(set) var note: String?
-    /// In-flight checkbox toggles, shown before the next screen read confirms them.
+    /// Optimistic checkbox state: taps show at once, and stay until the queue has drained and the screen has been compared with them.
     @Published private(set) var pending: [Int: Bool] = [:]
+    private let queue = PromptKeyQueue { await OrchestratorManager.shared.postKey($0) }
+    private var reconciling: Task<Void, Never>?
     private var busy = false
     private var lastId: PromptIdentity?
     private var noteGen = 0
@@ -74,8 +76,8 @@ final class PromptCardController: ObservableObject {
         flash = false
     }
 
-    /// Hide the card now, send `keys`, and bring the card back with a note if ~2s later the same prompt is still up.
-    /// Never re-sends by itself: the user taps again.
+    /// Hide the card now, queue `keys` behind any ticks still in flight, and bring the card back with a note if ~2s later the same prompt is still up.
+    /// Never re-sends by itself: the user taps again. If the screen disagrees with the ticks shown, nothing is submitted and the screen's state is shown.
     private func answer(_ keys: [String], pressed n: Int?, displayed: PromptCard) {
         guard !busy, dismissed == nil else { return }
         busy = true
@@ -90,9 +92,13 @@ final class PromptCardController: ObservableObject {
                 try? await Task.sleep(for: .milliseconds(120))
                 withAnimation(spring) { dismissed = id }
             }
+            reconciling?.cancel()
+            guard await queue.settle() else { pending = [:]; restore(note: "Didn't go through"); return }
             guard await stillCurrent(displayed) else { restore(note: nil); return }
-            let ok = await m.pressKeys(keys)
-            guard ok else { restore(note: "Didn't go through"); return }
+            if !pending.isEmpty, await screenShowsTicks(displayed) == false { pending = [:]; restore(note: Self.resync); return }
+            pending = [:]
+            queue.enqueue(keys)
+            guard await queue.settle() else { restore(note: "Didn't go through"); return }
             try? await Task.sleep(for: .seconds(max(0, 2 - Date().timeIntervalSince(t0))))
             await m.refresh(fresh: true)
             if !m.offline, let cur = m.prompt, promptIdentity(cur) == id { restore(note: "Didn't go through"); return }
@@ -101,10 +107,16 @@ final class PromptCardController: ObservableObject {
         }
     }
 
+    private static let resync = "Re-synced: a tap didn't register"
+
     private func restore(note text: String?) {
         withAnimation(spring) { dismissed = nil }
         pressed = nil
         busy = false
+        show(note: text)
+    }
+
+    private func show(note text: String?) {
         note = text
         noteGen += 1
         let g = noteGen
@@ -120,12 +132,33 @@ final class PromptCardController: ObservableObject {
 
     func toggle(_ n: Int, displayed: PromptCard) {
         guard !busy, let item = displayed.items.first(where: { $0.number == n }), let was = item.checked else { return }
-        let to = !(pending[n] ?? was)
-        pending[n] = to
-        Task {
-            if await stillCurrent(displayed) { _ = await OrchestratorManager.shared.pressKeys([String(n)]) }
-            pending[n] = nil // the screen read inside pressKeys is the truth now
+        pending[n] = !(pending[n] ?? was)
+        queue.enqueue([String(n)])
+        // ponytail: a key queued for a card that has since changed on the screen (answered at the terminal) is still sent; Esc and answers drop/flush the queue.
+        reconciling?.cancel()
+        reconciling = Task { await reconcile(displayed) }
+    }
+
+    /// After the queue drains: the screen must show the ticks. If it never does (a key was lost), show its state and say so.
+    private func reconcile(_ displayed: PromptCard) async {
+        guard await queue.settle() else { if !Task.isCancelled { pending = [:]; show(note: "Didn't go through") }; return }
+        guard let ok = await screenShowsTicks(displayed) else { return }
+        pending = [:]
+        if !ok { show(note: Self.resync) }
+    }
+
+    /// True once the screen shows `pending` (or the card has moved on); re-reads a few times, the TUI may not have redrawn yet.
+    /// nil: a newer tap owns the comparison.
+    private func screenShowsTicks(_ displayed: PromptCard) async -> Bool? {
+        let m = OrchestratorManager.shared
+        for attempt in 0..<4 {
+            await m.refresh(fresh: true)
+            guard !Task.isCancelled, queue.isIdle else { return nil }
+            guard let cur = m.prompt, promptIdentity(cur) == promptIdentity(displayed) else { return true }
+            if promptMismatches(expected: pending, card: cur).isEmpty { return true }
+            if attempt < 3 { try? await Task.sleep(for: .milliseconds(250)) }
         }
+        return false
     }
 
     /// Multi-select has no Submit key: Tab is "done, next" (and from the last question lands on the review step).
@@ -138,6 +171,9 @@ final class PromptCardController: ObservableObject {
     }
 
     func escape(displayed: PromptCard) {
+        queue.cancel()
+        reconciling?.cancel()
+        pending = [:]
         Task {
             guard await stillCurrent(displayed) else { return }
             await OrchestratorManager.shared.pressEscape()

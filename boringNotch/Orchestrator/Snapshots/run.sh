@@ -5,6 +5,7 @@
 #        boringNotch/Orchestrator/Snapshots/run.sh --transition   ->  top-edge check over grow/collapse/stock-open steps
 #        boringNotch/Orchestrator/Snapshots/run.sh --closed       ->  closed-notch wings + music indicator (closed-*.png)
 #        boringNotch/Orchestrator/Snapshots/run.sh --hittest      ->  clicks composer/segment/capsule in the real tab (no POSTs)
+#        ORCH_BASE=http://127.0.0.1:47999 boringNotch/Orchestrator/Snapshots/run.sh --keymock  ->  question card taps vs Tests/key-mock.py: rapid taps in order, lost key re-sync, submit waits (~20 s)
 #        boringNotch/Orchestrator/Snapshots/run.sh --idle         ->  idle CPU per scene + outside-click/close-gate checks (IDLE_REPORT=1: never fail, IDLE_SAMPLE=1: sample hot scenes)
 #        boringNotch/Orchestrator/Snapshots/run.sh --fulltext     ->  long multi-paragraph row keeps its whole text and last line (widths, growth)
 #        ORCH_BASE=http://127.0.0.1:47999 boringNotch/Orchestrator/Snapshots/run.sh --sendmock  ->  composer send path vs Tests/send-mock.py (~75 s)
