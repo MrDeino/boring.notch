@@ -34,9 +34,9 @@ final class OrchestratorWingsModel: ObservableObject {
     @Published private(set) var shiftX: CGFloat = 0
     private let inputs = OrchestratorWingsInputs.shared
     private let manager = OrchestratorManager.shared
-    private var baseline = RunsBaseline()
-    private var queue: [(project: String, failed: Bool)] = []
-    private var finished: (project: String, failed: Bool)?
+    private var wings = FinishedWings()
+    /// The runs as last published. `$runs` fires in willSet, when `manager.runs` is still the old value.
+    private var runs: [OrchestratorRun] = []
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
@@ -44,28 +44,23 @@ final class OrchestratorWingsModel: ObservableObject {
         manager.$runs.combineLatest(manager.$offline, manager.$hasLoaded)
             .sink { [weak self] runs, offline, loaded in self?.runsChanged(runs, offline, loaded) }
             .store(in: &cancellables)
+        // Chat status, prompt and attention publish through the manager; read after the change has landed.
         manager.objectWillChange.receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.recompute() }
             .store(in: &cancellables)
     }
 
     private func runsChanged(_ runs: [OrchestratorRun], _ offline: Bool, _ loaded: Bool) {
-        for r in finishedTransitions(old: baseline.advance(runs, offline: offline, loaded: loaded), new: runs) {
-            queue.append((r.project ?? "Run", r.state == "failed"))
-        }
-        if finished == nil { showNext() }
+        self.runs = runs
+        if wings.ingest(runs, offline: offline, loaded: loaded) { armExpiry() } // the manager's own publish recomputes
     }
 
-    /// Each finished/failed run gets its own 4s wing, in turn.
-    private func showNext() {
-        guard !queue.isEmpty else { return }
-        finished = queue.removeFirst()
-        recompute()
+    private func armExpiry() {
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(4))
             guard let self else { return }
-            self.finished = nil
-            if self.queue.isEmpty { self.recompute() } else { self.showNext() }
+            if self.wings.expire() { self.armExpiry() }
+            self.recompute()
         }
     }
 
@@ -77,14 +72,14 @@ final class OrchestratorWingsModel: ObservableObject {
     private func recompute() {
         let dot = (manager.needsAttention || manager.claudeUpdateReady) && !manager.offline
         if dot != inputs.attentionDot { inputs.attentionDot = dot }
-        let t = WingTiming(chatElapsed: manager.liveStatus?.elapsed, starts: manager.runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt) })
+        let t = WingTiming(chatElapsed: manager.liveStatus?.elapsed, starts: runs.filter { $0.state == "running" }.compactMap { parseRunDate($0.startedAt) })
         if t != inputs.timing { inputs.timing = t }
         var k: WingKind? = nil
         if manager.hasLoaded && !manager.offline {
             let label = wingLabel(promptTitle: manager.prompt?.title,
-                                  waitingDenials: manager.runs.first { $0.state == "waiting" }?.denials)
-            k = wingKind(needsYou: manager.needsAttention, needsLabel: label, finished: finished,
-                         workingCount: workingCount(chatWorking: manager.chatRunning && manager.liveStatus != nil, runs: manager.runs))
+                                  waitingDenials: runs.first { $0.state == "waiting" }?.denials)
+            k = wingKind(needsYou: manager.needsAttention, needsLabel: label, finished: wings.current,
+                         workingCount: workingCount(chatWorking: manager.chatRunning && manager.liveStatus != nil, runs: runs))
         }
         if k != kind {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { kind = k }
