@@ -445,6 +445,7 @@ private struct PermissionCard: View {
                         .padding(.vertical, 8).padding(.horizontal, 10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(OT.C.raised, in: RoundedRectangle(cornerRadius: 8))
+                        .expandsOnTap()
                         .measureHeight($contentH)
                 }
                 .scrollBounceBehavior(.basedOnSize)
@@ -457,6 +458,7 @@ private struct PermissionCard: View {
                 ForEach(card.items.filter { $0.role == .deny }, id: \.number) { pill($0) }
             }
         }
+        .expandsOnTap()
         .measureHeight($cardH)
         .promptFit(content: contentH, viewport: viewportH, card: cardH)
     }
@@ -522,6 +524,8 @@ private struct QuestionCard: View {
                         }
                         ForEach(card.items.filter { $0.role == .normal }, id: \.number) { row($0) }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .expandsOnTap()
                     .measureHeight($contentH)
                 }
                 .scrollBounceBehavior(.basedOnSize)
@@ -532,6 +536,7 @@ private struct QuestionCard: View {
             }
             footer
         }
+        .expandsOnTap()
         .measureHeight($cardH)
         .promptFit(content: contentH, viewport: viewportH, card: cardH)
     }
@@ -553,6 +558,7 @@ private struct QuestionCard: View {
             }
             Spacer(minLength: 0)
         }
+        .expandsOnTap()
     }
 
     private func row(_ item: PromptCardOption) -> some View {

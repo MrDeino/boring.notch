@@ -73,4 +73,76 @@ extension Snap {
         print(fails.isEmpty ? "OK: card fit (grow, cap, shrink, steps, expanded)" : "FAIL: card fit: " + fails.joined(separator: "; "))
         return fails.isEmpty
     }
+
+    /// run.sh --cardclick (ORCH_BASE=http://127.0.0.1:47999, Tests/key-mock.py): at the open level with a card up, a click on an option answers
+    /// (its key reaches serve, no expand); a click anywhere else on the card or its tab row expands, with the card still up and nothing sent.
+    /// One fresh panel per probe, so a click never inherits state.
+    static func cardClickPass() async -> Bool {
+        let m = OrchestratorManager.shared, ex = OrchestratorExpand.shared, c = PromptCardController.shared
+        let b = OrchestratorManager.baseURL
+        precondition(b.port != 4777, "set ORCH_BASE to the key mock")
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        proc.arguments = ["-I", "boringNotch/Orchestrator/Tests/key-mock.py"]
+        try! proc.run()
+        defer { proc.terminate() }
+        let ses = URLSession(configuration: .ephemeral)
+        for _ in 0..<50 { if (try? await ses.data(from: b.appendingPathComponent("__log"))) != nil { break }; try? await Task.sleep(for: .milliseconds(100)) }
+        func sent() async -> Int {
+            let (data, _) = try! await ses.data(from: b.appendingPathComponent("__log"))
+            return (try! JSONSerialization.jsonObject(with: data) as! [Any]).count
+        }
+        var reset = URLRequest(url: b.appendingPathComponent("__reset")); reset.httpMethod = "POST"; reset.httpBody = Data("{}".utf8)
+        var fails: [String] = []
+        var keep: [AnyObject] = [] // a freed view model's address could be reused by the next one, and the expand state is keyed by it
+        // (name, x from the left, y below the top of the question's scroll area, option row?)
+        let probes: [(String, CGFloat, CGFloat, Bool)] = [
+            ("option row", 300, 44, true), ("option row, right end", 520, 44, true), ("option row, left end", 150, 44, true),
+            ("question title", 300, 9, false), ("question title, right of text", 520, 9, false),
+            ("tab row, empty space", 520, -16, false), ("tab row, beside the chips", 300, -16, false), ("gap above the question", 300, -12, false), ("chip Color", 107, -16, true), ("Next button", 386, 66, true),
+        ]
+        for (name, x, dy, option) in probes {
+            _ = try? await ses.data(for: reset)
+            await m.refresh(fresh: true)
+            let vm = BoringViewModel()
+            keep.append(vm)
+            let window = KeyablePanel(contentRect: NSRect(x: -20000, y: -20000, width: windowSize.width, height: windowSize.height),
+                                      styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            window.isOpaque = false; window.backgroundColor = .clear
+            // The app's root layout, root hover and tap included: without them SwiftUI-only regions get no clicks in a bare hosting view.
+            let mainLayout = NotchReplica(vm: vm).core.environmentObject(vm).contentShape(Rectangle()).onHover { _ in }.onTapGesture { }
+            let root = ZStack(alignment: .top) { VStack(spacing: 0) { mainLayout } }
+                .padding(.bottom, 8).notchRootFrame(notchSize: vm.notchSize).compositingGroup()
+            let host = NSHostingView(rootView: root)
+            host.sizingOptions = []
+            window.contentView = host
+            window.setFrame(NSRect(x: -20000, y: -20000, width: windowSize.width, height: 520), display: true) // room for the notch to be clicked at its fitted height
+            window.orderFrontRegardless()
+            try? await Task.sleep(for: .milliseconds(2000))
+            host.layoutSubtreeIfNeeded()
+            c.snapshotSet()
+            let H = host.bounds.height
+            // The card's layout moves with the lead-in and the fit, so find the question's scroll area (an AppKit container) and measure from it.
+            var top: CGFloat?
+            for yy in stride(from: CGFloat(30), to: H, by: 2) where host.superview?.hitTest(NSPoint(x: 300, y: H - yy)).map({ String(describing: type(of: $0)).contains("PlatformGroupContainer") }) == true { top = yy; break }
+            guard let scrollTop = top else { fails.append("\(name): card scroll area not found"); continue }
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                if let e = NSEvent.mouseEvent(with: type, location: NSPoint(x: x, y: H - (scrollTop + dy)), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) { window.sendEvent(e) }
+                try? await Task.sleep(for: .milliseconds(30))
+            }
+            try? await Task.sleep(for: .milliseconds(400))
+            let n = await sent(), expanded = ex.level(for: vm) != .open
+            print("cardclick \(name): keys=\(n) expanded=\(expanded) card=\(m.prompt != nil)")
+            if option { if n != 1 || expanded { fails.append("\(name): should answer without expanding") } }
+            else if n != 0 || !expanded || m.prompt == nil { fails.append("\(name): should expand with the card still up") }
+            for _ in 0..<60 where !c.pending.isEmpty { try? await Task.sleep(for: .milliseconds(100)) } // the answer's reconcile may still add a notice line, which moves the card
+            c.snapshotSet()
+            ex.reset()
+            window.contentView = nil
+            window.orderOut(nil)
+        }
+        print(fails.isEmpty ? "OK: card click (options answer, elsewhere expands)" : "FAIL: card click: " + fails.joined(separator: "; "))
+        return fails.isEmpty
+    }
 }

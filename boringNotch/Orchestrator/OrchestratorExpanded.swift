@@ -260,6 +260,8 @@ struct OrchestratorExpandedView: View {
                 }
                 if promptVisible { OrchestratorPromptCard() }
             }
+            // Open with a card up: a click on anything that is not a control expands, like a click on the transcript.
+            .expandsOnTap(open && promptVisible)
         }
     }
 
@@ -309,4 +311,27 @@ private struct PromptContextView: View {
     }
 
     private func fit() { OrchestratorExpand.shared.setFit("prompt", extra: height + 6, vm: vm, window: anchor.window) }
+}
+
+
+extension View {
+    /// A click on this view's empty space expands the notch from the open level (what a click on the transcript does).
+    /// Buttons and the text field claim their own taps, so only non-controls reach it.
+    func expandsOnTap(_ on: Bool = true) -> some View { modifier(ExpandOnTap(on: on)) }
+}
+
+private struct ExpandOnTap: ViewModifier {
+    let on: Bool
+    @EnvironmentObject private var vm: BoringViewModel
+    @State private var anchor = NSView() // growing needs the panel
+    func body(content: Content) -> some View {
+        content.background {
+            if on {
+                // A plain Button, not onTapGesture: a bare tap gesture on empty space does not fire next to the question's AppKit scroll view.
+                Button { OrchestratorExpand.shared.transcriptTapped(vm: vm, window: anchor.window) } label: { Color.clear.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+                    .background(WindowAnchor(view: anchor).allowsHitTesting(false))
+            }
+        }
+    }
 }

@@ -220,6 +220,11 @@ struct Snap {
             NSApp.setActivationPolicy(.accessory)
             exit(await cardFitPass() ? 0 : 1)
         }
+        if CommandLine.arguments.contains("--cardclick") {
+            _ = NSApplication.shared
+            NSApp.setActivationPolicy(.accessory)
+            exit(await cardClickPass() ? 0 : 1)
+        }
         if CommandLine.arguments.contains("--closed") { await closed(); return }
         if CommandLine.arguments.contains("--askmock") { await askMock(); return }
         if CommandLine.arguments.contains("--sendmock") { await sendMock(); return }
