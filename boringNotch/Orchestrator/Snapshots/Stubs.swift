@@ -17,6 +17,8 @@ final class BoringViewModel: NSObject, ObservableObject {
     @Published var notchSize = openNotchSize
     @Published var closedNotchSize = CGSize(width: 185, height: 34)
     @Published var screenUUID: String? = nil
+    @Published var dragDetectorTargeting = false
+    @Published var dropEvent = false
     var effectiveClosedNotchHeight: CGFloat { closedNotchSize.height }
     var closeCount = 0
     var closedAt: TimeInterval?

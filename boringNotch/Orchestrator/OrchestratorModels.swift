@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import UniformTypeIdentifiers
 
 /// GET /api/chat. All fields optional so server omissions never break decoding.
 struct ChatResponse: Decodable {
@@ -380,4 +381,157 @@ func orchestratorPNG(from image: NSImage, maxSide: CGFloat = 2000) -> Data? {
     image.draw(in: NSRect(x: 0, y: 0, width: pw, height: ph), from: .zero, operation: .copy, fraction: 1)
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])
+}
+
+// MARK: - Files (POST /api/chat/file)
+
+/// serve's file cap.
+let orchestratorFileMax: Int64 = 200 * 1024 * 1024
+
+/// x-filename header: plain when printable ASCII (and no '%'), else percent-encoded so a header never carries raw bytes.
+func orchestratorFilenameHeader(_ rawName: String) -> String {
+    let name = rawName.precomposedStringWithCanonicalMapping // APFS hands back decomposed accents
+    let plain = !name.isEmpty && !name.contains("%") && name.utf8.allSatisfy { $0 >= 0x20 && $0 < 0x7f }
+    return plain ? name : (name.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? "file")
+}
+
+func orchestratorFileRequest(name: String, base: URL) -> URLRequest {
+    var r = URLRequest(url: base.appendingPathComponent("api/chat/file"))
+    r.httpMethod = "POST"
+    r.setValue("1", forHTTPHeaderField: "x-orch")
+    r.setValue(orchestratorFilenameHeader(name), forHTTPHeaderField: "x-filename")
+    r.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+    return r
+}
+
+struct FileUploadError: Error, Equatable { let message: String }
+
+private final class UploadProgress: NSObject, URLSessionTaskDelegate {
+    let onProgress: @Sendable (Double) -> Void
+    init(_ f: @escaping @Sendable (Double) -> Void) { onProgress = f }
+    func urlSession(_ s: URLSession, task: URLSessionTask, didSendBodyData b: Int64, totalBytesSent t: Int64, totalBytesExpectedToSend e: Int64) {
+        if e > 0 { onProgress(min(1, Double(t) / Double(e))) }
+    }
+}
+
+/// Streams the file from disk (never into memory). The server path on success.
+func uploadOrchestratorFile(_ url: URL, name: String, base: URL, session: URLSession,
+                            progress: @escaping @Sendable (Double) -> Void) async -> Result<String, FileUploadError> {
+    let scoped = url.startAccessingSecurityScopedResource() // drag/paste URLs; false (harmless) for plain ones
+    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    // URLSession would send an empty body for a vanished file and serve would store an empty one.
+    guard FileManager.default.isReadableFile(atPath: url.path) else { return .failure(.init(message: "File gone")) }
+    do {
+        let (data, resp) = try await session.upload(for: orchestratorFileRequest(name: name, base: base), fromFile: url, delegate: UploadProgress(progress))
+        guard let http = resp as? HTTPURLResponse else { return .failure(.init(message: "Upload failed")) }
+        if http.statusCode == 413 { return .failure(.init(message: "Too big")) }
+        guard http.statusCode == 200, let path = decodeImagePath(data) else { return .failure(.init(message: "Upload failed")) }
+        return .success(path)
+    } catch {
+        return .failure(.init(message: (error as? URLError)?.code == .fileDoesNotExist ? "File gone" : "Upload failed"))
+    }
+}
+
+struct FileChip: Identifiable, Equatable {
+    enum State: Equatable { case queued, uploading(Double), done(String), failed(String) }
+    let id: Int
+    let url: URL
+    let name: String
+    let size: Int64
+    var temp = false // a file-promise copy we made: deleted once uploaded or removed
+    var state: State
+    var path: String? { if case .done(let p) = state { return p }; return nil }
+    var isFailed: Bool { if case .failed = state { return true }; return false }
+    var isActive: Bool { switch state { case .queued, .uploading: return true; default: return false } }
+}
+
+func orchestratorSizeLabel(_ bytes: Int64) -> String {
+    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+}
+
+enum OrchestratorDropKind { case image, file }
+
+/// Real images keep going to /api/chat/image (re-encoded, capped); everything else is uploaded as the file itself.
+func orchestratorDropKind(_ url: URL) -> OrchestratorDropKind {
+    UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true ? .image : .file
+}
+
+/// The Orchestrator tab owns file drops/pastes while it is the current tab; every other tab leaves them to the shelf.
+func orchestratorOwnsDrops(orchestratorIsCurrentTab: Bool) -> Bool { orchestratorIsCurrentTab }
+
+/// Dropped/pasted file URLs: images to `image`, the rest to the upload queue.
+@MainActor func orchestratorHandleURLs(_ urls: [URL], files: OrchestratorFileQueue, image: (URL) -> Void) {
+    var other: [URL] = []
+    for u in urls { if orchestratorDropKind(u) == .image { image(u) } else { other.append(u) } }
+    if !other.isEmpty { files.add(other) }
+}
+
+/// Composer file chips, uploaded one at a time as they arrive. `base`/`session` are read per upload.
+@MainActor final class OrchestratorFileQueue: ObservableObject {
+    @Published private(set) var chips: [FileChip] = []
+    private let base: () -> URL
+    private let session: () -> URLSession
+    private var nextID = 0
+    private var worker: Task<Void, Never>?
+
+    init(base: @escaping () -> URL, session: @escaping () -> URLSession) { self.base = base; self.session = session }
+
+    /// A chip still waiting on or in an upload, or a failed one: sending must wait for the user to resolve it.
+    var blocksSend: Bool { chips.contains { $0.isActive || $0.isFailed } }
+    var isEmpty: Bool { chips.isEmpty }
+
+    func add(_ urls: [URL], temp: Bool = false) {
+        for u in urls {
+            nextID += 1
+            let size = Int64((try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            let over = size > orchestratorFileMax
+            chips.append(FileChip(id: nextID, url: u, name: u.lastPathComponent, size: size, temp: temp, state: over ? .failed("Over 200 MB") : .queued))
+        }
+        start()
+    }
+
+    /// Chips of a message sent back for editing (already uploaded).
+    func restore(_ done: [FileChip]) { chips.insert(contentsOf: done, at: 0) }
+
+    func remove(_ id: Int) {
+        guard let i = chips.firstIndex(where: { $0.id == id }) else { return }
+        let c = chips.remove(at: i)
+        if c.temp { try? FileManager.default.removeItem(at: c.url) }
+    }
+
+    func retry(_ id: Int) {
+        guard let i = chips.firstIndex(where: { $0.id == id }), chips[i].isFailed, chips[i].size <= orchestratorFileMax else { return }
+        chips[i].state = .queued
+        start()
+    }
+
+    /// Done chips for the message being sent; the row is cleared.
+    func take() -> [FileChip] { defer { chips = [] }; return chips.filter { $0.path != nil } }
+
+    func waitIdle() async { await worker?.value }
+
+    #if ORCH_SNAPSHOT
+    func snapshotSet(_ c: [FileChip]) { chips = c }
+    #endif
+
+    private func set(_ id: Int, _ s: FileChip.State) {
+        if let i = chips.firstIndex(where: { $0.id == id }) { chips[i].state = s }
+    }
+
+    private func start() {
+        guard worker == nil else { return }
+        worker = Task { @MainActor in
+            while let c = chips.first(where: { $0.state == .queued }) {
+                set(c.id, .uploading(0))
+                let r = await uploadOrchestratorFile(c.url, name: c.name, base: base(), session: session()) { p in
+                    Task { @MainActor in if case .uploading = self.chips.first(where: { $0.id == c.id })?.state { self.set(c.id, .uploading(p)) } }
+                }
+                switch r {
+                case .success(let path): set(c.id, .done(path)); if c.temp { try? FileManager.default.removeItem(at: c.url) }
+                case .failure(let e): set(c.id, .failed(e.message))
+                }
+            }
+            worker = nil
+        }
+    }
 }
