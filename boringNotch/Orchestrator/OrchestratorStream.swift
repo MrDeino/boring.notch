@@ -23,6 +23,9 @@ enum OrchestratorStreamEvent {
     case blocks(running: Bool?, blocks: [ChatBlock], reset: Bool)
     /// nil = serve says none pending.
     case approval(OrchestratorApproval?)
+    /// The full deploys list (a bare array or `{"deploys":[…]}`); one bare deploy object is a single upsert by project.
+    case deploys([Deploy])
+    case deploy(Deploy)
 }
 
 /// `URLSession.bytes.lines` drops blank lines, so events are dispatched on each `data:` line using the last `event:` name.
@@ -53,6 +56,10 @@ struct SSELineParser {
         case "approval":
             if v.trimmingCharacters(in: .whitespaces) == "null" { return .approval(nil) }
             return (try? dec.decode(OrchestratorApproval.self, from: data)).map { .approval($0) } // malformed: keep current
+        case "deploy":
+            if let list = (try? dec.decode(StateResponse.self, from: data))?.deploys { return .deploys(list) }
+            if let list = try? dec.decode([Deploy].self, from: data) { return .deploys(list) }
+            return (try? dec.decode(Deploy.self, from: data)).map { .deploy($0) }
         default: return nil
         }
     }
