@@ -24,6 +24,10 @@ func runQuickFilesTests() {
     for n in ["data.csv", "clip.mov", "notes.txt", "doc.pdf", "bundle.zip", "noext"] { precondition(orchestratorDropKind(u(n)) == .file) }
     precondition(orchestratorOwnsDrops(orchestratorIsCurrentTab: true))
     precondition(!orchestratorOwnsDrops(orchestratorIsCurrentTab: false)) // home / shelf tab: the shelf keeps its drops
+    // Drag routing: selected tab or last-used tab (closed notch) sends to the chat; shelf only when another tab is in use
+    precondition(orchestratorOwnsDrops(orchestratorIsCurrentTab: false, lastUsedIsOrchestrator: true)) // closed, last used = Orchestrator
+    precondition(orchestratorOwnsDrops(orchestratorIsCurrentTab: true, lastUsedIsOrchestrator: false)) // open on the Orchestrator tab
+    precondition(!orchestratorOwnsDrops(orchestratorIsCurrentTab: false, lastUsedIsOrchestrator: false)) // another tab in use: shelf
     precondition(orchestratorSizeLabel(1_500_000).contains("MB"))
 }
 
@@ -100,6 +104,16 @@ private func tmpFile(_ dir: URL, _ name: String, bytes: Int) -> URL {
     let total = await log().count, imgAfter = await entries("/api/chat/image"), fileAfter = await entries("/api/chat/file")
     precondition(imgPath == "/mock/\(total)-img.png")
     precondition(imgAfter.count == imgBefore + 1 && fileAfter.count == fileBefore + 1)
+
+    // Folders: a failed chip, never uploaded; files beside it still go
+    let folder = dir.appendingPathComponent("somefolder"); try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    (q, _) = makeQueue()
+    let n00 = (await log()).count
+    orchestratorHandleURLs([folder, csv], files: q) { _ in }
+    precondition(q.chips.map(\.name) == ["somefolder", "data.csv"] && q.chips[0].state == .failed("Folders not supported"))
+    await q.waitIdle()
+    let n01 = await log().count
+    precondition(n01 == n00 + 1)
 
     // Errors: 500, 413, no server, oversize (sparse, never uploaded), then a retry that works
     (q, _) = makeQueue()

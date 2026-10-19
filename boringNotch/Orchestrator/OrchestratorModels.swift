@@ -457,12 +457,16 @@ func orchestratorDropKind(_ url: URL) -> OrchestratorDropKind {
 }
 
 /// The Orchestrator tab owns file drops/pastes while it is the current tab; every other tab leaves them to the shelf.
-func orchestratorOwnsDrops(orchestratorIsCurrentTab: Bool) -> Bool { orchestratorIsCurrentTab }
+/// A closed notch resets its tab on close, so the last-used tab counts too.
+func orchestratorOwnsDrops(orchestratorIsCurrentTab: Bool, lastUsedIsOrchestrator: Bool = false) -> Bool { orchestratorIsCurrentTab || lastUsedIsOrchestrator }
 
 /// Dropped/pasted file URLs: images to `image`, the rest to the upload queue.
+/// Folders (and packages) can't be uploaded: they show as a failed chip, "Folders not supported" (works from any drop path).
 @MainActor func orchestratorHandleURLs(_ urls: [URL], files: OrchestratorFileQueue, image: (URL) -> Void) {
     var other: [URL] = []
-    for u in urls { if orchestratorDropKind(u) == .image { image(u) } else { other.append(u) } }
+    for u in urls {
+        if (try? u.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true { files.addFailed(u, "Folders not supported"); continue }
+        if orchestratorDropKind(u) == .image { image(u) } else { other.append(u) } }
     if !other.isEmpty { files.add(other) }
 }
 
@@ -479,6 +483,11 @@ func orchestratorOwnsDrops(orchestratorIsCurrentTab: Bool) -> Bool { orchestrato
     /// A chip still waiting on or in an upload, or a failed one: sending must wait for the user to resolve it.
     var blocksSend: Bool { chips.contains { $0.isActive || $0.isFailed } }
     var isEmpty: Bool { chips.isEmpty }
+
+    func addFailed(_ u: URL, _ why: String) {
+        nextID += 1
+        chips.append(FileChip(id: nextID, url: u, name: u.lastPathComponent, size: 0, state: .failed(why)))
+    }
 
     func add(_ urls: [URL], temp: Bool = false) {
         for u in urls {
