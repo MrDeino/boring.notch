@@ -229,10 +229,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         if Defaults[.showOnAllDisplays], let viewModel = viewModels[uuid] {
             viewModel.open()
-            coordinator.currentView = .shelf
+            coordinator.currentView = coordinator.dragsGoToChat ? .orchestrator : .shelf
         } else if !Defaults[.showOnAllDisplays], let windowScreen = window?.screen, screen == windowScreen {
             vm.open()
-            coordinator.currentView = .shelf
+            coordinator.currentView = coordinator.dragsGoToChat ? .orchestrator : .shelf
         }
     }
 

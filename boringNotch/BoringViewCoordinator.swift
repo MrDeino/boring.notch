@@ -51,6 +51,12 @@ class BoringViewCoordinator: ObservableObject {
     static let shared = BoringViewCoordinator()
 
     @Published var currentView: NotchViews = .orchestrator
+    /// The tab shown when the notch last closed (close resets `currentView`); drags to the closed notch route by it.
+    var lastUsedView: NotchViews = .orchestrator
+    /// Drags go to the chat, not the shelf, while the Orchestrator tab is selected or was the last one used.
+    var dragsGoToChat: Bool {
+        orchestratorOwnsDrops(orchestratorIsCurrentTab: currentView == .orchestrator, lastUsedIsOrchestrator: lastUsedView == .orchestrator)
+    }
     @Published var helloAnimationRunning: Bool = false
     private var sneakPeekDispatch: DispatchWorkItem?
     private var expandingViewDispatch: DispatchWorkItem?
