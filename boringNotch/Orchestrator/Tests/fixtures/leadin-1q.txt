@@ -1,0 +1,24 @@
+
+ ▐▛███▛█   Claude Code v2.1.299
+▝▜██████▀  Haiku 5.5 · Claude Max
+ ▝▝   ▝▝   /private/tmp/notch-fixture
+
+❯ Describe the sample project, then ask me which fruit I prefer.
+
+⏺ The sample project has two parts: a small parser and a renderer that draws its output.
+
+  SINGLE-LEADIN-END
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Fruit  ✔ Submit  →
+
+Which fruit do you prefer?
+
+❯ 1. apple
+     Choose apple
+  2. banana
+     Choose banana
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel

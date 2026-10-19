@@ -220,11 +220,23 @@ private func rejoinElement(_ els: ArraySlice<String>, width: Int, firstIsMark: B
 
 private func proseKey(_ s: String) -> String { String(s.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains).map(Character.init)) }
 
+/// Whether one transcript prose block already holds this screen text. Head and tail must both match inside a single
+/// block, so an earlier block that merely opens the same way ("Let me check ...") doesn't hide new text.
+func proseHeld(_ part: String, in blocks: [ChatBlock]) -> Bool {
+    let k = proseKey(part)
+    let head = String(k.prefix(40)), tail = String(k.suffix(40))
+    let since = blocks.lastIndex { $0.kind == .user }.map { blocks.index(after: $0) } ?? blocks.startIndex
+    return blocks[since...].contains { b in
+        guard b.kind == .prose, let t = b.text else { return false }
+        let bk = proseKey(t)
+        return bk.contains(head) && bk.contains(tail)
+    }
+}
+
 /// The screen lead-in while the transcript doesn't hold it yet (nil once its prose block has arrived).
 func heldLeadIn(screen: String, blocks: [ChatBlock]) -> String? {
     guard let lead = screenLeadIn(screen: screen) else { return nil }
-    let probe = String(proseKey(lead).prefix(40))
-    return (latestAssistantProse(blocks).map { proseKey($0).contains(probe) } ?? false) ? nil : lead
+    return lead.components(separatedBy: "\n\n").allSatisfy({ proseHeld($0, in: blocks) }) ? nil : lead
 }
 
 /// The reply being written right now, read off the tmux screen: every `⏺` prose element of the turn above the
@@ -264,8 +276,7 @@ func screenLiveReply(screen: String, blocks: [ChatBlock]) -> (text: String, head
             if !t.isEmpty { parts.insert(t, at: 0); headCut = true }
         }
     }
-    let held = latestAssistantProse(blocks).map(proseKey) ?? ""
-    parts = parts.filter { !held.contains(String(proseKey($0).prefix(40))) }
+    parts = parts.filter { !proseHeld($0, in: blocks) }
     return parts.isEmpty ? nil : (parts.joined(separator: "\n\n"), headCut)
 }
 
@@ -283,9 +294,16 @@ func mergeLiveReply(previous: String?, current: String, headCut: Bool) -> String
 
 /// The live reply for the next screen. Idle with nothing showing does no parsing; idle with a row showing keeps it
 /// (end-of-turn grace) until the transcript block arrives and screenLiveReply drops it.
-func nextLiveReply(previous: String?, screen: String, blocks: [ChatBlock], working: Bool) -> String? {
+/// cardUp: a question/permission card is showing; the text above it is the row (Claude Code writes it to the
+/// transcript only after the answer), seeded from the screen and kept as it was otherwise.
+func nextLiveReply(previous: String?, screen: String, blocks: [ChatBlock], working: Bool, cardUp: Bool = false) -> String? {
+    if cardUp { return heldLeadIn(screen: screen, blocks: blocks) ?? previous }
     if !working && previous == nil { return nil }
-    guard let r = screenLiveReply(screen: screen, blocks: blocks) else { return nil }
+    // Nothing on screen (a card just closed, the text scrolled off) but the transcript lacks it: keep the row, never lose text.
+    guard let r = screenLiveReply(screen: screen, blocks: blocks) else {
+        let rest = (previous ?? "").components(separatedBy: "\n\n").filter { !$0.isEmpty && !proseHeld($0, in: blocks) }
+        return rest.isEmpty ? nil : rest.joined(separator: "\n\n")
+    }
     return mergeLiveReply(previous: previous, current: r.text, headCut: r.headCut)
 }
 

@@ -24,7 +24,7 @@ func runQuickE1dTests() {
     precondition(!last.contains("\n") || last.components(separatedBy: "\n").count == 3)
     precondition(!last.contains("Working") && !last.contains("Tip") && !last.contains("esc to interrupt") && !last.contains("⏺"))
     // The swap: once the block holds the text (markdown and all) the live text is gone.
-    let md = blocks("**The notch** is a `camera` cutout in the top of the screen that Apple added to the MacBook Pro so the display could reach.")
+    let md = blocks(last.replacingOccurrences(of: "The notch", with: "**The notch**").replacingOccurrences(of: "camera", with: "`camera`").replacingOccurrences(of: "\n\n", with: "\\n\\n"))
     precondition(nextLiveReply(previous: last, screen: one[3], blocks: md, working: true) == nil)
 
     // Several blocks: tool rows (inline and collapsed group) never show; held prose is dropped.
