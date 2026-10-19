@@ -373,16 +373,16 @@ final class OrchestratorManager: ObservableObject {
     /// Recomputes the live reply from the current screen and transcript (called after either changes).
     func updateLiveReply() {
         let working = chatLive ?? (liveStatus != nil)
-        let next = nextLiveReply(previous: liveReply, screen: screen, blocks: OrchestratorTranscriptStore.shared.blocks, working: working)
+        let next = nextLiveReply(previous: liveReply, screen: screen, blocks: OrchestratorTranscriptStore.shared.blocks, working: working, cardUp: prompt != nil)
         if liveReply != next { liveReply = next }
-        if working || liveReply == nil { liveEnd?.cancel(); liveEnd = nil }
+        if working || liveReply == nil || prompt != nil { liveEnd?.cancel(); liveEnd = nil }
         else if liveEnd == nil {
             // Turn over but its block never matched the screen text: drop the row after a grace.
             liveEnd = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(3))
                 guard !Task.isCancelled, let self else { return }
                 self.liveEnd = nil
-                if !(self.chatLive ?? (self.liveStatus != nil)) { self.liveReply = nil }
+                if self.prompt == nil, !(self.chatLive ?? (self.liveStatus != nil)) { self.liveReply = nil }
             }
         }
     }

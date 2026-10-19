@@ -23,7 +23,10 @@ func runQuickJzdTests() {
     // Held: shown until its prose block reaches the transcript (markdown in the block does not matter).
     let user = decodeChatBlocks(Data(#"[{"id":"u","kind":"user","text":"hi"}]"#.utf8))!.blocks
     precondition(heldLeadIn(screen: real, blocks: user) == lead)
-    let arrived = decodeChatBlocks(Data(#"[{"id":"u","kind":"user","text":"hi"},{"id":"p","kind":"prose","text":"**Laptop** notches exist because the `webcam` has to sit somewhere, and more."}]"#.utf8))!.blocks
+    let first = lead.components(separatedBy: "\n\n")[0].replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "webcam", with: "`webcam`")
+    let partial = decodeChatBlocks(Data(("[{\"id\":\"u\",\"kind\":\"user\",\"text\":\"hi\"},{\"id\":\"p\",\"kind\":\"prose\",\"text\":\"**Laptop** notches exist because the `webcam` has to sit somewhere, and more.\"}]").utf8))!.blocks
+    precondition(heldLeadIn(screen: real, blocks: partial) == lead) // a block holding only part of it does not hide the rest
+    let arrived = decodeChatBlocks(Data(("[{\"id\":\"u\",\"kind\":\"user\",\"text\":\"hi\"},{\"id\":\"p\",\"kind\":\"prose\",\"text\":\"" + first + "\\n\\nLEADIN-END\"}]").utf8))!.blocks
     precondition(heldLeadIn(screen: real, blocks: arrived) == nil)
     let older = decodeChatBlocks(Data(#"[{"id":"u","kind":"user","text":"hi"},{"id":"p","kind":"prose","text":"Let me check the runs first."}]"#.utf8))!.blocks
     precondition(heldLeadIn(screen: real, blocks: older) == lead)
