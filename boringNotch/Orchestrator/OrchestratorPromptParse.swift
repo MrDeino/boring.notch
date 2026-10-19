@@ -40,7 +40,8 @@ private func scanPrompt(_ screen: String, window: Int) -> (lines: [String], opti
     }
     // Live prompts end with an "Esc to cancel" footer; a numbered draft in the input box has none.
     // The question review step has no footer; its "Ready to submit" line stands in.
-    let footer = lines.dropFirst(bestEnd + 1).contains { $0.localizedCaseInsensitiveContains("esc to cancel") }
+    // The footer wraps onto a second line when it grows (typing in a free-text option adds "ctrl+g to edit in Vim"): match the joined text.
+    let footer = lines.dropFirst(bestEnd + 1).joined(separator: " ").localizedCaseInsensitiveContains("esc to cancel")
         || lines.contains { $0 == "Ready to submit your answers?" }
     guard bestEnd >= 0 && bestEnd >= lines.count - 4 && footer else { return nil }
     return (lines, best, bestIdx, bestMarked)

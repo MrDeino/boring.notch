@@ -182,9 +182,7 @@ func latestAssistantProse(_ blocks: [ChatBlock]) -> String? {
 /// Soft wraps are re-joined by terminal width (the rule's length); blank lines stay paragraph breaks.
 // ponytail: width heuristic counts Characters, so wide glyphs (CJK, emoji) can leave a stray line break.
 func screenLeadIn(screen: String) -> String? {
-    let lines = screen.split(separator: "\n", omittingEmptySubsequences: false).map {
-        String($0.replacingOccurrences(of: "\u{a0}", with: " ").reversed().drop { $0 == " " }.reversed())
-    }
+    let lines = screenLines(screen)
     func isRule(_ s: String) -> Bool { s.hasPrefix("───") }
     guard let mark = lines.lastIndex(where: { $0.hasPrefix("⏺") }),
           let top = lines[mark...].firstIndex(where: isRule) else { return nil }
@@ -202,6 +200,20 @@ func screenLeadIn(screen: String) -> String? {
         if !t.isEmpty { paragraphs.insert(t, at: 0) }
     }
     return paragraphs.isEmpty ? nil : paragraphs.joined(separator: "\n\n")
+}
+
+/// The screen as trimmed lines. Claude Code blinks the ⏺ of a running tool element: on the "off" frames the marker is two
+/// spaces, so the tool's header (a summary, or any line directly above its ⎿ result) looks like a continuation of the prose
+/// above it. Those headers get their ⏺ back, so the element split sees the same shape on every frame.
+func screenLines(_ screen: String) -> [String] {
+    var lines = screen.split(separator: "\n", omittingEmptySubsequences: false).map {
+        String($0.replacingOccurrences(of: "\u{a0}", with: " ").reversed().drop { $0 == " " }.reversed())
+    }
+    for i in lines.indices where lines[i].hasPrefix("  ") && !lines[i].hasPrefix("   ") {
+        let body = String(lines[i].dropFirst(2))
+        if isToolSummary(body) || i + 1 < lines.count && lines[i + 1].hasPrefix("  ⎿") && !body.hasPrefix("⎿") { lines[i] = "⏺ " + body }
+    }
+    return lines
 }
 
 /// One screen element's lines as text: soft wraps (line filled to the terminal width) re-joined, blank lines kept as paragraph breaks.
@@ -245,20 +257,29 @@ func heldLeadIn(screen: String, blocks: [ChatBlock]) -> String? {
     return lead.components(separatedBy: "\n\n").allSatisfy({ proseHeld($0, in: blocks) }) ? nil : lead
 }
 
+/// Index of the rule above the input box (the `❯` line that is not a numbered option); nil while a dialog replaces the box.
+private func inputBoxTop(_ lines: [String]) -> Int? {
+    lines.indices.last(where: { i in
+        guard lines[i].hasPrefix("───"), i + 1 < lines.count else { return false }
+        let n = lines[i + 1].trimmingCharacters(in: .whitespaces)
+        return n.hasPrefix("❯") && n.range(of: #"^❯\s*\d+\."#, options: .regularExpression) == nil
+    })
+}
+
+/// Whether the end-of-turn grace may run (and drop the live row): turn over, a row showing, no card, and the input box back on
+/// screen. A dialog (question card, however its footer wraps or its prompt parses) holds text Claude Code hasn't written yet.
+func liveEndDue(working: Bool, hasRow: Bool, cardUp: Bool, screen: String) -> Bool {
+    !working && hasRow && !cardUp && (screen.isEmpty || inputBoxTop(screenLines(screen)) != nil)
+}
+
 /// The reply being written right now, read off the tmux screen: every `⏺` prose element of the turn above the
 /// input box that the transcript doesn't hold yet (tool rows and the spinner are skipped). headCut = the first
 /// `⏺` scrolled out of the capture, so the head must come from an earlier screen (see mergeLiveReply).
 /// nil while a dialog is up (no input box under the text) or when there is nothing.
 func screenLiveReply(screen: String, blocks: [ChatBlock]) -> (text: String, headCut: Bool)? {
-    let lines = screen.split(separator: "\n", omittingEmptySubsequences: false).map {
-        String($0.replacingOccurrences(of: "\u{a0}", with: " ").reversed().drop { $0 == " " }.reversed())
-    }
+    let lines = screenLines(screen)
     func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespaces) }
-    guard let top = lines.indices.last(where: { i in
-        guard lines[i].hasPrefix("───"), i + 1 < lines.count else { return false }
-        let n = trimmed(lines[i + 1])
-        return n.hasPrefix("❯") && n.range(of: #"^❯\s*\d+\."#, options: .regularExpression) == nil
-    }) else { return nil }
+    guard let top = inputBoxTop(lines) else { return nil }
     let width = lines[top].count
     let starts = lines.indices.filter { $0 < top && !lines[$0].isEmpty && !lines[$0].hasPrefix(" ") }
     var parts: [String] = [], headCut = false, stopped = false
