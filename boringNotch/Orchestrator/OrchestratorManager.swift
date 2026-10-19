@@ -380,14 +380,14 @@ final class OrchestratorManager: ObservableObject {
         if turn != liveIgnoredTurn { liveIgnored = []; liveIgnoredTurn = turn }
         let next = nextLiveReply(previous: liveReply, screen: screen, blocks: blocks, working: working, cardUp: prompt != nil, ignore: liveIgnored)
         if liveReply != next { liveReply = next }
-        if working || liveReply == nil || prompt != nil { liveEnd?.cancel(); liveEnd = nil }
+        if !liveEndDue(working: working, hasRow: liveReply != nil, cardUp: prompt != nil, screen: screen) { liveEnd?.cancel(); liveEnd = nil }
         else if liveEnd == nil {
             // Turn over but its block never matched the screen text: drop the row after a grace.
             liveEnd = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(3))
                 guard !Task.isCancelled, let self else { return }
                 self.liveEnd = nil
-                if self.prompt == nil, !(self.chatLive ?? (self.liveStatus != nil)) {
+                if liveEndDue(working: self.chatLive ?? (self.liveStatus != nil), hasRow: true, cardUp: self.prompt != nil, screen: self.screen) {
                     if let r = self.liveReply { self.liveIgnored.formUnion(liveKeys(r)) } // the screen still shows it: don't bring it back
                     self.liveReply = nil
                 }
