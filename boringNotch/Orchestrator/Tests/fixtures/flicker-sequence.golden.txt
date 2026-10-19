@@ -1,0 +1,30 @@
+step 0 row 0: P1 The buzzer works now and the next
+step 1 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 2 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 3 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 3 row 1: P2 Sorry, a typo in my
+step 4 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 4 row 1: P2 Sorry, a typo in my script meant that run did not count, so running it once more now. P2-END
+step 5 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 5 row 1: P2 Sorry, a typo in my script meant that run did not count, so running it once more now. P2-END
+step 6 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 6 row 1: P2 Sorry, a typo in my script meant that run did not count, so running it once more now. P2-END
+step 6 row 2: P3 Trigger test passed with clean presses and no doubles, so now checking the receiver. P3-END
+step 7 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 7 row 1: P2 Sorry, a typo in my script meant that run did not count, so running it once more now. P2-END
+step 7 row 2: P3 Trigger test passed with clean presses and no doubles, so now checking the receiver. P3-END
+step 8 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 8 row 1: P2 Sorry, a typo in my script meant that run did not count, so running it once more now. P2-END
+step 8 row 2: P3 Trigger test passed with clean presses and no doubles, so now checking the receiver. P3-END
+step 9 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 9 row 1: P2 Sorry, a typo in my script meant that run did not count, so running it once more now. P2-END
+step 9 row 2: P3 Trigger test passed with clean presses and no doubles, so now checking the receiver. P3-END
+step 9 row 3: P4 Nothing came through, but the pin idling high confirms the setup is right. P4-END
+step 10 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 10 row 1: P2 Sorry, a typo in my script meant that run did not count, so running it once more now. P2-END
+step 10 row 2: P3 Trigger test passed with clean presses and no doubles, so now checking the receiver. P3-END
+step 10 row 3: P4 Nothing came through, but the pin idling high confirms the setup is right. P4-END
+step 11 row 0: P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+step 11 row 1: P2 Sorry, a typo in my script meant that run did not count, so running it once more now. P2-END
+step 11 row 2: P3 Trigger test passed with clean presses and no doubles, so now checking the receiver. P3-END
+step 11 row 3: P4 Nothing came through, but the pin idling high confirms the setup is right. P4-END

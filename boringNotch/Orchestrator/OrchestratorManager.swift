@@ -32,6 +32,8 @@ final class OrchestratorManager: ObservableObject {
     @Published private(set) var chatLive: Bool? = nil
     /// Quick e1d: the reply being written, read off the screen until its transcript block arrives.
     @Published private(set) var liveReply: String? = nil
+    private var liveIgnored: Set<String> = []
+    private var liveIgnoredTurn: String?
     private var liveEnd: Task<Void, Never>?
     // Phase 8
     /// serve's context.percent while the chat runs; nil on old serve.
@@ -373,7 +375,10 @@ final class OrchestratorManager: ObservableObject {
     /// Recomputes the live reply from the current screen and transcript (called after either changes).
     func updateLiveReply() {
         let working = chatLive ?? (liveStatus != nil)
-        let next = nextLiveReply(previous: liveReply, screen: screen, blocks: OrchestratorTranscriptStore.shared.blocks, working: working, cardUp: prompt != nil)
+        let blocks = OrchestratorTranscriptStore.shared.blocks
+        let turn = blocks.last { $0.kind == .user }?.id
+        if turn != liveIgnoredTurn { liveIgnored = []; liveIgnoredTurn = turn }
+        let next = nextLiveReply(previous: liveReply, screen: screen, blocks: blocks, working: working, cardUp: prompt != nil, ignore: liveIgnored)
         if liveReply != next { liveReply = next }
         if working || liveReply == nil || prompt != nil { liveEnd?.cancel(); liveEnd = nil }
         else if liveEnd == nil {
@@ -382,7 +387,10 @@ final class OrchestratorManager: ObservableObject {
                 try? await Task.sleep(for: .seconds(3))
                 guard !Task.isCancelled, let self else { return }
                 self.liveEnd = nil
-                if self.prompt == nil, !(self.chatLive ?? (self.liveStatus != nil)) { self.liveReply = nil }
+                if self.prompt == nil, !(self.chatLive ?? (self.liveStatus != nil)) {
+                    if let r = self.liveReply { self.liveIgnored.formUnion(liveKeys(r)) } // the screen still shows it: don't bring it back
+                    self.liveReply = nil
+                }
             }
         }
     }

@@ -1,0 +1,21 @@
+❯ go
+
+⏺ P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END
+
+⏺ Ran 1 shell command (ctrl+o to expand)
+
+⏺ P2 Sorry, a typo in my script meant that run did not count, so running it once more now. P2-END
+
+⏺ Ran 2 shell commands (ctrl+o to expand)
+
+⏺ P3 Trigger test passed with clean presses and no doubles, so now checking the receiver. P3-END
+
+⏺ Bash(ssh gun2 'sleep 20')
+  ⎿  Running…
+
+✻ Working… (12s · esc to interrupt)
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ? for shortcuts
