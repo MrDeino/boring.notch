@@ -195,7 +195,7 @@ func screenLeadIn(screen: String) -> String? {
     for (k, s) in starts.enumerated().reversed() {
         let first = lines[s]
         guard first.hasPrefix("⏺") else { break }
-        let isTool = first.range(of: #"^⏺ [^\s(]+\("#, options: .regularExpression) != nil
+        let isTool = first.range(of: #"^⏺ [^\s(]+\("#, options: .regularExpression) != nil || isToolSummary(first)
         if isTool { if paragraphs.isEmpty { continue } else { break } }
         let end = k + 1 < starts.count ? starts[k + 1] : top
         let t = rejoinElement(lines[s..<end], width: width, firstIsMark: true)
@@ -216,6 +216,12 @@ private func rejoinElement(_ els: ArraySlice<String>, width: Int, firstIsMark: B
         prevLen = l.count
     }
     return text.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+/// Claude Code's collapsed tool summary ("⏺ Ran 2 shell commands (ctrl+o to expand)"): a tool element, never prose.
+func isToolSummary(_ line: String) -> Bool {
+    let l = line.hasPrefix("⏺ ") ? String(line.dropFirst(2)) : line
+    return l.range(of: #"^[A-Z][a-z]+( for)? (\d+|a|an) (shell commands?|commands?|files?|patterns?|searche?s?|director(y|ies)|lines?|edits?|MCP tools?|tools?|agents?)\b[^.!?]*$"#, options: .regularExpression) != nil
 }
 
 private func proseKey(_ s: String) -> String { String(s.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains).map(Character.init)) }
@@ -262,7 +268,7 @@ func screenLiveReply(screen: String, blocks: [ChatBlock]) -> (text: String, head
         if parts.isEmpty, let c = first.first, "✻✢✳✶✽✺✹·*".contains(c) { continue }
         guard first.hasPrefix("⏺") else { stopped = true; break }
         let isTool = first.range(of: #"^⏺ [^\s(]+\("#, options: .regularExpression) != nil
-            || lines[(s + 1)..<end].contains { trimmed($0).hasPrefix("⎿") }
+            || isToolSummary(first) || lines[(s + 1)..<end].contains { trimmed($0).hasPrefix("⎿") }
         if isTool { continue }
         let t = rejoinElement(lines[s..<end], width: width, firstIsMark: true)
         if !t.isEmpty { parts.insert(t, at: 0) }
@@ -292,19 +298,50 @@ func mergeLiveReply(previous: String?, current: String, headCut: Bool) -> String
     return tail.hasPrefix(current) || current.hasPrefix(tail) ? String(previous[..<at.lowerBound]) + current : current
 }
 
+/// A live row as paragraphs: blanks, tool summaries, paragraphs the transcript holds, those in `ignore` and repeats dropped, order kept.
+private func liveParagraphs(_ paras: [String], blocks: [ChatBlock], ignore: Set<String>) -> [String] {
+    var seen = ignore
+    return paras.filter { p in
+        let k = proseKey(p)
+        return !k.isEmpty && !isToolSummary(p) && !proseHeld(p, in: blocks) && seen.insert(k).inserted
+    }
+}
+
+private func paragraphs(_ s: String?) -> [String] { (s ?? "").components(separatedBy: "\n\n").filter { !$0.isEmpty } }
+
+/// Paragraphs of the previous row that sit above the current text (scrolled off the screen, transcript not caught up).
+/// The current first paragraph is located among them by its opening; no match keeps them all.
+private func carriedOver(_ prev: [String], before cur: [String]) -> [String] {
+    guard let c = cur.first.map(proseKey), !c.isEmpty else { return prev }
+    let at = prev.firstIndex { let k = proseKey($0); return !k.isEmpty && (c.hasPrefix(k.prefix(30)) || k.hasPrefix(c.prefix(30))) }
+    return at.map { Array(prev[..<$0]) } ?? prev
+}
+
+/// Keys of the paragraphs of `text`, for the manager's end-of-turn drop (ignore).
+func liveKeys(_ text: String) -> Set<String> { Set(paragraphs(text).map(proseKey)) }
+
 /// The live reply for the next screen. Idle with nothing showing does no parsing; idle with a row showing keeps it
 /// (end-of-turn grace) until the transcript block arrives and screenLiveReply drops it.
 /// cardUp: a question/permission card is showing; the text above it is the row (Claude Code writes it to the
 /// transcript only after the answer), seeded from the screen and kept as it was otherwise.
-func nextLiveReply(previous: String?, screen: String, blocks: [ChatBlock], working: Bool, cardUp: Bool = false) -> String? {
-    if cardUp { return heldLeadIn(screen: screen, blocks: blocks) ?? previous }
+/// Every result goes through liveParagraphs: each paragraph once, in order, never one the transcript already shows.
+/// ignore: paragraphs the row already dropped this turn (end-of-turn grace), so they don't come back from the screen.
+func nextLiveReply(previous: String?, screen: String, blocks: [ChatBlock], working: Bool, cardUp: Bool = false, ignore: Set<String> = []) -> String? {
+    let prev = paragraphs(previous)
+    func result(_ p: [String]) -> String? {
+        let l = liveParagraphs(p, blocks: blocks, ignore: ignore)
+        return l.isEmpty ? nil : l.joined(separator: "\n\n")
+    }
+    if cardUp {
+        guard let lead = heldLeadIn(screen: screen, blocks: blocks) else { return result(prev) }
+        let cur = paragraphs(lead)
+        return result(carriedOver(prev, before: cur) + cur)
+    }
     if !working && previous == nil { return nil }
     // Nothing on screen (a card just closed, the text scrolled off) but the transcript lacks it: keep the row, never lose text.
-    guard let r = screenLiveReply(screen: screen, blocks: blocks) else {
-        let rest = (previous ?? "").components(separatedBy: "\n\n").filter { !$0.isEmpty && !proseHeld($0, in: blocks) }
-        return rest.isEmpty ? nil : rest.joined(separator: "\n\n")
-    }
-    return mergeLiveReply(previous: previous, current: r.text, headCut: r.headCut)
+    guard let r = screenLiveReply(screen: screen, blocks: blocks) else { return result(prev) }
+    let cur = paragraphs(r.text)
+    return result(r.headCut ? paragraphs(mergeLiveReply(previous: previous, current: r.text, headCut: true)) : carriedOver(prev, before: cur) + cur)
 }
 
 /// Transcript text is untrusted: inline markdown only, links stripped (T-05-01/02). The size cap only bounds a hostile

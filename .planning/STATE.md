@@ -131,3 +131,4 @@ Resume file: None
 | 261017-dpl | Deploy wing + row: building/live (6 s)/failed (sticky) wings from serve's optional `deploys` (+ SSE `deploy`), open-notch deploy rows that open `url`; mock-serve test, snapshots closed-30..38, 66..68 | 2026-10-17 | .planning/quick/261017-dpl-deploy-wings
 | 261017-key | Question card taps instant: optimistic ticks, ordered key queue, reconcile with the screen, submit waits for the queue | 2026-10-17 | .planning/quick/261017-key-question-taps-instant-queued |
 | 261019-k0i | Chat shows all assistant text: live row stays through a card (seeded from the screen lead-in, kept until the transcript holds it), stricter held-text test | 2026-10-19 | .planning/quick/261019-k0i-chat-shows-all-assistant-text |
+| 261019-flk | Live row: each paragraph once, in order; no "Ran N" lines, no vanish/reappear | 2026-10-19 | .planning/quick/261019-flk-live-row-text-once-in-order |

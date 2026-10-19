@@ -153,6 +153,14 @@ private let heldBlocks = blocks(#"""
  {"id":"l1","kind":"user","text":"the animations are smoother, but still not 100% smooth, expand moves in two steps"}
 ]}
 """#)
+// Synthetic turn: P1 already in the transcript, P2 and P3 only on the screen (shown once, in order, no "Ran N" lines).
+private let toolsTurnBlocks = blocks(#"""
+{"running":true,"blocks":[
+ {"id":"u","kind":"user","text":"go"},
+ {"id":"p0","kind":"prose","text":"P1 The buzzer works now and the next step is the trigger test, so press it a few times. P1-END"},
+ {"id":"t0","kind":"tool","name":"Bash","target":"ssh gun2 'sleep 5'","result":"ok"}
+]}
+"""#)
 private let questionBlocks = blocks(#"""
 {"running":true,"blocks":[
  {"id":"q1","kind":"user","text":"How should the expanded view behave on long chats?"},
@@ -344,6 +352,7 @@ struct Snap {
             Scene(name: "59-ask-leadin-real-2q", chat: askChat("leadin-2q.txt"), blocks: heldBlocks, expanded: true),
             Scene(name: "60-live-reply-open", chat: liveChat, blocks: heldBlocks),
             Scene(name: "61-live-reply-expanded", chat: liveChat, blocks: heldBlocks, expanded: true),
+            Scene(name: "69-live-reply-tools-expanded", chat: ChatResponse(running: true, screen: fixture("live-tools-turn.txt"), live: true), blocks: toolsTurnBlocks, expanded: true),
             Scene(name: "66-deploy-row-building-open", chat: chat(""), blocks: shortBlocks, deploys: [snapDeploy("building", ago: 41)]),
             Scene(name: "67-deploy-row-live-expanded", chat: chat(""), blocks: shortBlocks, expanded: true, deploys: [snapDeploy("building", ago: 300, sha: "e5"), snapDeploy("live", ago: 140, done: 30)]),
             Scene(name: "68-deploy-row-failed-open", chat: chat(""), blocks: shortBlocks, deploys: [snapDeploy("failed", ago: 75, done: 20)]),
