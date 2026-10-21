@@ -15,6 +15,7 @@
 		0A1C00000000000000000453 /* OrchestratorStates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000403 /* OrchestratorStates.swift */; };
 		0A1C00000000000000000454 /* OrchestratorChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000404 /* OrchestratorChat.swift */; };
 		0A1C00000000000000000455 /* OrchestratorTranscript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000405 /* OrchestratorTranscript.swift */; };
+		0A1C000000000000000004F5 /* OrchestratorAsk.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C000000000000000004F6 /* OrchestratorAsk.swift */; };
 		0A1C00000000000000000456 /* OrchestratorPromptCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000406 /* OrchestratorPromptCard.swift */; };
 		0A1C00000000000000000457 /* OrchestratorPromptParse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000407 /* OrchestratorPromptParse.swift */; };
 		0A1C00000000000000000458 /* OrchestratorRunsBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000408 /* OrchestratorRunsBoard.swift */; };
@@ -211,6 +212,7 @@
 		0A1C00000000000000000403 /* OrchestratorStates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorStates.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000404 /* OrchestratorChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorChat.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000405 /* OrchestratorTranscript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorTranscript.swift; sourceTree = "<group>"; };
+		0A1C000000000000000004F6 /* OrchestratorAsk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorAsk.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000406 /* OrchestratorPromptCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorPromptCard.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000407 /* OrchestratorPromptParse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorPromptParse.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000408 /* OrchestratorRunsBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorRunsBoard.swift; sourceTree = "<group>"; };
@@ -412,6 +414,7 @@
 				0A1C00000000000000000403 /* OrchestratorStates.swift */,
 				0A1C00000000000000000404 /* OrchestratorChat.swift */,
 				0A1C00000000000000000405 /* OrchestratorTranscript.swift */,
+				0A1C000000000000000004F6 /* OrchestratorAsk.swift */,
 				0A1C00000000000000000406 /* OrchestratorPromptCard.swift */,
 				0A1C00000000000000000407 /* OrchestratorPromptParse.swift */,
 				0A1C00000000000000000408 /* OrchestratorRunsBoard.swift */,
@@ -987,6 +990,7 @@
 				0A1C00000000000000000453 /* OrchestratorStates.swift in Sources */,
 				0A1C00000000000000000454 /* OrchestratorChat.swift in Sources */,
 				0A1C00000000000000000455 /* OrchestratorTranscript.swift in Sources */,
+				0A1C000000000000000004F5 /* OrchestratorAsk.swift in Sources */,
 				0A1C00000000000000000456 /* OrchestratorPromptCard.swift in Sources */,
 				0A1C00000000000000000457 /* OrchestratorPromptParse.swift in Sources */,
 				0A1C00000000000000000458 /* OrchestratorRunsBoard.swift in Sources */,
