@@ -145,6 +145,28 @@ private let editBlocks = blocks(#"""
 ]}
 """#)
 
+/// Finished question rows (synthetic): a long two-question one (single + multi-select, "Other" pick, note), a dismissed one, an older-serve fallback.
+private let askBlocks = blocks(#"""
+{"running":true,"blocks":[
+ {"id":"a1","kind":"user","text":"Pick a release plan and the checks to run."},
+ {"id":"a2","kind":"tool","name":"AskUserQuestion","target":"Which release channel should the next build ship to, given that the changelog is long?","result":"User has answered your questions (+2 lines)",
+  "questions":[
+   {"header":"Channel","question":"Which release channel should the next build ship to, given that the changelog is long and the beta group is small?","multiSelect":false,"options":[
+     {"label":"Stable","description":"Everyone gets it at once, including people on slow connections and old machines"},
+     {"label":"Beta","description":"A small group first"},
+     {"label":"Nightly"}]},
+   {"header":"Checks","question":"Which checks should run before it ships?","multiSelect":true,"options":[
+     {"label":"Unit","description":"Fast"},{"label":"Snapshots","description":"Renders every scene"},{"label":"Manual pass"}]}],
+  "answers":[
+   {"question":"Which release channel should the next build ship to, given that the changelog is long and the beta group is small?","selected":["Beta"],"other":null,"notes":null},
+   {"question":"Which checks should run before it ships?","selected":["Unit","Snapshots"],"other":"A dry run on a spare machine","notes":"Skip the manual pass this time."}]},
+ {"id":"a3","kind":"tool","name":"AskUserQuestion","target":"Rename the tab?","result":"dismissed",
+  "questions":[{"header":"Rename","question":"Rename the tab?","multiSelect":false,"options":[{"label":"Yes"},{"label":"No"}]}],"answers":[]},
+ {"id":"a4","kind":"tool","name":"AskUserQuestion","target":"Older serve: no questions field","result":"User has answered your questions"},
+ {"id":"a5","kind":"prose","text":"Going with the beta channel."}
+]}
+"""#)
+
 /// Ends on a user message followed by several paragraphs of prose: the context above a question card.
 /// What the store holds while a question is pending: Claude Code writes the turn's text only after the answer.
 private let heldBlocks = blocks(#"""
@@ -199,6 +221,7 @@ struct Scene {
     var dismissed = false
     var draft = ""
     var diffOpen = false
+    var askOpen = false // finished question rows start opened
     var calm = false // no runs: capsule shows Running (+ ctx)
     var logRun: String? // run log overlay over the content
     var logLines = true // false: empty log
@@ -356,6 +379,10 @@ struct Snap {
             Scene(name: "66-deploy-row-building-open", chat: chat(""), blocks: shortBlocks, deploys: [snapDeploy("building", ago: 41)]),
             Scene(name: "67-deploy-row-live-expanded", chat: chat(""), blocks: shortBlocks, expanded: true, deploys: [snapDeploy("building", ago: 300, sha: "e5"), snapDeploy("live", ago: 140, done: 30)]),
             Scene(name: "68-deploy-row-failed-open", chat: chat(""), blocks: shortBlocks, deploys: [snapDeploy("failed", ago: 75, done: 20)]),
+            Scene(name: "70-ask-done-closed-open", chat: chat(""), blocks: Array(askBlocks.prefix(2))),
+            Scene(name: "71-ask-done-opened-open", chat: chat(""), blocks: Array(askBlocks.prefix(2)), askOpen: true),
+            Scene(name: "72-ask-done-closed-expanded", chat: chat(""), blocks: askBlocks, expanded: true),
+            Scene(name: "73-ask-done-opened-expanded", chat: chat(""), blocks: askBlocks, expanded: true, askOpen: true),
             Scene(name: "57-runlog-open", chat: chat(""), blocks: longBlocks, logRun: "261014024541-r002"),
         ]
 
@@ -367,7 +394,7 @@ struct Snap {
             let vm = BoringViewModel()
             let m = OrchestratorManager.shared
             await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: s.calm ? StateResponse(runs: [], usage: nil) : StateResponse(runs: state.runs, usage: state.usage, deploys: s.deploys.isEmpty ? nil : try! JSONDecoder().decode([Deploy].self, from: Data("[\(s.deploys.joined(separator: ","))]".utf8))), runsBoard: s.runsBoard)
-            OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends, attachments: s.attachments, draft: s.draft)
+            OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends, attachments: s.attachments, draft: s.draft, askOpen: s.askOpen ? ["a2", "a3"] : [])
             OrchestratorFileQueue.shared.snapshotSet(s.files)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
             PromptCardController.shared.snapshotSet(pressed: s.pressed, note: s.note, pending: s.pending, dismissCurrent: s.dismissed)

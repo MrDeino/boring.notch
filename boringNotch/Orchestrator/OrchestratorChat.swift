@@ -32,6 +32,9 @@ final class OrchestratorTranscriptStore: ObservableObject {
     /// level changes, notch close/reopen and tab switches, which remount the chat view.
     @Published var draft = "" { didSet { if draft.isEmpty && draftFromTerminal { draftFromTerminal = false } } }
     @Published var draftFromTerminal = false
+    /// Finished question rows the user has opened; here (not row @State) so they stay open across level changes and tab switches.
+    @Published private(set) var askOpen: Set<String> = []
+    func toggleAsk(_ id: String) { if !askOpen.insert(id).inserted { askOpen.remove(id) } }
     private var knownUserIDs: Set<String> = []
     private var nextPendingID = 0
     private var draining = false
@@ -54,6 +57,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
     func refresh(base: URL, session: URLSession, chatRunning: Bool) async {
         guard chatRunning else {
             if !blocks.isEmpty { blocks = [] }
+            if !askOpen.isEmpty { askOpen = [] }
             needsFull = true
             return
         }
@@ -204,7 +208,8 @@ final class OrchestratorTranscriptStore: ObservableObject {
 #if ORCH_SNAPSHOT
 extension OrchestratorTranscriptStore {
     /// Snapshot harness only: fixture blocks instead of /api/chat/blocks.
-    func snapshotSet(blocks: [ChatBlock], pending: [PendingMessage] = [], attachments: [Data] = [], draft: String = "") {
+    func snapshotSet(blocks: [ChatBlock], pending: [PendingMessage] = [], attachments: [Data] = [], draft: String = "", askOpen: Set<String> = []) {
+        self.askOpen = askOpen
         self.draft = draft
         draftFromTerminal = false
         self.attachments = attachments
@@ -379,7 +384,7 @@ struct OrchestratorChatView: View {
                 }
             } else {
                 ForEach(store.blocks.suffix(maxRows)) { b in
-                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, caret: caretVisible(live: manager.chatLive, working: manager.liveStatus != nil, kind: b.kind, id: b.id, newestID: store.blocks.last?.id) && store.pending.isEmpty && manager.liveReply == nil, onClick: expandChat, onCopied: showCopied)
+                    ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, caret: caretVisible(live: manager.chatLive, working: manager.liveStatus != nil, kind: b.kind, id: b.id, newestID: store.blocks.last?.id) && store.pending.isEmpty && manager.liveReply == nil, onClick: expandChat, onCopied: showCopied, askOpen: store.askOpen.contains(b.id), onAskToggle: { toggleAsk(b.id) })
                         .equatable()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -454,7 +459,20 @@ struct OrchestratorChatView: View {
     @State private var unseen = false
     @State private var contentHeight: CGFloat = 0
 
+    /// Opening/closing a question row changes the height on purpose: keep the offset, no jump to bottom, no "new messages" pill.
+    @State private var holdScroll = false
+
+    private func toggleAsk(_ id: String) {
+        holdScroll = true
+        store.toggleAsk(id)
+        Task { @MainActor in try? await Task.sleep(for: .milliseconds(500)); holdScroll = false }
+    }
+
     private func chatGeometry(_ f: CGRect, viewport: CGFloat, proxy: ScrollViewProxy) {
+        if holdScroll {
+            contentHeight = f.height
+            return
+        }
         let r = chatScrollStep(stick: stick, oldHeight: contentHeight, newHeight: f.height, contentMinY: f.minY, viewport: viewport)
         contentHeight = f.height
         if r.stick != stick { stick = r.stick }
@@ -806,7 +824,7 @@ var orchSnapDiffOpen = false
 /// or a new block re-lays-out only the rows whose block changed.
 private struct ChatBlockRow: View, Equatable {
     static func == (a: ChatBlockRow, b: ChatBlockRow) -> Bool {
-        a.block == b.block && a.proseLineLimit == b.proseLineLimit && a.expanded == b.expanded && a.caret == b.caret && a.plain == b.plain
+        a.block == b.block && a.proseLineLimit == b.proseLineLimit && a.expanded == b.expanded && a.caret == b.caret && a.plain == b.plain && a.askOpen == b.askOpen
     }
 
     let block: ChatBlock
@@ -817,6 +835,9 @@ private struct ChatBlockRow: View, Equatable {
     var plain = false
     var onClick: () -> Void = {}
     var onCopied: () -> Void = {}
+    /// Finished AskUserQuestion row: opened by the user (kept in the store).
+    var askOpen = false
+    var onAskToggle: () -> Void = {}
     @State private var folded = false
     #if ORCH_SNAPSHOT
     @State private var diffOpen = orchSnapDiffOpen // open chat: "▸ diff" shows the same card inline
@@ -959,7 +980,63 @@ private struct ChatBlockRow: View, Equatable {
     }
 
     @ViewBuilder private var toolRow: some View {
-        if let desc = toolDescription(block) { describedToolRow(desc) } else { plainToolRow }
+        if let ask = askRow(block) { askCard(ask) } else if let desc = toolDescription(block) { describedToolRow(desc) } else { plainToolRow }
+    }
+
+    /// Closed: a one-line summary per question. Open: every question in full with its options, the picks marked, "Other" text and notes.
+    /// The whole card is the button, so a tap toggles it and never reaches the transcript's expandChat().
+    private func askCard(_ ask: AskRow) -> some View {
+        Button { withAnimation(.easeOut(duration: 0.15)) { onAskToggle() } } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(verbatim: askOpen ? "▾" : "▸").font(OT.F.ui).foregroundStyle(OT.C.text5)
+                    Text(verbatim: "Question").font(OT.F.monoChip.weight(.medium)).foregroundStyle(OT.C.text3)
+                        .padding(.vertical, 2).padding(.horizontal, 6)
+                        .background(OT.C.raised, in: RoundedRectangle(cornerRadius: 5))
+                    if ask.dismissed { Text(verbatim: "dismissed").font(OT.F.meta).foregroundStyle(OT.C.text6) }
+                    Spacer(minLength: 0)
+                }
+                if askOpen {
+                    ForEach(Array(ask.questions.enumerated()), id: \.offset) { _, q in askQuestionView(q, dismissed: ask.dismissed) }
+                    if ask.dismissed { Text(verbatim: "Not answered / dismissed").font(OT.F.ui).foregroundStyle(OT.C.text5) }
+                } else {
+                    ForEach(Array(ask.summary.enumerated()), id: \.offset) { _, line in
+                        Text(verbatim: line).font(OT.F.ui).foregroundStyle(OT.C.text2).fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(OT.C.diffCard, in: RoundedRectangle(cornerRadius: 9))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(askOpen ? "Hide question and answer" : "Show question and answer")
+    }
+
+    private func askQuestionView(_ q: AskRowQuestion, dismissed: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if !q.header.isEmpty { Text(verbatim: q.header.uppercased()).font(OT.F.tiny.weight(.semibold)).foregroundStyle(OT.C.text6) }
+            if !q.question.isEmpty { Text(verbatim: q.question).font(OT.F.ui).foregroundStyle(OT.C.text).fixedSize(horizontal: false, vertical: true) }
+            ForEach(Array(q.options.enumerated()), id: \.offset) { _, o in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(verbatim: o.chosen ? (q.multiSelect ? "☑" : "●") : (q.multiSelect ? "☐" : "○"))
+                        .font(OT.F.meta).foregroundStyle(o.chosen ? OT.C.green : OT.C.text6)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(verbatim: o.label).font(o.chosen ? OT.F.uiMedium : OT.F.ui).foregroundStyle(o.chosen ? OT.C.text : OT.C.text4)
+                        if let d = o.description { Text(verbatim: d).font(OT.F.meta).foregroundStyle(OT.C.text6) }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let other = q.other {
+                Text(verbatim: "Other: " + other).font(OT.F.uiMedium).foregroundStyle(OT.C.green).fixedSize(horizontal: false, vertical: true)
+            }
+            if let n = q.notes { Text(verbatim: "Note: " + n).font(OT.F.meta).foregroundStyle(OT.C.text4).fixedSize(horizontal: false, vertical: true) }
+            if !q.answered && !dismissed { Text(verbatim: "Not answered").font(OT.F.meta).foregroundStyle(OT.C.text5) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func describedToolRow(_ desc: String) -> some View {

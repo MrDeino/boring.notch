@@ -20,8 +20,11 @@ struct ChatBlock: Decodable, Equatable, Identifiable {
     let removed: Int?
     let diff: [ChatDiffHunk]?
     let description: String?
+    /// AskUserQuestion only, from serve: the questions, and the answers (nil = waiting, [] = dismissed). Absent on older serves.
+    let questions: [AskQuestion]?
+    let answers: [AskAnswer]?
 
-    private enum CodingKeys: String, CodingKey { case id, kind, text, name, target, result, added, removed, diff, description }
+    private enum CodingKeys: String, CodingKey { case id, kind, text, name, target, result, added, removed, diff, description, questions, answers }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -40,6 +43,8 @@ struct ChatBlock: Decodable, Equatable, Identifiable {
         removed = try? c.decodeIfPresent(Int.self, forKey: .removed)
         diff = try? c.decodeIfPresent([ChatDiffHunk].self, forKey: .diff)
         description = try? c.decodeIfPresent(String.self, forKey: .description)
+        questions = (try? c.decodeIfPresent([LossyAsk<AskQuestion>].self, forKey: .questions))?.compactMap(\.value)
+        answers = (try? c.decodeIfPresent([LossyAsk<AskAnswer>].self, forKey: .answers))?.compactMap(\.value)
     }
 }
 
@@ -445,6 +450,6 @@ func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: S
 extension ChatBlock {
     init(pendingID: String, text: String, kind: Kind = .user) {
         id = pendingID; self.kind = kind; self.text = text
-        name = nil; target = nil; result = nil; added = nil; removed = nil; diff = nil; description = nil
+        name = nil; target = nil; result = nil; added = nil; removed = nil; diff = nil; description = nil; questions = nil; answers = nil
     }
 }

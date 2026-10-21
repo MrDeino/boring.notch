@@ -133,3 +133,4 @@ Resume file: None
 | 261019-k0i | Chat shows all assistant text: live row stays through a card (seeded from the screen lead-in, kept until the transcript holds it), stricter held-text test | 2026-10-19 | .planning/quick/261019-k0i-chat-shows-all-assistant-text |
 | 261019-flk | Live row: each paragraph once, in order; no "Ran N" lines, no vanish/reappear | 2026-10-19 | .planning/quick/261019-flk-live-row-text-once-in-order |
 | 261019-blk | Live row stops blinking: blinking tool marker and wrapped card footer found in a real recording; synthetic fixtures | 2026-10-19 | .planning/quick/261019-blk-live-row-blink-real-capture |
+| 261021-ask | Finished AskUserQuestion rows open/close on click (questions, options, picks, Other, notes, dismissed) from serve's optional questions/answers; absent fields keep the plain row; tests + snapshots 70-73 | 2026-10-21 | .planning/quick/261021-ask-expandable-answered-question-rows |
