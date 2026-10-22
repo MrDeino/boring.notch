@@ -13,11 +13,16 @@ struct OrchestratorView: View {
     @StateObject private var slice = ModelSlice.view
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var runLog = OrchestratorRunLog.shared
+    @ObservedObject var bgCard = OrchestratorBgCard.shared
     @State private var anchor = NSView()
     @State private var restoreLevel: ExpandLevel?
     @State private var escMonitor: Any?
 
     /// The log opens over the content: the open level grows to expanded first and returns on close.
+    /// The run log or a background card is up over the content.
+    private var overlayID: String? { runLog.runID ?? bgCard.selectedID }
+    private func closeOverlay() { runLog.close(); bgCard.close() }
+
     private func logChanged(_ id: String?) {
         if id != nil {
             guard restoreLevel == nil else { return }
@@ -26,7 +31,7 @@ struct OrchestratorView: View {
             if escMonitor == nil {
                 escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                     guard event.keyCode == 53, event.window === anchor.window else { return event }
-                    runLog.close()
+                    closeOverlay()
                     return nil
                 }
             }
@@ -51,12 +56,17 @@ struct OrchestratorView: View {
         .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         .clipped()
         .opacity(manager.statusMenuOpen || manager.notesOpen ? 0.35 : 1)
-        .allowsHitTesting(!manager.statusMenuOpen && !manager.notesOpen && runLog.runID == nil)
+        .allowsHitTesting(!manager.statusMenuOpen && !manager.notesOpen && overlayID == nil)
         .overlay(alignment: .topTrailing) {
             if runLog.runID != nil {
                 ZStack {
                     Color.clear.contentShape(Rectangle()).onTapGesture { runLog.close() }
                     OrchestratorRunLogOverlay().transition(.opacity)
+                }
+            } else if bgCard.selectedID != nil {
+                ZStack {
+                    Color.clear.contentShape(Rectangle()).onTapGesture { bgCard.close() }
+                    OrchestratorBgCardView().transition(.opacity)
                 }
             } else if manager.notesOpen {
                 ZStack(alignment: .topTrailing) {
@@ -81,14 +91,14 @@ struct OrchestratorView: View {
             return orchestratorHandleDrop(providers) { _ in }
         }
         .onAppear { expand.tabOpened(vm: vm, anchor: anchor) }
-        .onChange(of: runLog.runID) { _, id in logChanged(id) }
+        .onChange(of: overlayID) { _, id in logChanged(id) }
         // The log lives on the expanded level: leaving it (outside click, back) must not strand an overlay whose
         // content keeps the window from shrinking to the open size.
-        .onChange(of: expand.level(for: vm)) { _, l in if l == .open && runLog.runID != nil { restoreLevel = nil; runLog.close() } }
+        .onChange(of: expand.level(for: vm)) { _, l in if l == .open && overlayID != nil { restoreLevel = nil; closeOverlay() } }
         .onDisappear {
             expand.tabClosed(vm: vm)
             OrchestratorNotesStore.shared.flush(); manager.statusMenuOpen = false; manager.notesOpen = false
-            runLog.close()
+            closeOverlay()
             if let m = escMonitor { NSEvent.removeMonitor(m); escMonitor = nil }
             restoreLevel = nil
         }

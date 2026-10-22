@@ -199,6 +199,7 @@ struct OrchestratorExpandedView: View {
         HStack(alignment: .top, spacing: open ? 0 : 12) {
             VStack(spacing: 4) {
                 OrchestratorDeployRows()
+                OrchestratorBackgroundRow()
                 column(level).frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if !open {

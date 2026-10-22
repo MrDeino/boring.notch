@@ -225,6 +225,8 @@ struct Scene {
     var calm = false // no runs: capsule shows Running (+ ctx)
     var logRun: String? // run log overlay over the content
     var logLines = true // false: empty log
+    var bg: String? // background agents/monitors (JSON array); bgCard = the open card's id
+    var bgCard: String?
 }
 
 /// Two-colour test PNG through the real orchestratorPNG path.
@@ -385,6 +387,14 @@ struct Snap {
             Scene(name: "71-ask-done-opened-open", chat: chat(""), blocks: Array(askBlocks.prefix(2)), askOpen: true),
             Scene(name: "72-ask-done-closed-expanded", chat: chat(""), blocks: askBlocks, expanded: true),
             Scene(name: "73-ask-done-opened-expanded", chat: chat(""), blocks: askBlocks, expanded: true, askOpen: true),
+            Scene(name: "80-bg-row-open", chat: chat(""), blocks: shortBlocks, bg: snapBgTasks()),
+            Scene(name: "81-bg-row-expanded", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks()),
+            Scene(name: "82-bg-card-agent-running", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "a1"),
+            Scene(name: "83-bg-card-agent-done-report", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "a2"),
+            Scene(name: "84-bg-card-agent-failed", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "a3"),
+            Scene(name: "85-bg-card-monitor-running", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "m1"),
+            Scene(name: "86-bg-card-monitor-ended", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "m2"),
+            Scene(name: "87-bg-card-open-level", chat: chat(""), blocks: shortBlocks, bg: snapBgTasks(), bgCard: "a2"),
             Scene(name: "57-runlog-open", chat: chat(""), blocks: longBlocks, logRun: "261014024541-r002"),
         ]
 
@@ -403,6 +413,8 @@ struct Snap {
             if let n = s.notes { OrchestratorNotesStore.shared.snapshotSet(text: n.0, status: n.1); m.notesOpen = true }
             let logLines = (try? JSONDecoder().decode([String].self, from: Data(fixture("x18-log.json").utf8))) ?? []
             OrchestratorRunLog.shared.snapshotSet(runID: s.logRun, lines: s.logLines ? logLines : [])
+            m.snapshotSetBackground(s.bg.flatMap { decodeBgTasks(Data($0.utf8)) } ?? [])
+            OrchestratorBgCard.shared.snapshotSet(s.bgCard)
 
             let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 480),
                                   styleMask: .borderless, backing: .buffered, defer: false)

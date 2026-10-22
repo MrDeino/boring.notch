@@ -26,6 +26,9 @@ enum OrchestratorStreamEvent {
     /// The full deploys list (a bare array or `{"deploys":[…]}`); one bare deploy object is a single upsert by project.
     case deploys([Deploy])
     case deploy(Deploy)
+    /// The full background list / one task (upsert by id).
+    case background([BgTask])
+    case backgroundOne(BgTask)
 }
 
 /// `URLSession.bytes.lines` drops blank lines, so events are dispatched on each `data:` line using the last `event:` name.
@@ -60,6 +63,8 @@ struct SSELineParser {
             if let list = (try? dec.decode(StateResponse.self, from: data))?.deploys { return .deploys(list) }
             if let list = try? dec.decode([Deploy].self, from: data) { return .deploys(list) }
             return (try? dec.decode(Deploy.self, from: data)).map { .deploy($0) }
+        case "agents": return decodeBgTasks(data).map { .background($0) }
+        case "agent": return decodeBgTask(data).map { .backgroundOne($0) }
         default: return nil
         }
     }
