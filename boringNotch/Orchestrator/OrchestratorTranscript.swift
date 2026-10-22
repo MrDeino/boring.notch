@@ -238,6 +238,8 @@ private func rejoinElement(_ els: ArraySlice<String>, width: Int, firstIsMark: B
 /// Claude Code's collapsed tool summary ("⏺ Ran 2 shell commands (ctrl+o to expand)"): a tool element, never prose.
 func isToolSummary(_ line: String) -> Bool {
     let l = line.hasPrefix("⏺ ") ? String(line.dropFirst(2)) : line
+    // A running tool's progress line: "Calling Shopify…", "Searching the web…" (short, one line, ends in an ellipsis).
+    if l.count <= 80, l.range(of: #"^[A-Z][a-z]+ing\b[^.!?\n]*(…|\.\.\.)$"#, options: .regularExpression) != nil { return true }
     return l.range(of: #"^[A-Z][a-z]+( for)? (\d+|a|an) (shell commands?|commands?|files?|patterns?|searche?s?|director(y|ies)|lines?|edits?|MCP tools?|tools?|agents?)\b[^.!?]*$"#, options: .regularExpression) != nil
 }
 
