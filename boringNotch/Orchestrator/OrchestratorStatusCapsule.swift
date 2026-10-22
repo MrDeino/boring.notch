@@ -206,11 +206,12 @@ struct OrchestratorStatusMenu: View {
 
     private func close() { withAnimation(.easeOut(duration: 0.15)) { manager.statusMenuOpen = false } }
 
-    var body: some View {
+    @ViewBuilder private var rows: some View {
         let u = manager.usage
         VStack(spacing: 0) {
             usageRow("5-hour usage", u?.fiveHour) { $0.formatted(date: .omitted, time: .shortened).lowercased() }
             usageRow("7-day usage", u?.sevenDay) { $0.formatted(.dateTime.weekday(.abbreviated).hour().minute()) }
+            contextRow(manager.lastContext, live: manager.chatRunning && manager.contextPercent != nil)
             OT.C.divider2.frame(height: 1).padding(.vertical, 4)
             row("Open terminal", hint: Text("click transcript").foregroundColor(OT.C.text6)) {
                 close(); openTerminal()
@@ -244,12 +245,22 @@ struct OrchestratorStatusMenu: View {
             try? await Task.sleep(for: .seconds(4))
             confirmEnd = false
         }
-        .padding(5)
-        .frame(width: 232)
-        .background(RoundedRectangle(cornerRadius: OT.R.cardL).fill(OT.C.raised))
-        .overlay(RoundedRectangle(cornerRadius: OT.R.cardL).stroke(OT.C.selected, lineWidth: 1))
-        .shadow(color: .black.opacity(0.6), radius: 15, y: 10)
-        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func chrome<C: View>(_ c: C) -> some View {
+        c.padding(5)
+            .frame(width: 232)
+            .background(RoundedRectangle(cornerRadius: OT.R.cardL).fill(OT.C.raised))
+            .overlay(RoundedRectangle(cornerRadius: OT.R.cardL).stroke(OT.C.selected, lineWidth: 1))
+            .shadow(color: .black.opacity(0.6), radius: 15, y: 10)
+    }
+
+    /// Natural height when it fits; scrolls inside the box at the open level, where the tab is shorter than the menu.
+    var body: some View {
+        ViewThatFits(in: .vertical) {
+            chrome(rows)
+            chrome(ScrollView(showsIndicators: false) { rows })
+        }
     }
 
     private func pill(_ t: String, fg: Color, bg: Color, action: @escaping () -> Void) -> some View {
@@ -273,6 +284,35 @@ struct OrchestratorStatusMenu: View {
 
     private func row(_ title: String, color: Color = OT.C.text, action: @escaping () -> Void) -> some View {
         row(title, color: color, hint: EmptyView(), action: action)
+    }
+
+    private func contextRow(_ r: ContextReading?, live: Bool) -> some View {
+        let high = usageIsHigh(r.map { Double($0.percent) })
+        let detail = r.map { rd in
+            "\(rd.percent)%" + (contextTokensLabel(tokens: rd.tokens, window: rd.window).map { " · \($0)" } ?? "")
+        } ?? "—"
+        return VStack(spacing: 3) {
+            HStack {
+                Text("Session context").foregroundColor(OT.C.text)
+                Spacer(minLength: 0)
+                Text(detail).foregroundColor(high ? OT.C.orange : OT.C.text5)
+            }
+            .font(OT.F.ui)
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(OT.C.selected2)
+                    Capsule().fill(high ? OT.C.orange : OT.C.text)
+                        .frame(width: g.size.width * min(max(Double(r?.percent ?? 0) / 100, 0), 1))
+                }
+            }
+            .frame(height: 3)
+            if let r, !live {
+                Text("as of \(r.at.formatted(date: .omitted, time: .shortened).lowercased())")
+                    .font(OT.F.hint).foregroundColor(OT.C.text6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.vertical, 3).padding(.horizontal, 8)
     }
 
     private func usageRow(_ title: String, _ w: UsageWindow?, reset: (Date) -> String) -> some View {

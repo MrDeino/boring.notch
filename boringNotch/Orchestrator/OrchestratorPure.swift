@@ -124,6 +124,33 @@ func fiveHourFraction(_ u: OrchestratorUsage?) -> Double? {
 
 func usageIsHigh(_ percent: Double?) -> Bool { (percent ?? 0) >= 80 }
 
+/// Chat session context as last reported by serve: percent of the window, with tokens/window when sent.
+struct ContextReading: Equatable {
+    let percent: Int
+    let tokens: Int?
+    let window: Int?
+    let at: Date
+}
+
+/// nil when serve sent nothing usable. percent falls back to tokens/window; a negative percent is "unknown".
+func contextReading(_ c: ChatContext?, at: Date) -> ContextReading? {
+    guard let c else { return nil }
+    var p = c.percent.flatMap { $0 >= 0 ? $0 : nil }
+    if p == nil, let t = c.tokens, let w = c.window, t >= 0, w > 0 { p = Int((Double(t) / Double(w) * 100).rounded()) }
+    return p.map { ContextReading(percent: $0, tokens: c.tokens, window: c.window, at: at) }
+}
+
+/// "152k / 1M"; nil unless both are known.
+func contextTokensLabel(tokens: Int?, window: Int?) -> String? {
+    guard let t = tokens, let w = window else { return nil }
+    func k(_ n: Int) -> String {
+        if n >= 1_000_000 { let m = Double(n) / 1_000_000; return (m == m.rounded() ? String(Int(m)) : String(format: "%.1f", m)) + "M" }
+        if n >= 1000 { return "\(Int((Double(n) / 1000).rounded()))k" }
+        return "\(n)"
+    }
+    return "\(k(t)) / \(k(w))"
+}
+
 // MARK: - Approvals (Phase 9)
 
 enum ApprovalAnswer: Equatable { case send(String), openCard, skip }

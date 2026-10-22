@@ -38,6 +38,8 @@ final class OrchestratorManager: ObservableObject {
     // Phase 8
     /// serve's context.percent while the chat runs; nil on old serve.
     @Published private(set) var contextPercent: Int? = nil
+    /// Last context serve reported; kept while idle/offline so the usage menu can show it "as of" its time.
+    @Published private(set) var lastContext: ContextReading? = nil
     /// True while the SSE stream is healthy; polling and the notch-open refresh stand down.
     @Published private(set) var streaming = false
     private var streamTask: Task<Void, Never>?
@@ -353,6 +355,10 @@ final class OrchestratorManager: ObservableObject {
         if screen != s { screen = s }
         let cp = running ? r.context?.percent.flatMap { $0 >= 0 ? $0 : nil } : nil
         if contextPercent != cp { contextPercent = cp }
+        if running, let rd = contextReading(r.context, at: Date()) {
+            // keep the old time while the numbers are unchanged, so "as of" means when it last changed
+            if lastContext.map({ ($0.percent, $0.tokens, $0.window) != (rd.percent, rd.tokens, rd.window) }) ?? true { lastContext = rd }
+        }
         OrchestratorTranscriptStore.shared.applyScreen(r)
         let po = running ? detectPrompt(screen: s) : []
         let pc = running ? detectPromptCard(screen: s) : nil
