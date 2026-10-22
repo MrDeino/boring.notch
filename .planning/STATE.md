@@ -134,3 +134,4 @@ Resume file: None
 | 261019-flk | Live row: each paragraph once, in order; no "Ran N" lines, no vanish/reappear | 2026-10-19 | .planning/quick/261019-flk-live-row-text-once-in-order |
 | 261019-blk | Live row stops blinking: blinking tool marker and wrapped card footer found in a real recording; synthetic fixtures | 2026-10-19 | .planning/quick/261019-blk-live-row-blink-real-capture |
 | 261021-ask | Finished AskUserQuestion rows open/close on click (questions, options, picks, Other, notes, dismissed) from serve's optional questions/answers; absent fields keep the plain row; tests + snapshots 70-73 | 2026-10-21 | .planning/quick/261021-ask-expandable-answered-question-rows |
+| 261022-brief | Question text keeps paragraphs, lists, bold labels; long brief scrolls above options | 2026-10-22 | .planning/quick/261022-brief-question-text-keeps-structure |

@@ -112,3 +112,41 @@ func askRow(_ b: ChatBlock) -> AskRow? {
     }
     return AskRow(questions: rows, dismissed: answers.isEmpty)
 }
+
+// MARK: - Question text with its structure kept
+
+/// One paragraph or list item of a question; `text` is inline markdown (labels already wrapped in **).
+struct BriefBlock: Equatable {
+    enum Kind: Equatable { case para, item(String) }
+    var kind: Kind
+    var text: String
+}
+
+/// Lines of a question (or a whole brief) -> blocks. A blank line (`gaps` = indices of lines that follow one, or an empty
+/// line itself when `hardBreaks`) starts a paragraph; "- ", "* ", "1." and "1)" start a list item; "GOAL:" style
+/// all-caps labels start a paragraph with the label bold. Any other line continues the block: joined with a newline when
+/// `hardBreaks` (the text has real newlines), else with a space unless the previous line is clearly shorter than the
+/// longest one (screen text is wrapped at the terminal width, so a short line before another means a real break).
+// ponytail: the short-line test is a guess; a hand-wrapped brief at a ragged width may join lines it should not.
+func briefBlocks(_ lines: [String], gaps: Set<Int> = [], hardBreaks: Bool) -> [BriefBlock] {
+    let width = lines.map(\.count).max() ?? 0
+    var out: [BriefBlock] = []
+    var prev = ""
+    for (i, raw) in lines.enumerated() {
+        let l = raw.trimmingCharacters(in: .whitespaces)
+        if l.isEmpty { prev = ""; if hardBreaks { out.append(BriefBlock(kind: .para, text: "")) } ; continue }
+        defer { prev = l }
+        if let m = l.wholeMatch(of: #/([-*•]|\d+[.)])\s+(.*)/#) {
+            let mark = String(m.1)
+            out.append(BriefBlock(kind: .item(mark.first!.isNumber ? mark : "•"), text: String(m.2)))
+        } else if let m = l.wholeMatch(of: #/([A-Z][A-Z0-9 \/&-]*[A-Z0-9]):(?:\s+(.*))?/#) {
+            out.append(BriefBlock(kind: .para, text: "**\(m.1):**" + (m.2.map { " " + $0 } ?? "")))
+        } else if let last = out.last, !last.text.isEmpty, !gaps.contains(i), prev != "" {
+            let soft = !hardBreaks && prev.count >= width * 85 / 100
+            out[out.count - 1].text += (soft ? " " : "\n") + l
+        } else {
+            out.append(BriefBlock(kind: .para, text: l))
+        }
+    }
+    return out.filter { !$0.text.isEmpty }
+}

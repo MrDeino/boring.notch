@@ -54,4 +54,21 @@ func runQuickAskTests() {
     precondition(bad.count == 2 && bad[0].questions == nil && bad[0].answers == nil)
     let r = askRow(bad[1])!
     precondition(r.questions.count == 1 && r.questions[0].options.map(\.label) == ["a"] && !r.questions[0].answered)
+
+    // Question text keeps its structure: paragraphs, labels, list items, hard vs wrapped lines.
+    let brief = detectPromptCard(screen: fixture("question-brief"))!
+    let bb = brief.questionBlocks
+    precondition(bb.map(\.kind) == [.para, .para, .para, .item("•"), .item("•"), .item("1)"), .item("2."), .para, .para])
+    precondition(bb[0].text == "Project: demo-app (synthetic example, GSD quick)")
+    precondition(bb[1].text == "**GOAL:** Add a dark-mode toggle to the settings page.")
+    precondition(bb[2].text.hasPrefix("**CONTEXT:** The settings page") && bb[2].text.contains("Users asked for a toggle in `Settings > Appearance`"))
+    precondition(bb[3].text == "Area: the **Appearance** view" && bb[5].text == "Read the current theme code")
+    precondition(bb[7].text.hasPrefix("**CONSTRAINTS:** Stay") && bb[8].text.hasPrefix("**DONE WHEN:** the toggle"))
+    precondition(brief.items.count == 5 && brief.question?.contains("GOAL:") == true)
+    // Real newlines (a finished question's text): every line break stays, a blank line is a paragraph break.
+    let hard = briefBlocks("Intro line\nsecond line\n\nNOTE: see `code`\n- one\n- two".components(separatedBy: "\n"), hardBreaks: true)
+    precondition(hard.map(\.text) == ["Intro line\nsecond line", "**NOTE:** see `code`", "one", "two"] && hard[2].kind == .item("•"))
+    // Plain one-line questions and lower-case "Word:" lines are not labels.
+    precondition(briefBlocks(["Which fruit?"], hardBreaks: false) == [BriefBlock(kind: .para, text: "Which fruit?")])
+    precondition(briefBlocks(["Note: lower"], hardBreaks: false)[0].text == "Note: lower")
 }

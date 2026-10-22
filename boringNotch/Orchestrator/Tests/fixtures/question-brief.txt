@@ -1,0 +1,36 @@
+
+ ▐▛███▛█   Claude Code v2.1.296
+▝▜██████▀  Opus 5.5 (1M context) · Claude Max
+ ▝▝   ▝▝   /private/tmp/notch-fixture.WJuB
+
+
+❯ Use the AskUserQuestion tool to show a brief and ask whether to dispatch it. Do nothing else.
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Dispatch
+
+Project: demo-app (synthetic example, GSD quick)
+
+GOAL: Add a dark-mode toggle to the settings page.
+
+CONTEXT: The settings page has a theme section that only lists the light theme. Users asked for
+a toggle in `Settings > Appearance`, saved per device.
+- Area: the **Appearance** view
+- Related phase: none
+1) Read the current theme code
+2. Add the toggle and persist it
+
+CONSTRAINTS: Stay on the current branch. Do not change the API. Keep the diff small.
+
+DONE WHEN: the toggle flips the theme, a test covers the saved value, and the build succeeds.
+
+❯ 1. Dispatch
+     Start the run now
+  2. Edit brief
+     Change the text first
+  3. Cancel
+     Do nothing
+  4. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
