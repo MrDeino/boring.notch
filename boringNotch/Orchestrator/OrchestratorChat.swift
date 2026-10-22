@@ -95,13 +95,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
             return
         }
         let m = mergeChatBlocks(blocks, incoming, reset: reset)
-        if m.blocks != blocks {
-            if m.appended && !reset && OrchestratorManager.shared.liveReply == nil {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { blocks = m.blocks }
-            } else {
-                blocks = m.blocks
-            }
-        }
+        if m.blocks != blocks { blocks = m.blocks }
         if fallback { fallback = false }
         needsFull = false
         failures = 0
@@ -114,9 +108,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
         guard !pending.isEmpty else { return }
         let r = reconcilePending(pending, blocks: blocks, known: knownUserIDs, now: Date())
         if r.known != knownUserIDs { knownUserIDs = r.known }
-        if r.pending != pending {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { pending = r.pending }
-        }
+        if r.pending != pending { pending = r.pending }
     }
 
     func attach(_ png: Data) { withAnimation(.easeOut(duration: 0.15)) { attachments.append(png) } }
@@ -130,9 +122,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
         // Older identical messages must not claim the new row.
         for b in blocks where b.kind == .user { knownUserIDs.insert(b.id) }
         nextPendingID += 1
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-            pending.append(PendingMessage(id: nextPendingID, text: text, state: .queued, sentAt: nil, images: images, files: files))
-        }
+        pending.append(PendingMessage(id: nextPendingID, text: text, state: .queued, sentAt: nil, images: images, files: files))
         drain()
     }
 
@@ -175,7 +165,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
 
     func restore(_ id: Int) -> (text: String, images: [Data])? {
         guard let i = pending.firstIndex(where: { $0.id == id }) else { return nil }
-        let m = withAnimation { pending.remove(at: i) }
+        let m = pending.remove(at: i)
         attachments.insert(contentsOf: m.images, at: 0)
         OrchestratorFileQueue.shared.restore(m.files)
         return (m.text, m.images)
@@ -307,8 +297,8 @@ struct OrchestratorChatView: View {
                         })
                     }
                     .defaultScrollAnchor(.bottom)
-                    // Also catches a new row that leaves the height unchanged (the row window drops an old one).
-                    .onChange(of: pinKey) { _, _ in if stick { proxy.scrollTo(Self.bottomID, anchor: .bottom) } else { unseen = true } }
+                    // The one pin is chatGeometry's (bottom anchor + a single non-animated scrollTo while sticky); this only flags unseen rows.
+                    .onChange(of: pinKey) { _, _ in if !stick { unseen = true } }
                     .overlay(alignment: .bottom) {
                         if unseen && !stick {
                             Button {
@@ -322,19 +312,6 @@ struct OrchestratorChatView: View {
                             .buttonStyle(.plain)
                             .padding(.bottom, 4)
                             .transition(.opacity)
-                        }
-                    }
-                    // A level change reflows the rows (width and height); the ScrollView keeps its offset, which
-                    // would scroll the newest row out of view when the content shrinks. Stay on the newest row.
-                    .onChange(of: g.size) { _, _ in
-                        // Next turn: the content has not been laid out at the new size yet when this fires.
-                        guard stick else { return }
-                        Task { @MainActor in
-                            for ms in [0, 80] {
-                                try? await Task.sleep(for: .milliseconds(ms))
-                                var t = Transaction(); t.disablesAnimations = true
-                                withTransaction(t) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
-                            }
                         }
                     }
                 }
@@ -386,25 +363,32 @@ struct OrchestratorChatView: View {
                 ForEach(store.blocks.suffix(maxRows)) { b in
                     ChatBlockRow(block: b, proseLineLimit: proseLineLimit, expanded: expanded, caret: caretVisible(live: manager.chatLive, working: manager.liveStatus != nil, kind: b.kind, id: b.id, newestID: store.blocks.last?.id) && store.pending.isEmpty && manager.liveReply == nil, onClick: expandChat, onCopied: showCopied, askOpen: store.askOpen.contains(b.id), onAskToggle: { toggleAsk(b.id) })
                         .equatable()
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(.identity)
                 }
                 // Quick e1d: the reply as it is being written; the transcript block takes this row's place with no animation.
                 // Stays up while a card is (the card's lead-in is seeded into it), and until the transcript block takes over.
                 if let live = manager.liveReply {
-                    ChatBlockRow(block: ChatBlock(pendingID: "live-reply", text: live, kind: .prose), proseLineLimit: proseLineLimit, expanded: expanded, caret: manager.prompt == nil && (manager.chatLive ?? (manager.liveStatus != nil)), plain: true, onClick: expandChat, onCopied: showCopied)
+                    ChatBlockRow(block: ChatBlock(pendingID: "live-reply", text: live, kind: .prose), proseLineLimit: proseLineLimit, expanded: expanded, caret: manager.prompt == nil && (manager.chatLive ?? (manager.liveStatus != nil)), onClick: expandChat, onCopied: showCopied)
                         .equatable()
                 }
             }
             ForEach(store.pending) { p in
                 pendingRow(p)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.identity)
             }
-            if let ls = manager.liveStatus {
-                OrchestratorLiveStatusRow(status: ls)
-            } else if !store.fallback, let idle = store.idleStatus {
-                Text(verbatim: idle).font(OT.F.meta).foregroundStyle(OT.C.text6).lineLimit(1)
+            // Fixed slot, blank when idle: the status coming and going never moves the rows above it.
+            Group {
+                if let ls = manager.liveStatus {
+                    OrchestratorLiveStatusRow(status: ls)
+                } else if !store.fallback, let idle = store.idleStatus {
+                    Text(verbatim: idle).font(OT.F.meta).foregroundStyle(OT.C.text6).lineLimit(1)
+                } else {
+                    Text(verbatim: " ").font(OT.F.meta)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .transaction { $0.animation = nil }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -487,9 +471,9 @@ struct OrchestratorChatView: View {
     }
 
     private static let bottomID = "bottom"
-    /// Changes whenever a row is added or the status row appears/disappears.
+    /// Changes whenever a row is added (the status slot is fixed and not part of it).
     private var pinKey: String {
-        "\(store.fallback ? fallbackLines.count : store.blocks.count)|\(store.blocks.last?.id ?? "")|\(manager.liveStatus != nil)|\(manager.liveReply != nil)|\(store.pending.count)|\(store.idleStatus ?? "")"
+        "\(store.fallback ? fallbackLines.count : store.blocks.count)|\(store.blocks.last?.id ?? "")|\(manager.liveReply != nil)|\(store.pending.count)"
     }
 
     /// chatTail lines minus spinner lines (the status row shows those).
