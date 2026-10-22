@@ -14,11 +14,21 @@ func detectPrompt(screen: String) -> [PromptOption] {
 /// option run sits and which option carries the ❯ pointer.
 // ponytail: bottom-window heuristic: the last option must be within the last 4 non-blank lines
 // and be followed by the "Esc to cancel" footer; retune if Claude Code adds more footer lines.
-private func scanPrompt(_ screen: String, window: Int) -> (lines: [String], options: [PromptOption], indices: [Int], marked: Int?)? {
+private func scanPrompt(_ screen: String, window: Int) -> (lines: [String], options: [PromptOption], indices: [Int], marked: Int?, gaps: Set<Int>)? {
     let line = #/^[ \u{a0}]*(❯[ \u{a0}]*)?(\d+)\.[ \u{a0}]+(.+)$/#
     let trim = CharacterSet(charactersIn: " \u{a0}\t\r│")
-    let lines = Array(screen.split(separator: "\n", omittingEmptySubsequences: false)
-        .map { $0.trimmingCharacters(in: trim) }.filter { !$0.isEmpty }.suffix(window))
+    // gaps: indices of kept lines that follow a blank line (the question's paragraph breaks).
+    var all: [String] = [], allGaps = Set<Int>(), gap = false
+    for raw in screen.split(separator: "\n", omittingEmptySubsequences: false) {
+        let t = raw.trimmingCharacters(in: trim)
+        if t.isEmpty { gap = true; continue }
+        if gap && !all.isEmpty { allGaps.insert(all.count) }
+        gap = false
+        all.append(t)
+    }
+    let skip = max(0, all.count - window)
+    let lines = Array(all.dropFirst(skip))
+    let gaps = Set(allGaps.compactMap { $0 >= skip ? $0 - skip : nil })
     var run: [PromptOption] = []
     var runIdx: [Int] = []
     var markedNo: Int?
@@ -44,7 +54,7 @@ private func scanPrompt(_ screen: String, window: Int) -> (lines: [String], opti
     let footer = lines.dropFirst(bestEnd + 1).joined(separator: " ").localizedCaseInsensitiveContains("esc to cancel")
         || lines.contains { $0 == "Ready to submit your answers?" }
     guard bestEnd >= 0 && bestEnd >= lines.count - 4 && footer else { return nil }
-    return (lines, best, bestIdx, bestMarked)
+    return (lines, best, bestIdx, bestMarked, gaps)
 }
 
 /// Observed in Claude Code 2.1.299: Shift-Tab (BTab) moves to the previous question chip, ticks kept,
@@ -82,6 +92,8 @@ struct PromptCard: Equatable {
     var header: String? = nil
     var progress: String? = nil
     var question: String? = nil
+    /// `question` with its paragraphs, lists and labels kept (see briefBlocks).
+    var questionBlocks: [BriefBlock] = []
     var items: [PromptCardOption] = []
     var highlighted: Int? = nil
     var multiSelect = false
@@ -158,6 +170,7 @@ func detectPromptCard(screen: String) -> PromptCard? {
         let from = chipIdx ?? ruleAbove ?? -1
         let q = lines[(from + 1)..<first].joined(separator: " ")
         card.question = q.isEmpty ? nil : q
+        card.questionBlocks = briefBlocks(Array(lines[(from + 1)..<first]), gaps: Set(sc.gaps.map { $0 - from - 1 }), hardBreaks: false)
         if let c = chipIdx {
             var chips: [(done: Bool, label: String)] = []
             var cur: (done: Bool, label: String)?

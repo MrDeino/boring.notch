@@ -397,6 +397,35 @@ private struct PromptFit: ViewModifier {
 @MainActor enum PromptFitProbe { static var last: CGFloat = 0 }
 #endif
 
+/// Tallest the question text grows before it scrolls inside the card (about 10 lines).
+let briefMaxHeight: CGFloat = 150
+
+/// Question text from `briefBlocks`: paragraphs and list items with inline markdown (bold, `code`); text is selectable-free like the rest of the card.
+struct BriefText: View {
+    let blocks: [BriefBlock]
+    let font: Font
+    var color: Color = OT.C.text
+    var spacing: CGFloat = 3
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, b in
+                switch b.kind {
+                case .para:
+                    Text(proseAttributed(b.text)).font(font).foregroundStyle(color).lineSpacing(spacing)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .item(let mark):
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(verbatim: mark).font(font).foregroundStyle(OT.C.text5)
+                        Text(proseAttributed(b.text)).font(font).foregroundStyle(color).lineSpacing(spacing)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.leading, 4)
+                }
+            }
+        }
+    }
+}
+
 private let darkDesc = Color(red: 0x48 / 255, green: 0x48 / 255, blue: 0x4A / 255) // #48484A, not an OT token
 
 private struct PromptKeycap: View {
@@ -497,6 +526,8 @@ private struct QuestionCard: View {
     @State private var contentH: CGFloat = 0
     @State private var viewportH: CGFloat = 0
     @State private var cardH: CGFloat = 0
+    @State private var questionH: CGFloat = 0
+    @State private var questionBoxH: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -513,11 +544,10 @@ private struct QuestionCard: View {
                     if let p = card.progress { Text(p).font(OT.F.meta).foregroundStyle(OT.C.text6) }
                 }
             }
+            questionText
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(card.question ?? "").font(OT.F.title).foregroundStyle(OT.C.text)
-                            .lineSpacing(14 * 0.35).fixedSize(horizontal: false, vertical: true)
                         if card.review, let b = card.body {
                             Text(b).font(OT.F.meta).foregroundStyle(OT.C.text5).lineLimit(6)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -529,6 +559,8 @@ private struct QuestionCard: View {
                     .measureHeight($contentH)
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: contentH > 0 ? contentH : nil)
+                .layoutPriority(1) // short on room, the question box gives way first and the options keep theirs
                 .measureHeight($viewportH)
                 .onChange(of: ctl.highlighted) { _, h in
                     if let h { withAnimation { proxy.scrollTo(h) } }
@@ -538,7 +570,23 @@ private struct QuestionCard: View {
         }
         .expandsOnTap()
         .measureHeight($cardH)
-        .promptFit(content: contentH, viewport: viewportH, card: cardH)
+        .promptFit(content: contentH + min(questionH, briefMaxHeight) - questionBoxH, viewport: viewportH, card: cardH) // the question box at its natural height, not the squeezed one
+    }
+
+    /// Paragraphs, lists and bold labels kept; a long brief scrolls in its own box so the options below stay in view.
+    private var questionText: some View {
+        let blocks = card.questionBlocks
+        let shown = blocks.isEmpty ? [BriefBlock(kind: .para, text: card.question ?? "")] : blocks
+        let brief = shown.count > 1 // a one-line question keeps the title look; a brief is regular weight so its bold labels stand out
+        return ScrollView(.vertical, showsIndicators: false) {
+            BriefText(blocks: shown, font: brief ? OT.F.ui : OT.F.title, spacing: brief ? 3 : 14 * 0.35)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .measureHeight($questionH)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(minHeight: min(questionH, 44), maxHeight: questionH > 0 ? min(questionH, briefMaxHeight) : nil)
+        .measureHeight($questionBoxH)
+        .expandsOnTap()
     }
 
     private var tabRow: some View {

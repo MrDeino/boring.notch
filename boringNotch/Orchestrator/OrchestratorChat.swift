@@ -1018,7 +1018,9 @@ private struct ChatBlockRow: View, Equatable {
     private func askQuestionView(_ q: AskRowQuestion, dismissed: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             if !q.header.isEmpty { Text(verbatim: q.header.uppercased()).font(OT.F.tiny.weight(.semibold)).foregroundStyle(OT.C.text6) }
-            if !q.question.isEmpty { Text(verbatim: q.question).font(OT.F.ui).foregroundStyle(OT.C.text).fixedSize(horizontal: false, vertical: true) }
+            if !q.question.isEmpty {
+                BriefText(blocks: briefBlocks(q.question.components(separatedBy: "\n"), hardBreaks: true), font: OT.F.ui)
+            }
             ForEach(Array(q.options.enumerated()), id: \.offset) { _, o in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(verbatim: o.chosen ? (q.multiSelect ? "☑" : "●") : (q.multiSelect ? "☐" : "○"))

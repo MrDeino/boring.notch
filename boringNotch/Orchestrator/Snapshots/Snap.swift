@@ -369,6 +369,8 @@ struct Snap {
             Scene(name: "51-ask-2q-multiselect", chat: askChat("multiselect-1.txt"), expanded: true),
             Scene(name: "62-ask-3opt-open", chat: askChat("question.txt")),
             Scene(name: "63-ask-6opt-open", chat: askChat("question6.txt")),
+            Scene(name: "65-ask-brief-open", chat: askChat("question-brief.txt")),
+            Scene(name: "66-ask-brief-expanded", chat: askChat("question-brief.txt"), expanded: true),
             Scene(name: "64-ask-12opt-capped", chat: askChat("question-long.txt")),
             Scene(name: "65-permission-longcmd-open", chat: chat(fixture("permission-longcmd.txt"))),
             Scene(name: "58-ask-leadin-long-2q", chat: askChat("leadin-long-2q.txt"), blocks: heldBlocks, expanded: true),
