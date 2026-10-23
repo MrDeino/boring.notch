@@ -285,29 +285,40 @@ final class PromptCardController: ObservableObject {
         submitting = true
         busy = true
         let id = promptIdentity(displayed)
-        withAnimation(spring) { dismissed = id }
+        // Typing an answer to one of several questions only moves to the next one: the card stays up then.
+        let hides = hidesOnAnswer(displayed, keys: [])
+        if hides { withAnimation(spring) { dismissed = id } }
         Task {
             defer { submitting = false }
             let m = OrchestratorManager.shared
             guard await stillCurrent(displayed) else { restore(note: nil); return }
-            // ponytail: number-then-text acceptance is UAT A1.
-            _ = await m.pressKeys([String(ft.number)])
+            // The row is an inline input: its number moves the ❯ onto it, the screen is otherwise the same. Pressing it while
+            // the ❯ already sits there would type the digit into the field.
+            if !freeTextFocused(m.prompt, number: ft.number) { _ = await m.pressKeys([String(ft.number)]) }
             try? await Task.sleep(for: .milliseconds(350))
-            // Only type once the select list has left the screen; if the press was dropped, digits and
-            // Enter would answer the list, so re-check a few times.
+            // Only type once the field has the cursor; if the press was dropped, digits and Enter would answer the list.
             var landed = false
             for _ in 0..<6 {
                 var i = 0
                 while m.sending && i < 40 { try? await Task.sleep(for: .milliseconds(50)); i += 1 }
                 if !m.sending { await m.refresh(fresh: true) }
                 // A failed GET also nils the prompt, so offline never counts as landed.
-                if !m.offline, m.prompt.map(promptIdentity) != promptIdentity(displayed) { landed = true; break }
+                if !m.offline, freeTextFocused(m.prompt, number: ft.number) { landed = true; break }
                 try? await Task.sleep(for: .milliseconds(200))
             }
             // One POST only: a timeout may still have typed the text, and 409 means chat is gone.
             guard landed, !m.sending, await m.sendText(t) else { restore(note: "Didn't go through"); return }
+            // Enter must move the screen on (next question, review, or the prompt gone); else keep the text and say so.
+            var moved = false
+            for _ in 0..<8 {
+                try? await Task.sleep(for: .milliseconds(250))
+                await m.refresh(fresh: true)
+                if !m.offline, m.prompt.map(promptIdentity) != id { moved = true; break }
+            }
+            guard moved else { restore(note: "Didn't go through"); return }
             freeText = ""
-            release()
+            busy = false
+            if hides { release() }
         }
     }
 }

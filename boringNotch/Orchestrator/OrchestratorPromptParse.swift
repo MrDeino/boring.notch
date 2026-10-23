@@ -272,3 +272,10 @@ func hidesOnAnswer(_ c: PromptCard, keys: [String]) -> Bool {
     if keys.contains("Tab") || keys.contains(promptBackKey) { return false }
     return !(c.kind == .question && !c.review && c.tabs.filter { $0.label != "Submit" }.count > 1)
 }
+
+/// The free-text row is an inline input on the same screen (Claude Code 2.1.309): pressing its number
+/// only moves the ❯ onto it (label stays "Type something.", prompt identity unchanged). Ready to type once the ❯ is there.
+func freeTextFocused(_ c: PromptCard?, number: Int) -> Bool {
+    guard let c, c.kind == .question else { return false }
+    return c.highlighted == number && c.items.contains { $0.number == number && $0.role == .freeText }
+}
