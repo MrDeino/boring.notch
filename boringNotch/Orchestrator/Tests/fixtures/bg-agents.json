@@ -1,0 +1,14 @@
+[
+ {"kind":"agent","id":"a1","description":"Survey the widget modules","status":"running","startedAt":"2026-10-22T04:00:00Z","endedAt":null,
+  "lastStep":"Grep: widget","steps":[{"at":"2026-10-22T04:00:05Z","tool":"Glob","summary":"src/**/*.widget"},{"at":"2026-10-22T04:00:09Z","tool":"Read","summary":"src/alpha/widget.txt"},{"at":"2026-10-22T04:00:20Z","tool":"Grep","summary":"widget"}],
+  "report":null,"tokens":null,"toolUses":3},
+ {"kind":"agent","id":"a2","description":"Draft the release notes","status":"done","startedAt":"2026-10-22T03:50:00Z","endedAt":"2026-10-22T03:52:10Z",
+  "lastStep":"Write: notes.md","steps":[{"at":"2026-10-22T03:51:00Z","tool":"Read","summary":"CHANGELOG.txt"},{"at":"2026-10-22T03:52:00Z","tool":"Write","summary":"notes.md"}],
+  "report":"**Release notes** are drafted.\n\n- Added the *sample* feature\n- Fixed `parse()` on empty input\n\nNothing else changed.","tokens":18400,"toolUses":7},
+ {"kind":"agent","id":"a3","description":"Check the example endpoint","status":"failed","startedAt":"2026-10-22T03:40:00Z","endedAt":"2026-10-22T03:40:30Z",
+  "lastStep":"Bash: curl","steps":[{"at":"2026-10-22T03:40:10Z","tool":"Bash","summary":"curl https://example.test/health"}],"report":"The endpoint did not answer.","tokens":900,"toolUses":1},
+ {"kind":"monitor","id":"m1","description":"Watch the build log","status":"running","startedAt":"2026-10-22T03:30:00Z","endedAt":null,
+  "lastStep":"line 40: ok","steps":[{"at":"2026-10-22T04:00:01Z","tool":"event","summary":"line 38: compiling"},{"at":"2026-10-22T04:00:03Z","tool":"event","summary":"line 40: ok"}],"report":null,"tokens":null,"toolUses":null},
+ {"kind":"monitor","id":"m2","description":"Watch the queue depth","status":"stopped","startedAt":"2026-10-22T03:00:00Z","endedAt":"2026-10-22T03:20:00Z",
+  "lastStep":null,"steps":[],"report":null,"tokens":null,"toolUses":null}
+]

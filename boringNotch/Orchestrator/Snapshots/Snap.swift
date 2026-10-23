@@ -227,6 +227,8 @@ struct Scene {
     var logLines = true // false: empty log
     var menu = false // status/usage menu open
     var before: ChatResponse? // applied first (an earlier working poll the menu remembers)
+    var bg: String? // background agents/monitors (JSON array); bgCard = the open card's id
+    var bgCard: String?
 }
 
 /// Two-colour test PNG through the real orchestratorPNG path.
@@ -393,6 +395,14 @@ struct Snap {
             Scene(name: "74-usage-menu-working", chat: ctxFull(23, 230_000, 1_000_000), blocks: shortBlocks, calm: true, menu: true),
             Scene(name: "75-usage-menu-idle", chat: chat("", running: false), blocks: shortBlocks, calm: true, menu: true, before: ctxFull(86, 860_000, 1_000_000)),
             Scene(name: "76-usage-menu-never", chat: chat("", running: false), blocks: shortBlocks, calm: true, menu: true),
+            Scene(name: "80-bg-row-open", chat: chat(""), blocks: shortBlocks, bg: snapBgTasks()),
+            Scene(name: "81-bg-row-expanded", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks()),
+            Scene(name: "82-bg-card-agent-running", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "a1"),
+            Scene(name: "83-bg-card-agent-done-report", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "a2"),
+            Scene(name: "84-bg-card-agent-failed", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "a3"),
+            Scene(name: "85-bg-card-monitor-running", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "m1"),
+            Scene(name: "86-bg-card-monitor-ended", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "m2"),
+            Scene(name: "87-bg-card-open-level", chat: chat(""), blocks: shortBlocks, bg: snapBgTasks(), bgCard: "a2"),
             Scene(name: "57-runlog-open", chat: chat(""), blocks: longBlocks, logRun: "261014024541-r002"),
         ]
 
@@ -413,6 +423,8 @@ struct Snap {
             if let n = s.notes { OrchestratorNotesStore.shared.snapshotSet(text: n.0, status: n.1); m.notesOpen = true }
             let logLines = (try? JSONDecoder().decode([String].self, from: Data(fixture("x18-log.json").utf8))) ?? []
             OrchestratorRunLog.shared.snapshotSet(runID: s.logRun, lines: s.logLines ? logLines : [])
+            m.snapshotSetBackground(s.bg.flatMap { decodeBgTasks(Data($0.utf8)) } ?? [])
+            OrchestratorBgCard.shared.snapshotSet(s.bgCard)
 
             let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 640, height: 480),
                                   styleMask: .borderless, backing: .buffered, defer: false)
