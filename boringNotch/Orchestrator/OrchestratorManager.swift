@@ -16,6 +16,8 @@ final class OrchestratorManager: ObservableObject {
     @Published private(set) var usage: OrchestratorUsage?
     /// serve's `deploys`; empty on an old serve.
     @Published private(set) var deploys: [Deploy] = []
+    /// serve's background agents and monitors of the running chat; empty on an old serve.
+    @Published private(set) var bgTasks: [BgTask] = []
     @Published private(set) var promptOptions: [PromptOption] = []
     /// A run is waiting or the chat shows a prompt. Deliberately independent of music/tab/notch state.
     var needsAttention: Bool { runs.contains { $0.state == "waiting" } || !promptOptions.isEmpty }
@@ -248,6 +250,7 @@ final class OrchestratorManager: ObservableObject {
         lastStreamLine = Date()
         streaming = true
         defer { streaming = false }
+        await loadBackground()
         let watchdogTripped = { [weak self] in self?.streaming = false; streamSession.invalidateAndCancel() }
         await withTaskGroup(of: Void.self) { group in
             group.addTask { @MainActor [weak self] in
@@ -269,6 +272,8 @@ final class OrchestratorManager: ObservableObject {
                             first = false
                         case .deploys(let list): if self.deploys != list { self.deploys = list }
                         case .deploy(let d): self.upsertDeploy(d)
+                        case .background(let list): self.setBackground(list)
+                        case .backgroundOne(let t): self.setBackground(bgUpserting(self.bgTasks, t))
                         case .approval(let a): self.applySeq += 1; self.applyApproval(a) // joins the sequence so an older poll cannot overwrite it
                         }
                         if !self.hasLoaded { self.hasLoaded = true }
@@ -316,10 +321,20 @@ final class OrchestratorManager: ObservableObject {
             let (r, st) = try await (chat, state)
             applyState(st)
             await applyChat(r, polledAt: started)
+            if r.running == true { await loadBackground() }
         } catch {
             applyOffline()
         }
         if !hasLoaded { hasLoaded = true }
+    }
+
+    private func setBackground(_ l: [BgTask]) { if bgTasks != l { bgTasks = l } }
+
+    /// A 404 or an odd payload (old serve) leaves the list alone.
+    private func loadBackground() async {
+        guard let (data, resp) = try? await session.data(from: Self.baseURL.appendingPathComponent("api/chat/agents")),
+              (resp as? HTTPURLResponse)?.statusCode == 200, let l = decodeBgTasks(data) else { return }
+        setBackground(l)
     }
 
     private func upsertDeploy(_ d: Deploy) {
@@ -345,6 +360,7 @@ final class OrchestratorManager: ObservableObject {
         if offline { offline = false }
         let running = r.running ?? false
         if chatRunning != running { chatRunning = running }
+        if !running { setBackground([]) } // a new session starts clean
         if claude != r.claude { claude = r.claude }
         let cr = claudeRestartOnChat(claudeRestart, running: running, posting: sending)
         if claudeRestart != cr { claudeRestart = cr }
@@ -399,6 +415,7 @@ final class OrchestratorManager: ObservableObject {
         if !offline { offline = true }
         if !runs.isEmpty { runs = [] }
         if !deploys.isEmpty { deploys = [] }
+        setBackground([])
         if rawApproval != nil || approval != nil { applyApproval(nil) }
         if !promptOptions.isEmpty { promptOptions = [] }
         if prompt != nil { prompt = nil }
@@ -422,6 +439,7 @@ extension OrchestratorManager {
         if let chat { applyState(state); await applyChat(chat) } else { applyOffline() }
     }
     /// Send-path harness: behave as if the SSE stream is up (blocks arrive as events, not fetched per poll).
+    func snapshotSetBackground(_ l: [BgTask]) { bgTasks = l }
     func snapshotSetStreaming(_ on: Bool) { streaming = on }
 }
 #endif

@@ -122,6 +122,13 @@ extension Snap {
         try? await Task.sleep(for: .seconds(4))
         await apply(working, [r1, r2]); await shot("18-working-hour-count-38", height: 38)
 
+        // Background work: a small blue dot while anything runs (alone, and beside the needs-you dot).
+        let bgList = decodeBgTasks(Data(snapBgTasks().utf8)) ?? []
+        await apply(idle, []); m.snapshotSetBackground(bgList); await shot("40-bg-dot", wide: true)
+        m.snapshotSetBackground(bgList.filter { !$0.isRunning }); await shot("41-bg-finished-no-dot", wide: true)
+        m.snapshotSetBackground(bgList); await apply(idle, [run("w", "notch", "waiting", ago: 60)]); m.snapshotSetBackground(bgList); await shot("42-bg-dot-and-needs-you", wide: true)
+        m.snapshotSetBackground([]); await apply(idle, [])
+
         // Deploys: building wing with elapsed, live flash (6s), failed sticky; needs-you beats it, it beats working.
         func deploy(_ state: String, ago: TimeInterval, done: TimeInterval? = nil, sha: String = "abc1234") -> String {
             #"{"project":"gg-app","state":"\#(state)","sha":"\#(sha)","pr":{"number":231,"title":"Tidy the widgets"},"startedAt":"\#(iso.string(from: Date().addingTimeInterval(-ago)))","finishedAt":\#(done.map { "\"\(iso.string(from: Date().addingTimeInterval(-$0)))\"" } ?? "null"),"url":"https://example.test/gg-app"}"#

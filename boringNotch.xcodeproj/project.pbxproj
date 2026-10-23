@@ -21,6 +21,8 @@
 		0A1C00000000000000000458 /* OrchestratorRunsBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000408 /* OrchestratorRunsBoard.swift */; };
 		0A1C00000000000000000459 /* OrchestratorRunsPure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000409 /* OrchestratorRunsPure.swift */; };
 		0A1C00000000000000000460 /* OrchestratorExpanded.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000410 /* OrchestratorExpanded.swift */; };
+		0A1C00000000000000000A02 /* OrchestratorBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000A01 /* OrchestratorBackground.swift */; };
+		0A1C00000000000000000A04 /* OrchestratorBackgroundModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000A03 /* OrchestratorBackgroundModel.swift */; };
 		0A1C00000000000000000461 /* OrchestratorWings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000411 /* OrchestratorWings.swift */; };
 		0A1C0000000000000000A001 /* OrchestratorKeyQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C0000000000000000A002 /* OrchestratorKeyQueue.swift */; };
 		0A1C00000000000000000901 /* OrchestratorApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1C00000000000000000902 /* OrchestratorApproval.swift */; };
@@ -218,6 +220,8 @@
 		0A1C00000000000000000408 /* OrchestratorRunsBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorRunsBoard.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000409 /* OrchestratorRunsPure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorRunsPure.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000410 /* OrchestratorExpanded.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorExpanded.swift; sourceTree = "<group>"; };
+		0A1C00000000000000000A01 /* OrchestratorBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorBackground.swift; sourceTree = "<group>"; };
+		0A1C00000000000000000A03 /* OrchestratorBackgroundModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorBackgroundModel.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000411 /* OrchestratorWings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorWings.swift; sourceTree = "<group>"; };
 		0A1C0000000000000000A002 /* OrchestratorKeyQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorKeyQueue.swift; sourceTree = "<group>"; };
 		0A1C00000000000000000902 /* OrchestratorApproval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorApproval.swift; sourceTree = "<group>"; };
@@ -420,6 +424,8 @@
 				0A1C00000000000000000408 /* OrchestratorRunsBoard.swift */,
 				0A1C00000000000000000409 /* OrchestratorRunsPure.swift */,
 				0A1C00000000000000000410 /* OrchestratorExpanded.swift */,
+				0A1C00000000000000000A01 /* OrchestratorBackground.swift */,
+				0A1C00000000000000000A03 /* OrchestratorBackgroundModel.swift */,
 				0A1C00000000000000000411 /* OrchestratorWings.swift */,
 				0A1C0000000000000000A002 /* OrchestratorKeyQueue.swift */,
 				0A1C00000000000000000902 /* OrchestratorApproval.swift */,
@@ -996,6 +1002,8 @@
 				0A1C00000000000000000458 /* OrchestratorRunsBoard.swift in Sources */,
 				0A1C00000000000000000459 /* OrchestratorRunsPure.swift in Sources */,
 				0A1C00000000000000000460 /* OrchestratorExpanded.swift in Sources */,
+				0A1C00000000000000000A02 /* OrchestratorBackground.swift in Sources */,
+				0A1C00000000000000000A04 /* OrchestratorBackgroundModel.swift in Sources */,
 				0A1C00000000000000000461 /* OrchestratorWings.swift in Sources */,
 				0A1C0000000000000000A001 /* OrchestratorKeyQueue.swift in Sources */,
 				0A1C00000000000000000901 /* OrchestratorApproval.swift in Sources */,
