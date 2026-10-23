@@ -225,6 +225,8 @@ struct Scene {
     var calm = false // no runs: capsule shows Running (+ ctx)
     var logRun: String? // run log overlay over the content
     var logLines = true // false: empty log
+    var menu = false // status/usage menu open
+    var before: ChatResponse? // applied first (an earlier working poll the menu remembers)
     var bg: String? // background agents/monitors (JSON array); bgCard = the open card's id
     var bgCard: String?
 }
@@ -287,6 +289,9 @@ struct Snap {
         func chat(_ screen: String, running: Bool = true) -> ChatResponse { ChatResponse(running: running, screen: screen) }
         func ctxChat(_ pct: Int) -> ChatResponse {
             try! JSONDecoder().decode(ChatResponse.self, from: Data(#"{"running":true,"screen":"","live":true,"context":{"percent":\#(pct)}}"#.utf8))
+        }
+        func ctxFull(_ pct: Int, _ tokens: Int, _ window: Int) -> ChatResponse {
+            try! JSONDecoder().decode(ChatResponse.self, from: Data(#"{"running":true,"screen":"","live":true,"context":{"percent":\#(pct),"tokens":\#(tokens),"window":\#(window)}}"#.utf8))
         }
         func askChat(_ f: String) -> ChatResponse {
             let o: [String: Any] = ["running": true, "screen": fixture(f), "approval": ["id": "q1", "tool": "AskUserQuestion", "command": "{\"questions\":[…"]]
@@ -387,6 +392,9 @@ struct Snap {
             Scene(name: "71-ask-done-opened-open", chat: chat(""), blocks: Array(askBlocks.prefix(2)), askOpen: true),
             Scene(name: "72-ask-done-closed-expanded", chat: chat(""), blocks: askBlocks, expanded: true),
             Scene(name: "73-ask-done-opened-expanded", chat: chat(""), blocks: askBlocks, expanded: true, askOpen: true),
+            Scene(name: "74-usage-menu-working", chat: ctxFull(23, 230_000, 1_000_000), blocks: shortBlocks, calm: true, menu: true),
+            Scene(name: "75-usage-menu-idle", chat: chat("", running: false), blocks: shortBlocks, calm: true, menu: true, before: ctxFull(86, 860_000, 1_000_000)),
+            Scene(name: "76-usage-menu-never", chat: chat("", running: false), blocks: shortBlocks, calm: true, menu: true),
             Scene(name: "80-bg-row-open", chat: chat(""), blocks: shortBlocks, bg: snapBgTasks()),
             Scene(name: "81-bg-row-expanded", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks()),
             Scene(name: "82-bg-card-agent-running", chat: chat(""), blocks: shortBlocks, expanded: true, bg: snapBgTasks(), bgCard: "a1"),
@@ -405,7 +413,9 @@ struct Snap {
             orchSnapDiffOpen = s.diffOpen
             let vm = BoringViewModel()
             let m = OrchestratorManager.shared
+            if let b = s.before { await m.snapshotApply(loaded: true, chat: b, state: StateResponse(runs: [], usage: nil)) }
             await m.snapshotApply(loaded: s.loaded, chat: s.chat, state: s.calm ? StateResponse(runs: [], usage: nil) : StateResponse(runs: state.runs, usage: state.usage, deploys: s.deploys.isEmpty ? nil : try! JSONDecoder().decode([Deploy].self, from: Data("[\(s.deploys.joined(separator: ","))]".utf8))), runsBoard: s.runsBoard)
+            m.statusMenuOpen = s.menu
             OrchestratorTranscriptStore.shared.snapshotSet(blocks: s.blocks, pending: s.sends, attachments: s.attachments, draft: s.draft, askOpen: s.askOpen ? ["a2", "a3"] : [])
             OrchestratorFileQueue.shared.snapshotSet(s.files)
             Defaults[.orchRunsRailCollapsed] = s.railCollapsed
@@ -447,7 +457,7 @@ struct Snap {
                     host.cacheDisplay(in: host.bounds, to: rep)
                     print("\(s.name): notch h=\(Int(vm.notchSize.height))")
                     png = rep.representation(using: .png, properties: [:])
-                    if s.loaded, s.chat?.running == true, !s.runsBoard, s.notes == nil, m.prompt == nil {
+                    if s.loaded, s.chat?.running == true, !s.runsBoard, s.notes == nil, !s.menu, m.prompt == nil {
                         let w = host.bounds.width
                         let c = bottomGap(rep, xPt: 200) ?? -1
                         let r = s.expanded ? (bottomGap(rep, xPt: w - 90) ?? -1) : 12
