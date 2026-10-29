@@ -342,6 +342,10 @@ func sendOrchestratorPost(_ post: OrchestratorPost, base: URL, session: URLSessi
     return http.statusCode
 }
 
+/// Refused connection: the request never reached serve, so nothing was typed and sending it again is safe.
+/// (A timeout may have landed: never resent automatically.)
+func neverReachedServe(_ e: Error) -> Bool { (e as? URLError)?.code == .cannotConnectToHost }
+
 /// GET /api/notes (text/plain). Throws unless HTTP 200 so a failed load is never mistaken for empty notes.
 func fetchOrchestratorNotes(base: URL, session: URLSession) async throws -> String {
     let (data, resp) = try await session.data(for: URLRequest(url: base.appendingPathComponent("api/notes")))

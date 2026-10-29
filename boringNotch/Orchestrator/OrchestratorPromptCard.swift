@@ -32,7 +32,8 @@ final class PromptCardController: ObservableObject {
     @Published private(set) var note: String?
     /// Optimistic checkbox state: taps show at once, and stay until the queue has drained and the screen has been compared with them.
     @Published private(set) var pending: [Int: Bool] = [:]
-    private let queue = PromptKeyQueue { await OrchestratorManager.shared.postKey($0) }
+    /// Keys outside the `sending` window: the queue sends back-to-back while the rest of the UI stays live.
+    private let queue = PromptKeyQueue { await OrchestratorManager.shared.postCode(.key($0)) == 200 }
     private var reconciling: Task<Void, Never>?
     private var busy = false
     private var lastId: PromptIdentity?
@@ -101,13 +102,15 @@ final class PromptCardController: ObservableObject {
             guard await queue.settle() else { restore(note: "Didn't go through"); return }
             try? await Task.sleep(for: .seconds(max(0, 2 - Date().timeIntervalSince(t0))))
             await m.refresh(fresh: true)
-            if !m.offline, let cur = m.prompt, promptIdentity(cur) == id { restore(note: "Didn't go through"); return }
+            if m.stale { restore(note: nil); return } // can't tell whether it moved on: show the card; the next good read decides
+            if let cur = m.prompt, promptIdentity(cur) == id { restore(note: "Didn't go through"); return }
             // ponytail: identity-equal first redraw (chip flips before the question text) just shows this step a moment longer; a 2 s no-move still says "Didn't go through".
             if hides { release() } // else the next question is on screen: keep the card and its key focus
         }
     }
 
     private static let resync = "Re-synced: a tap didn't register"
+    private static let waiting = "Waiting for the orchestrator…"
 
     private func restore(note text: String?) {
         withAnimation(spring) { dismissed = nil }
@@ -291,7 +294,17 @@ final class PromptCardController: ObservableObject {
         Task {
             defer { submitting = false }
             let m = OrchestratorManager.shared
-            guard await stillCurrent(displayed) else { restore(note: nil); return }
+            var current = await stillCurrent(displayed)
+            // Serve not answering: nothing typed yet. Keep the card and the text up, and go once it is back (Enter stays blocked meanwhile).
+            while m.stale {
+                withAnimation(spring) { dismissed = nil }
+                note = Self.waiting
+                await m.untilReachable()
+                note = nil
+                if hides { withAnimation(spring) { dismissed = id } }
+                current = await stillCurrent(displayed)
+            }
+            guard current else { restore(note: nil); return }
             // The row is an inline input: its number moves the ❯ onto it, the screen is otherwise the same. Pressing it while
             // the ❯ already sits there would type the digit into the field.
             if !freeTextFocused(m.prompt, number: ft.number) { _ = await m.pressKeys([String(ft.number)]) }
@@ -302,8 +315,8 @@ final class PromptCardController: ObservableObject {
                 var i = 0
                 while m.sending && i < 40 { try? await Task.sleep(for: .milliseconds(50)); i += 1 }
                 if !m.sending { await m.refresh(fresh: true) }
-                // A failed GET also nils the prompt, so offline never counts as landed.
-                if !m.offline, freeTextFocused(m.prompt, number: ft.number) { landed = true; break }
+                // A failed GET keeps the last prompt: stale data never counts as landed.
+                if !m.stale, freeTextFocused(m.prompt, number: ft.number) { landed = true; break }
                 try? await Task.sleep(for: .milliseconds(200))
             }
             // One POST only: a timeout may still have typed the text, and 409 means chat is gone.
@@ -313,7 +326,7 @@ final class PromptCardController: ObservableObject {
             for _ in 0..<8 {
                 try? await Task.sleep(for: .milliseconds(250))
                 await m.refresh(fresh: true)
-                if !m.offline, m.prompt.map(promptIdentity) != id { moved = true; break }
+                if !m.stale, m.prompt.map(promptIdentity) != id { moved = true; break }
             }
             guard moved else { restore(note: "Didn't go through"); return }
             freeText = ""

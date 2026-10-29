@@ -113,6 +113,7 @@ runQuickAskTests()
 await runQuickKeyQueueTests()
 runQuickFreetextTests()
 runQuickCtxTests()
+runQuickSlowTests()
 if ProcessInfo.processInfo.environment["ORCH_APPROVAL_MOCK"] != nil { await runPhase9Mock() }
 if ProcessInfo.processInfo.environment["ORCH_NOTES_MOCK"] != nil { await runQuickR8wMock() }
 if ProcessInfo.processInfo.environment["ORCH_IMAGE_MOCK"] != nil { await runQuickRm9Mock() }

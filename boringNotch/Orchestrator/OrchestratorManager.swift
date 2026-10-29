@@ -10,6 +10,15 @@ final class OrchestratorManager: ObservableObject {
     #endif
 
     @Published private(set) var offline = false
+    /// A request failed, but not for long enough to call it offline (goesOffline): the last good chat, runs and card stay up.
+    @Published private(set) var reconnecting = false
+    /// The data on screen may be out of date: don't treat it as proof an answer landed.
+    var stale: Bool { offline || reconnecting }
+    private var failures = 0
+    private var failingSince: Date?
+    private var everLoaded = false
+    /// The last POST never reached serve (connection refused): nothing was typed, so sending it again is safe.
+    private(set) var lastPostUnreached = false
     @Published private(set) var chatRunning = false
     @Published private(set) var screen = ""
     @Published private(set) var runs: [OrchestratorRun] = []
@@ -102,7 +111,7 @@ final class OrchestratorManager: ObservableObject {
         guard !sending, claudeRestart != .restarting else { return }
         sending = true
         claudeRestart = .restarting
-        let code = (try? await sendOrchestratorPost(.restart(force: force), base: Self.baseURL, session: session)) ?? nil
+        let code = await postCode(.restart(force: force))
         if code == 200 { restartedOnto = claude?.installed }
         sending = false
         claudeRestart = claudeRestartPhase(afterPost: code)
@@ -116,7 +125,7 @@ final class OrchestratorManager: ObservableObject {
     }
 
     var capsuleStatus: CapsuleState {
-        capsuleState(hasLoaded: hasLoaded, offline: offline, chatRunning: chatRunning, needsAttention: needsAttention, working: liveStatus != nil)
+        capsuleState(hasLoaded: hasLoaded, offline: offline, chatRunning: chatRunning, needsAttention: needsAttention, working: liveStatus != nil, reconnecting: reconnecting)
     }
 
     /// Fed by notch open/close hooks; opening triggers an immediate refresh.
@@ -162,8 +171,25 @@ final class OrchestratorManager: ObservableObject {
         return await postNow(p)
     }
 
+    /// Every POST: nil on any failure; a refused connection also counts towards offline.
+    func postCode(_ p: OrchestratorPost) async -> Int? {
+        do {
+            lastPostUnreached = false
+            return try await sendOrchestratorPost(p, base: Self.baseURL, session: session)
+        } catch {
+            lastPostUnreached = neverReachedServe(error)
+            if lastPostUnreached { noteFailure() }
+            return nil
+        }
+    }
+
+    /// Returns once a GET or stream event has succeeded again (the poll loop and the stream keep trying meanwhile).
+    func untilReachable() async {
+        while stale && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(500)) }
+    }
+
     private func postNow(_ p: OrchestratorPost) async -> Bool {
-        let code = (try? await sendOrchestratorPost(p, base: Self.baseURL, session: session)) ?? nil
+        let code = await postCode(p)
         if code == 200 { await refresh(fresh: true); return true }
         if code == 409 { await refresh(fresh: true) }
         return false
@@ -188,18 +214,13 @@ final class OrchestratorManager: ObservableObject {
     func startChat() async { await post(.start) }
     func stopChat() async { await post(.stop) }
 
-    /// One key outside the `sending` window: the prompt card's queue sends back-to-back while the rest of the UI stays live.
-    func postKey(_ k: String) async -> Bool {
-        (try? await sendOrchestratorPost(.key(k), base: Self.baseURL, session: session)) == 200
-    }
-
     /// A key sequence in one `sending` window. Stops at the first non-200; true only if every key landed.
     func pressKeys(_ keys: [String]) async -> Bool {
         guard !sending else { return false }
         sending = true
         defer { sending = false }
         for k in keys {
-            guard (try? await sendOrchestratorPost(.key(k), base: Self.baseURL, session: session)) == 200 else { await refresh(fresh: true); return false }
+            guard await postCode(.key(k)) == 200 else { await refresh(fresh: true); return false }
         }
         await refresh(fresh: true)
         return true
@@ -207,8 +228,9 @@ final class OrchestratorManager: ObservableObject {
 
     let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
-        c.timeoutIntervalForRequest = 3
-        c.timeoutIntervalForResource = 5
+        // A busy serve takes seconds to answer; that is slow, not offline. A stopped serve still fails at once (refused).
+        c.timeoutIntervalForRequest = 20
+        c.timeoutIntervalForResource = 30
         c.waitsForConnectivity = false
         return URLSession(configuration: c)
     }()
@@ -244,7 +266,11 @@ final class OrchestratorManager: ObservableObject {
 
     /// Returns when the stream ends: 404 (old serve), error, or 20 s with no line. Polling resumes within ~2 s.
     private func runStream() async {
-        var req = URLRequest(url: Self.baseURL.appendingPathComponent("api/events"))
+        // Resume after the last block we hold: the first blocks event then appends instead of replacing the chat.
+        let since = OrchestratorTranscriptStore.shared.blocks.last?.id
+        var comps = URLComponents(url: Self.baseURL.appendingPathComponent("api/events"), resolvingAgainstBaseURL: false)!
+        if let since { comps.queryItems = [URLQueryItem(name: "since", value: since)] }
+        var req = URLRequest(url: comps.url!)
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         let streamSession = makeStreamSession() // per stream: invalidateAndCancel() on watchdog trip guarantees the iterator ends
         defer { streamSession.finishTasksAndInvalidate() }
@@ -252,7 +278,7 @@ final class OrchestratorManager: ObservableObject {
         lastStreamLine = Date()
         streaming = true
         defer { streaming = false }
-        await loadBackground()
+        Task { await loadBackground() } // a slow serve must not hold up the events
         let watchdogTripped = { [weak self] in self?.streaming = false; streamSession.invalidateAndCancel() }
         await withTaskGroup(of: Void.self) { group in
             group.addTask { @MainActor [weak self] in
@@ -269,8 +295,10 @@ final class OrchestratorManager: ObservableObject {
                             await self.applyChat(r)
                             if r.running == false { OrchestratorTranscriptStore.shared.ingestBlocks(running: false, blocks: [], reset: true) }
                         case .blocks(let running, let blocks, let reset):
-                            // First blocks event of a connection replaces; pending rows survive (store keeps them).
-                            OrchestratorTranscriptStore.shared.ingestBlocks(running: running, blocks: blocks, reset: first || reset)
+                            // First event of a connection: blocks after `since` (appended), or everything (replaces; pending rows survive).
+                            let store = OrchestratorTranscriptStore.shared
+                            if first, since != nil, !reset { await store.ingestSince(running: running, blocks: blocks, base: Self.baseURL, session: self.session) }
+                            else { store.ingestBlocks(running: running, blocks: blocks, reset: reset || first) }
                             first = false
                         case .deploys(let list): if self.deploys != list { self.deploys = list }
                         case .deploy(let d): self.upsertDeploy(d)
@@ -325,9 +353,26 @@ final class OrchestratorManager: ObservableObject {
             await applyChat(r, polledAt: started)
             if r.running == true { await loadBackground() }
         } catch {
-            applyOffline()
+            noteFailure()
         }
         if !hasLoaded { hasLoaded = true }
+    }
+
+    private func noteFailure() {
+        failures += 1
+        let since = failingSince ?? Date()
+        failingSince = since
+        if goesOffline(everLoaded: everLoaded, failures: failures, failingFor: Date().timeIntervalSince(since)) { applyOffline() }
+        else if !reconnecting { reconnecting = true }
+    }
+
+    /// Any good response or stream event.
+    private func markReachable() {
+        failures = 0
+        failingSince = nil
+        everLoaded = true
+        if reconnecting { reconnecting = false }
+        if offline { offline = false }
     }
 
     private func setBackground(_ l: [BgTask]) { if bgTasks != l { bgTasks = l } }
@@ -347,7 +392,7 @@ final class OrchestratorManager: ObservableObject {
 
     private func applyState(_ st: StateResponse) {
         if let ds = st.deploys, deploys != ds { deploys = ds } // before `offline` clears, so the wings never see a reconnect with stale deploys
-        if offline { offline = false }
+        markReachable()
         let rs = st.runs ?? []
         if runs != rs { runs = rs }
         if usage != st.usage { usage = st.usage }
@@ -359,7 +404,7 @@ final class OrchestratorManager: ObservableObject {
         let approvalFresh = approvalApplyIsFresh(startedAt: polledAt, current: applySeq)
         applySeq += 1
         let mine = applySeq
-        if offline { offline = false }
+        markReachable()
         let running = r.running ?? false
         if chatRunning != running { chatRunning = running }
         if !running { setBackground([]) } // a new session starts clean
@@ -418,6 +463,7 @@ final class OrchestratorManager: ObservableObject {
     }
 
     private func applyOffline() {
+        if reconnecting { reconnecting = false }
         if !offline { offline = true }
         if !runs.isEmpty { runs = [] }
         if !deploys.isEmpty { deploys = [] }

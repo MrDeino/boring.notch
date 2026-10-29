@@ -103,11 +103,12 @@ func formatElapsed(_ seconds: TimeInterval) -> String {
     return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
 }
 
-enum CapsuleState: Equatable { case connecting, offline, stopped, needsYou, running, idle }
+enum CapsuleState: Equatable { case connecting, offline, reconnecting, stopped, needsYou, running, idle }
 
-func capsuleState(hasLoaded: Bool, offline: Bool, chatRunning: Bool, needsAttention: Bool, working: Bool) -> CapsuleState {
+func capsuleState(hasLoaded: Bool, offline: Bool, chatRunning: Bool, needsAttention: Bool, working: Bool, reconnecting: Bool = false) -> CapsuleState {
     if !hasLoaded { return .connecting }
     if offline { return .offline }
+    if reconnecting { return .reconnecting }
     if !chatRunning { return .stopped }
     if needsAttention { return .needsYou }
     return working ? .running : .idle
@@ -254,4 +255,10 @@ func promptFitExtra(need: CGFloat, base: CGFloat = promptCardBase) -> CGFloat { 
 /// Tallest notch a prompt card may ask for: most of the screen below the menu bar (the card scrolls past this).
 func promptCardMaxHeight(screen: CGSize) -> CGFloat {
     max(expandedSize(screen: screen).height, screen.height - 80)
+}
+
+/// Offline (full-screen, last data dropped) only before anything ever loaded, or after sustained failure:
+/// one slow or failed request leaves the last good data on screen.
+func goesOffline(everLoaded: Bool, failures: Int, failingFor: TimeInterval) -> Bool {
+    !everLoaded || failures >= 3 && failingFor >= 30
 }

@@ -138,3 +138,4 @@ Resume file: None
 | 261022-glitch | Chat reads as a plain log: no animation, one scroll pin, fixed status slot, "⏺ Calling X…" is a tool row, live row uses markdown so the final block takes its place | 2026-10-22 | .planning/quick/261022-glitch-chat-plain-log |
 | 261022-ctx | Usage menu shows Session context (bar, tokens/window, "as of" when idle) from serve's context fields; no auto-compact field from serve; menu scrolls when taller than the open tab | 2026-10-22 | .planning/quick/261022-ctx-usage-menu-session-context |
 | 261022-jie | Background agents and monitors: row, card and closed-notch dot | 2026-10-22 | .planning/quick/261022-jie-bg-agents |
+| 261029-ey6 | Slow/briefly unreachable serve: offline only after 30 s of failures, chat/runs/card kept while reconnecting, sends never lost or doubled (refused = resend once back), SSE resumes with since | 2026-10-29 | .planning/quick/261029-ey6-orchestrator-tab-survives-slow-server |
