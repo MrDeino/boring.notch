@@ -41,7 +41,6 @@ final class OrchestratorTranscriptStore: ObservableObject {
 
     private var needsFull = true
     private var polls = 0
-    private var failures = 0
 
     /// Input box + idle status from a chat payload (polled or pushed). Phase 8: serve's `input` wins over the heuristic.
     func applyScreen(_ r: ChatResponse) {
@@ -68,22 +67,28 @@ final class OrchestratorTranscriptStore: ObservableObject {
         polls += 1
 
         let sinceSent = !full && !blocks.isEmpty
-        guard var decoded = await fetchBlocks(base: base, session: session, since: sinceSent ? blocks.last?.id : nil) else {
+        guard let decoded = await fetchBlocks(base: base, session: session, since: sinceSent ? blocks.last?.id : nil) else {
             fetchFailed()
             return
         }
-        if decoded.running == false && decoded.blocks.isEmpty { ingestBlocks(running: false, blocks: [], reset: true); return }
-        var reset = full
-        if blocksDiscontinuous(sinceSent: sinceSent, incoming: decoded.blocks, existing: blocks) {
-            // Full fetch: still holding our last block = plain append, else the conversation changed (/clear): replace.
-            guard let all = await fetchBlocks(base: base, session: session, since: nil) else {
-                fetchFailed()
-                return
-            }
-            decoded = all
-            reset = !all.blocks.contains { $0.id == blocks.last?.id }
+        if sinceSent { await ingestSince(running: decoded.running, blocks: decoded.blocks, base: base, session: session) }
+        else { ingestFull(decoded) }
+    }
+
+    /// Blocks asked for after our last id (poll or stream reconnect): appended, unless they share no id with ours
+    /// (blocksDiscontinuous); then a full fetch decides between append and replace.
+    func ingestSince(running: Bool?, blocks incoming: [ChatBlock], base: URL, session: URLSession) async {
+        guard blocksDiscontinuous(sinceSent: true, incoming: incoming, existing: blocks) else {
+            ingestBlocks(running: running, blocks: incoming, reset: false)
+            return
         }
-        ingestBlocks(running: decoded.running, blocks: decoded.blocks, reset: reset)
+        guard let all = await fetchBlocks(base: base, session: session, since: nil) else { fetchFailed(); return }
+        ingestFull(all)
+    }
+
+    /// A full fetch still holding our last block merges; without it the conversation changed (/clear): replace.
+    private func ingestFull(_ d: (running: Bool?, blocks: [ChatBlock])) {
+        ingestBlocks(running: d.running, blocks: d.blocks, reset: !d.blocks.contains { $0.id == blocks.last?.id })
     }
 
     /// The one place blocks enter the store (polled or pushed). `reset` replaces the rows; pending rows are kept and reconciled.
@@ -98,7 +103,6 @@ final class OrchestratorTranscriptStore: ObservableObject {
         if m.blocks != blocks { blocks = m.blocks }
         if fallback { fallback = false }
         needsFull = false
-        failures = 0
         reconcile()
         // Quick e1d: the block that replaces the live row and the row's removal publish together.
         OrchestratorManager.shared.updateLiveReply()
@@ -148,10 +152,12 @@ final class OrchestratorTranscriptStore: ObservableObject {
                     pending[i].paths.append(path)
                 }
                 guard uploaded else { setPending(p.id, .failed); continue }
-                // Never type queued text into a permission/question prompt.
-                while manager.sending || !manager.promptOptions.isEmpty { try? await Task.sleep(for: .milliseconds(50)) }
+                // Never type queued text into a permission/question prompt, nor while serve isn't answering.
+                while manager.sending || !manager.promptOptions.isEmpty || manager.stale { try? await Task.sleep(for: .milliseconds(50)) }
                 guard let row = pending.first(where: { $0.id == p.id && $0.state == .sending }) else { continue }
                 let ok = await manager.sendText(row.wireText) { await self.clearRealLine() }
+                // Refused before reaching serve: nothing was typed, so it waits (above) and goes once serve is back.
+                if !ok && manager.lastPostUnreached { setPending(p.id, .queued); continue }
                 setPending(p.id, ok ? .sent : .failed, sentAt: ok ? Date() : nil)
             }
             draining = false
@@ -171,10 +177,9 @@ final class OrchestratorTranscriptStore: ObservableObject {
         return (m.text, m.images)
     }
 
-    /// D-03 fallback, but one transient failure keeps the rows we hold (no flicker to chatTail and back).
+    /// D-03 fallback only with no rows: a failed fetch keeps the rows we hold (no flicker to chatTail and back).
     private func fetchFailed() {
-        failures += 1
-        if (blocks.isEmpty || failures >= 3) && !fallback { fallback = true }
+        if blocks.isEmpty && !fallback { fallback = true }
     }
 
     private func fetchBlocks(base: URL, session: URLSession, since: String?) async -> (running: Bool?, blocks: [ChatBlock])? {
@@ -191,7 +196,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
     /// but typing replaces it. false = the C-u POST failed, so don't type. Same base/session as the text POST:
     /// while streaming, refresh(base:) may never have run.
     func clearRealLine() async -> Bool {
-        (try? await sendOrchestratorPost(.key("C-u"), base: OrchestratorManager.baseURL, session: OrchestratorManager.shared.session)) == 200
+        await OrchestratorManager.shared.postCode(.key("C-u")) == 200
     }
 }
 

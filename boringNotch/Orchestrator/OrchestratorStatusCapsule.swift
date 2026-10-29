@@ -161,6 +161,7 @@ struct OrchestratorStatusCapsule: View {
             case .stopped: return (OT.C.text5, "Stopped", OT.C.text4, OT.C.raised)
             case .offline: return (OT.C.red, "Offline", OT.C.text4, OT.C.raised)
             case .connecting: return (OT.C.text6, "Connecting", OT.C.text5, OT.C.raised)
+            case .reconnecting: return (OT.C.orange, "Reconnecting", OT.C.text4, OT.C.raised)
             }
         }()
         let showRing = s == .running || s == .idle || s == .stopped
