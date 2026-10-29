@@ -32,7 +32,8 @@ final class PromptCardController: ObservableObject {
     @Published private(set) var note: String?
     /// Optimistic checkbox state: taps show at once, and stay until the queue has drained and the screen has been compared with them.
     @Published private(set) var pending: [Int: Bool] = [:]
-    private let queue = PromptKeyQueue { await OrchestratorManager.shared.postKey($0) }
+    /// Keys outside the `sending` window: the queue sends back-to-back while the rest of the UI stays live.
+    private let queue = PromptKeyQueue { await OrchestratorManager.shared.postCode(.key($0)) == 200 }
     private var reconciling: Task<Void, Never>?
     private var busy = false
     private var lastId: PromptIdentity?

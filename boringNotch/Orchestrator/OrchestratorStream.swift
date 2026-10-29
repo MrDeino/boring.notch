@@ -70,8 +70,8 @@ struct SSELineParser {
     }
 }
 
-func streamHealthy(lastLineAt: Date, now: Date, limit: TimeInterval = 20) -> Bool {
-    now.timeIntervalSince(lastLineAt) <= limit
+func streamHealthy(lastLineAt: Date, now: Date) -> Bool {
+    now.timeIntervalSince(lastLineAt) <= 20
 }
 
 // MARK: - Caret (08-03)
