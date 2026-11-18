@@ -123,4 +123,5 @@ if ProcessInfo.processInfo.environment["ORCH_RESTART_MOCK"] != nil { await runQu
 if ProcessInfo.processInfo.environment["ORCH_RETRY_MOCK"] != nil { await runQuickMe4Mock() }
 if ProcessInfo.processInfo.environment["ORCH_DEPLOY_MOCK"] != nil { await runQuickDeployMock() }
 runQuickMe4SelectionTest()
+runQuickGrowTest()
 print("OK")
