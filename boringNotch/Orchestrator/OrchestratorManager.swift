@@ -393,7 +393,8 @@ final class OrchestratorManager: ObservableObject {
         markReachable()
         let rs = st.runs ?? []
         if runs != rs { runs = rs }
-        if usage != st.usage { usage = st.usage }
+        let live = liveUsage(st.usage)
+        if usage != live { usage = live }
     }
 
     /// Reused by the SSE stream (08-02): screen/input first, then blocks, then the prompt that needs them.

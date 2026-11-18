@@ -118,6 +118,16 @@ func liveRunCount(_ runs: [OrchestratorRun]) -> Int {
     runs.filter { ["running", "waiting", "stuck"].contains($0.state ?? "") }.count
 }
 
+/// A usage window whose reset time has passed is stale: drop its figures (shown as unknown) until serve reports the new one.
+func liveUsage(_ u: OrchestratorUsage?, now: Date = Date()) -> OrchestratorUsage? {
+    guard let u else { return nil }
+    func live(_ w: UsageWindow?) -> UsageWindow? {
+        guard let w, let r = w.resetsDate, r <= now else { return w }
+        return UsageWindow(usedPercentage: nil, resetsAt: nil)
+    }
+    return OrchestratorUsage(fiveHour: live(u.fiveHour), sevenDay: live(u.sevenDay))
+}
+
 /// 5h window used as 0...1, nil when unknown.
 func fiveHourFraction(_ u: OrchestratorUsage?) -> Double? {
     u?.fiveHour?.usedPercentage.map { min(max($0 / 100, 0), 1) }
@@ -262,3 +272,11 @@ func promptCardMaxHeight(screen: CGSize) -> CGFloat {
 func goesOffline(everLoaded: Bool, failures: Int, failingFor: TimeInterval) -> Bool {
     !everLoaded || failures >= 3 && failingFor >= 30
 }
+
+/// Closing one display's notch while `othersOpen` other notches are open must leave the shared tab / Orchestrator state alone.
+func closeKeepsSharedState(othersOpen: Int) -> Bool { othersOpen > 0 }
+
+/// Back from expanded to open: the shape shrinks under the pointer, so the hover-exit (and the keep-open release) it causes
+/// must not close the notch. The hold lasts the spring plus the deferred window shrink, or until the next hover-enter.
+let expandBackHoldSeconds: TimeInterval = 1.2
+func holdsOpen(until: TimeInterval?, now: TimeInterval) -> Bool { until.map { now < $0 } ?? false }

@@ -114,7 +114,10 @@ final class OrchestratorExpand: ObservableObject {
         let cur = level(for: vm)
         guard target != cur else { return }
         switch target {
-        case .open: collapse(vm: vm)
+        case .open:
+            // Set before collapse: its endInteraction posts .sharingDidFinish, whose close checks the hold.
+            if vm.notchState == .open { holdUntil[k] = ProcessInfo.processInfo.systemUptime + expandBackHoldSeconds }
+            collapse(vm: vm)
         case .expanded:
             if cur == .open { grow(vm, w) }
             if cur == .terminal { terminal.remove(k); releaseKey(w) }
@@ -123,6 +126,11 @@ final class OrchestratorExpand: ObservableObject {
             if expanded.contains(k) { terminal.insert(k) }
         }
     }
+
+    /// Back from expanded (not an outside click): the hover-exit closes skip this notch for a moment (see holdsOpen).
+    private var holdUntil: [ObjectIdentifier: TimeInterval] = [:]
+    func holdingOpen(_ vm: BoringViewModel) -> Bool { holdsOpen(until: holdUntil[key(vm)], now: ProcessInfo.processInfo.systemUptime) }
+    func clearHold(_ vm: BoringViewModel) { holdUntil[key(vm)] = nil }
 
     func back(_ vm: BoringViewModel) { setLevel(nextLevel(level(for: vm), .back), vm: vm, window: nil) }
 
@@ -208,6 +216,7 @@ final class OrchestratorExpand: ObservableObject {
         // Fits belong to the open notch; a closed notch starts from openNotchSize again.
         let fitted = fits.filter { $0.value.values.contains { $0 > 0 } }.keys
         fits = [:]
+        holdUntil = [:]
         for k in fitted where !expanded.contains(k) {
             if let vm = vms[k]?.vm {
                 if vm.notchState == .open { vm.notchSize = openNotchSize }
