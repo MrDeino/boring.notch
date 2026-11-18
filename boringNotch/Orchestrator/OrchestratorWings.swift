@@ -152,6 +152,8 @@ struct OrchestratorWingsView: View {
             FinishedMark(failed: failed, size: 13)
         case .deploying:
             WingSpinner(size: 15)
+        case .deployUnknown:
+            Image(systemName: "questionmark.circle").font(.system(size: 12, weight: .semibold)).foregroundStyle(OT.C.orangeText)
         }
     }
 
@@ -184,6 +186,9 @@ struct OrchestratorWingsView: View {
         case .deployed(let label, let failed):
             Text(verbatim: failed ? "\(label) ✗ deploy failed" : "\(label) live ✓").font(.system(size: 11))
                 .foregroundStyle(failed ? OT.C.red : OT.C.green).lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: 220, alignment: .leading).fixedSize(horizontal: true, vertical: false)
+        case .deployUnknown(let label, let note):
+            Text(verbatim: "\(label) \(note)").font(.system(size: 11)).foregroundStyle(OT.C.orangeText).lineLimit(1).truncationMode(.tail)
                 .frame(maxWidth: 220, alignment: .leading).fixedSize(horizontal: true, vertical: false)
         case .finished(let project, _):
             Text(verbatim: project).font(.system(size: 11)).foregroundStyle(OT.C.text4).lineLimit(1).truncationMode(.tail)

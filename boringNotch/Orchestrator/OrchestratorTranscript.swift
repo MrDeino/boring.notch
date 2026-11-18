@@ -80,12 +80,31 @@ func mergeChatBlocks(_ existing: [ChatBlock], _ incoming: [ChatBlock], reset: Bo
     // Reset de-dups like the append path (repeated JSONL lines, 7 vs "7") so ForEach ids stay unique.
     if reset { return (mergeChatBlocks([], incoming, reset: false, cap: cap).blocks, false) }
     var out = existing
-    var index = Dictionary(out.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { _, b in b })
     var appended = false
-    for b in incoming {
-        if let i = index[b.id] { out[i] = b } else { index[b.id] = out.count; out.append(b); appended = true }
+    // An unknown block goes right after the incoming block before it, so a filled gap ([A, C] + [A, B, C]) lands in
+    // place; a leading unknown one goes before the first incoming block we hold, else at the end.
+    // ponytail: O(n²) firstIndex scans; n is capped at 200 + one batch.
+    for (j, b) in incoming.enumerated() {
+        if let i = out.firstIndex(where: { $0.id == b.id }) { out[i] = b; continue }
+        let at = j > 0 ? out.firstIndex { $0.id == incoming[j - 1].id }.map { $0 + 1 }
+            : incoming.dropFirst().lazy.compactMap { n in out.firstIndex { $0.id == n.id } }.first
+        out.insert(b, at: at ?? out.count)
+        appended = true
     }
     return (Array(out.suffix(cap)), appended)
+}
+
+/// A full fetch that began when the store held `snapshot` and lands when it holds `current` (the stream may have
+/// added or updated blocks meanwhile). It is a /clear only when it lacks the snapshot's last block, never because
+/// of blocks that arrived after it started. Blocks that changed during the fetch keep their newer copy.
+func mergeFullFetch(current: [ChatBlock], snapshot: [ChatBlock], incoming: [ChatBlock], cap: Int = 200) -> [ChatBlock] {
+    let fresh = current.filter { !snapshot.contains($0) }
+    let byID = Dictionary(fresh.map { ($0.id, $0) }, uniquingKeysWith: { _, b in b })
+    let inc = incoming.map { byID[$0.id] ?? $0 }
+    let cleared = !incoming.contains { $0.id == snapshot.last?.id }
+    // A /clear keeps only what the stream sent after the fetch began, after the new conversation.
+    if cleared { return mergeChatBlocks(mergeChatBlocks([], inc, reset: false).blocks, fresh, reset: false, cap: cap).blocks }
+    return mergeChatBlocks(current, inc, reset: false, cap: cap).blocks
 }
 
 /// A non-empty since-response sharing no id with what we hold is ambiguous: serve didn't know `since`
@@ -430,7 +449,9 @@ func normalizeChatText(_ s: String) -> String {
     s.split(whereSeparator: { $0.isWhitespace || $0 == "\u{a0}" }).joined(separator: " ")
 }
 
-func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: Set<String>, now: Date, staleAfter: TimeInterval = 30) -> (pending: [PendingMessage], known: Set<String>) {
+/// `idleSince`: when the current turn ended, nil while a turn is live. Claude Code records a message sent mid-turn
+/// only when it takes the queued input, after the turn, so the stale clock starts at the later of send and turn end.
+func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: Set<String>, now: Date, idleSince: Date? = .distantPast, staleAfter: TimeInterval = 30) -> (pending: [PendingMessage], known: Set<String>) {
     var known = known
     var out: [PendingMessage] = []
     for p in pending {
@@ -442,7 +463,7 @@ func reconcilePending(_ pending: [PendingMessage], blocks: [ChatBlock], known: S
             }
             // ponytail: a sent message whose block text differs (e.g. a slash command) is dropped after staleAfter;
             // upgrade = serve echoing a client id. Same for images if Claude Code rewrites the path (e.g. [Image #1]).
-            if p.state == .sent, let t = p.sentAt, now.timeIntervalSince(t) > staleAfter { continue }
+            if p.state == .sent, let t = p.sentAt, let idle = idleSince, now.timeIntervalSince(max(t, idle)) > staleAfter { continue }
         }
         out.append(p)
     }

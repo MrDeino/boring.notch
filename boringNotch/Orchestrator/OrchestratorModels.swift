@@ -163,27 +163,34 @@ private struct LenientDeploy: Decodable {
     init(from decoder: Decoder) { deploy = Deploy(lenient: decoder) }
 }
 
+/// A bare `[deploy]` array: an entry with an unknown state or a bad shape is dropped, never the whole list.
+func decodeDeployList(_ data: Data) -> [Deploy]? {
+    (try? JSONDecoder().decode([LenientDeploy].self, from: data))?.compactMap(\.deploy)
+}
+
 /// One entry of serve's `deploys`. Lenient like OrchestratorRun: a field of the wrong type becomes nil;
 /// an entry without a project or a known state decodes to nil and is dropped.
 struct Deploy: Decodable, Equatable {
     struct PR: Equatable { let number: Int?; let title: String? }
     let project: String
-    /// "building" | "live" | "failed"
+    /// "building" | "live" | "failed" | "unknown" (serve: in progress for over 20 min; `note` says what to do)
     let state: String
+    let note: String?
     let sha: String?
     let pr: PR?
     let startedAt: String?
     let finishedAt: String?
     let url: String?
 
-    private enum CodingKeys: String, CodingKey { case project, state, sha, pr, startedAt, finishedAt, url }
+    private enum CodingKeys: String, CodingKey { case project, state, sha, pr, startedAt, finishedAt, url, note }
     private enum PRKeys: String, CodingKey { case number, title }
 
     init?(lenient decoder: Decoder) {
         guard let c = try? decoder.container(keyedBy: CodingKeys.self),
               let p = try? c.decodeIfPresent(String.self, forKey: .project), !p.isEmpty,
-              let s = try? c.decodeIfPresent(String.self, forKey: .state), ["building", "live", "failed"].contains(s) else { return nil }
+              let s = try? c.decodeIfPresent(String.self, forKey: .state), ["building", "live", "failed", "unknown"].contains(s) else { return nil }
         project = p; state = s
+        note = try? c.decodeIfPresent(String.self, forKey: .note)
         sha = try? c.decodeIfPresent(String.self, forKey: .sha)
         startedAt = try? c.decodeIfPresent(String.self, forKey: .startedAt)
         finishedAt = try? c.decodeIfPresent(String.self, forKey: .finishedAt)
