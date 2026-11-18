@@ -37,3 +37,18 @@ Note: the snapshot harness (`run.sh`, scene 38) has no real NSScrollView, so it 
 3. ⌘↑ (or click line 1 after scrolling up), then select and edit the first words.
 4. Enter still sends, and Shift/Option-Enter behave as before. Esc still leaves typing. The notch grows with the box and shrinks back after sending.
 5. Check the expanded level too, and the "from terminal ·" label lining up with the first line.
+
+## Follow-up: "unknown" deploys
+
+serve now reports a deploy that has been `in_progress` for over 20 min as `state: "unknown"` with a `note`. Clive dropped it.
+
+- `Deploy` now accepts `unknown` and decodes `note`. A state Clive doesn't know drops only that entry, in `/api/state` and in the SSE `deploy` list (the SSE list used a strict `[Deploy]` decode, so one odd entry used to drop the whole list).
+- Closed wing: a new `WingKind.deployUnknown(label, note)` shows `<project · #PR> <note>` in amber with a `?` mark. Priority: a live flash, then building, then unknown, then a failed flash. Turning unknown is not a live flash. Unknown → live flashes live as usual.
+- Expanded deploy rows: unknown is listed with the open deploys, has an amber dot, shows the note (or "unknown, check Railway" when the note is blank), and its elapsed time counts to now.
+
+Test: `Tests/QuickUnknownDeployTests.swift`. Harness OK; Debug and Release BUILD SUCCEEDED in ./build.
+
+### Check by hand
+1. With a deploy serve reports as unknown, the closed notch shows "<project · #PR> unknown, check Railway" in amber, with no spinner.
+2. Open and expand the notch: the deploy row has an amber dot, the note, and a growing elapsed time.
+3. When it later goes live or failed, the wing flashes live, or shows failed, as before.
