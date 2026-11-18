@@ -21,11 +21,8 @@ struct DynamicNotchApp: App {
     let updaterController: SPUStandardUpdaterController
 
     init() {
-        #if ORCH_NO_SPARKLE
-        let startUpdater = false // local ad-hoc builds must not self-update
-        #else
-        let startUpdater = true
-        #endif
+        // Clive never self-updates: the bundled feed is upstream Boring Notch's, which would offer to replace Clive.
+        let startUpdater = false
         updaterController = SPUStandardUpdaterController(
             startingUpdater: startUpdater, updaterDelegate: nil, userDriverDelegate: nil)
 

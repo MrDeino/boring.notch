@@ -118,6 +118,16 @@ func liveRunCount(_ runs: [OrchestratorRun]) -> Int {
     runs.filter { ["running", "waiting", "stuck"].contains($0.state ?? "") }.count
 }
 
+/// A usage window whose reset time has passed is stale: drop its figures (shown as unknown) until serve reports the new one.
+func liveUsage(_ u: OrchestratorUsage?, now: Date = Date()) -> OrchestratorUsage? {
+    guard let u else { return nil }
+    func live(_ w: UsageWindow?) -> UsageWindow? {
+        guard let w, let r = w.resetsDate, r <= now else { return w }
+        return UsageWindow(usedPercentage: nil, resetsAt: nil)
+    }
+    return OrchestratorUsage(fiveHour: live(u.fiveHour), sevenDay: live(u.sevenDay))
+}
+
 /// 5h window used as 0...1, nil when unknown.
 func fiveHourFraction(_ u: OrchestratorUsage?) -> Double? {
     u?.fiveHour?.usedPercentage.map { min(max($0 / 100, 0), 1) }
