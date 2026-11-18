@@ -149,7 +149,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Lock, sleep or a display change: the notch comes back closed, with no expand or typing hold left over
+    /// (a rebuilt window starts at windowSize and never saw the hover-enter that would close it).
+    @MainActor
+    private func closeNotches() {
+        OrchestratorExpand.shared.reset()
+        OrchestratorManager.shared.endTyping()
+        (Array(viewModels.values) + [vm]).forEach { $0.close() }
+    }
+
     private func cleanupWindows(shouldInvert: Bool = false) {
+        MainActor.assumeIsolated { closeNotches() }
         let shouldCleanupMulti = shouldInvert ? !Defaults[.showOnAllDisplays] : Defaults[.showOnAllDisplays]
         
         if shouldCleanupMulti {
@@ -257,6 +267,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // min size (the expanded height) onto the window and clamp every shrink.
         hosting.sizingOptions = []
         window.contentView = hosting
+        // Register the new panel and size it to the view model now (the notchSize onChange won't fire for it).
+        OrchestratorExpand.shared.syncWindow(vm: viewModel, window: window, now: true)
 
         window.orderFrontRegardless()
         NotchSpaceManager.shared.notchSpace.windows.insert(window)
@@ -342,6 +354,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 self?.setupDragDetectors()
             }
+        }
+
+        // Sleep: close like a lock. Wake: frames can match while the menu-bar height changed, so re-place and re-arm.
+        let ws = NSWorkspace.shared.notificationCenter
+        ws.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.closeNotches() }
+        }
+        ws.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.adjustWindowPosition(); self?.setupDragDetectors() }
         }
 
         // Use closure-based observers for DistributedNotificationCenter and keep tokens for removal

@@ -531,7 +531,9 @@ struct OrchestratorChatView: View {
                 if fieldFocused || dropTargeted { RoundedRectangle(cornerRadius: OT.R.pill30).stroke(OT.C.claude, lineWidth: 1.5) }
             }
         }
-        .onDrop(of: [.image, .fileURL, .data], isTargeted: $dropTargeted) { providers in handleDrop(providers) }
+        .onDrop(of: [.image, .fileURL, .data], isTargeted: $dropTargeted) { providers in vm.dropEvent = true; return handleDrop(providers) }
+        // Counts as a notch drop target, so ContentView's drop debounce doesn't close the notch under a composer drag.
+        .onChange(of: dropTargeted) { _, t in vm.composerDropTargeting = t }
         .onDisappear { OrchestratorExpand.shared.setFit("composer", extra: 0, vm: vm, window: anchor.window) }
     }
 

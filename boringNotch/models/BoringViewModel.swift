@@ -23,6 +23,8 @@ class BoringViewModel: NSObject, ObservableObject {
     @Published var generalDropTargeting: Bool = false
     @Published var dropZoneTargeting: Bool = false
     @Published var dropEvent: Bool = false
+    /// The Orchestrator composer's own drop target (innermost, so the outer targets read false while it is targeted).
+    @Published var composerDropTargeting: Bool = false
     @Published var anyDropZoneTargeting: Bool = false
     var cancellables: Set<AnyCancellable> = []
     
@@ -59,9 +61,9 @@ class BoringViewModel: NSObject, ObservableObject {
         notchSize = getClosedNotchSize(screenUUID: screenUUID)
         closedNotchSize = notchSize
 
-        Publishers.CombineLatest3($dropZoneTargeting, $dragDetectorTargeting, $generalDropTargeting)
-            .map { shelf, drag, general in
-                shelf || drag || general
+        Publishers.CombineLatest4($dropZoneTargeting, $dragDetectorTargeting, $generalDropTargeting, $composerDropTargeting)
+            .map { shelf, drag, general, composer in
+                shelf || drag || general || composer
             }
             .assign(to: \.anyDropZoneTargeting, on: self)
             .store(in: &cancellables)
@@ -192,25 +194,40 @@ class BoringViewModel: NSObject, ObservableObject {
     func open() {
         self.notchSize = OrchestratorExpand.shared.openSize(for: self)
         self.notchState = .open
+        Self.openModels.add(self)
         OrchestratorManager.shared.notchOpen = true
         
         // Force music information update when notch is opened
         MusicManager.shared.forceUpdate()
     }
 
+    /// Open notches across displays (weak): the shared tab and Orchestrator state follow "any notch open", not the last close().
+    private static let openModels = NSHashTable<BoringViewModel>.weakObjects()
+
     func close() {
+        // Already closed (screen-parameter / notch-height refresh, drop debounce): refresh sizes only, so another display's
+        // open notch keeps its tab, sneak peek and Orchestrator state.
+        if notchState == .closed {
+            self.notchSize = getClosedNotchSize(screenUUID: self.screenUUID)
+            self.closedNotchSize = self.notchSize
+            return
+        }
         // Do not close while a share picker or sharing service is active
         if SharingStateManager.shared.preventNotchClose {
             return
         }
-        coordinator.lastUsedView = coordinator.currentView
+        OrchestratorExpand.shared.clearHold(self)
+        Self.openModels.remove(self)
+        let lastOpen = !closeKeepsSharedState(othersOpen: Self.openModels.allObjects.count)
+        if lastOpen { coordinator.lastUsedView = coordinator.currentView }
         self.notchSize = getClosedNotchSize(screenUUID: self.screenUUID)
         self.closedNotchSize = self.notchSize
         self.notchState = .closed
-        OrchestratorManager.shared.notchOpen = false
+        OrchestratorManager.shared.notchOpen = !lastOpen
         self.isBatteryPopoverActive = false
-        self.coordinator.sneakPeek.show = false
         self.edgeAutoOpenActive = false
+        guard lastOpen else { return }
+        self.coordinator.sneakPeek.show = false
 
         // Set the current view to shelf if it contains files and the user enables openShelfByDefault
         // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home

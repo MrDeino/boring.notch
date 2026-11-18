@@ -262,3 +262,11 @@ func promptCardMaxHeight(screen: CGSize) -> CGFloat {
 func goesOffline(everLoaded: Bool, failures: Int, failingFor: TimeInterval) -> Bool {
     !everLoaded || failures >= 3 && failingFor >= 30
 }
+
+/// Closing one display's notch while `othersOpen` other notches are open must leave the shared tab / Orchestrator state alone.
+func closeKeepsSharedState(othersOpen: Int) -> Bool { othersOpen > 0 }
+
+/// Back from expanded to open: the shape shrinks under the pointer, so the hover-exit (and the keep-open release) it causes
+/// must not close the notch. The hold lasts the spring plus the deferred window shrink, or until the next hover-enter.
+let expandBackHoldSeconds: TimeInterval = 1.2
+func holdsOpen(until: TimeInterval?, now: TimeInterval) -> Bool { until.map { now < $0 } ?? false }

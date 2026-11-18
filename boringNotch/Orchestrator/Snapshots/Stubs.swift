@@ -19,6 +19,7 @@ final class BoringViewModel: NSObject, ObservableObject {
     @Published var screenUUID: String? = nil
     @Published var dragDetectorTargeting = false
     @Published var dropEvent = false
+    @Published var composerDropTargeting = false
     var effectiveClosedNotchHeight: CGFloat { closedNotchSize.height }
     var closeCount = 0
     var closedAt: TimeInterval?
