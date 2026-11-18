@@ -246,7 +246,8 @@ struct FinishedWings {
 }
 
 /// working = agents at work (chat + running runs). deploying/deployed = a project deploy (building; live or failed).
-enum WingKind: Equatable { case working(Int), needsYou(String), finished(String, failed: Bool), deploying(String), deployed(String, failed: Bool) }
+/// deployUnknown = serve lost track of a long deploy ("unknown"): the label and serve's note, shown neutral, not as building.
+enum WingKind: Equatable { case working(Int), needsYou(String), finished(String, failed: Bool), deploying(String), deployed(String, failed: Bool), deployUnknown(String, note: String) }
 
 /// needs-you > finished run (4s) > deploy > working count.
 func wingKind(needsYou: Bool, needsLabel: String, finished: (project: String, failed: Bool)?, workingCount: Int, deploy: WingKind? = nil) -> WingKind? {
@@ -261,18 +262,36 @@ func wingKind(needsYou: Bool, needsLabel: String, finished: (project: String, fa
 /// "gg-app · #231", or just the project without a PR.
 func deployLabel(_ d: Deploy) -> String { d.pr?.number.map { "\(d.project) · #\($0)" } ?? d.project }
 
+/// Still open on serve's side (building, or unknown after 20 min): listed first and timed to now.
+func deployOpen(_ d: Deploy) -> Bool { d.state == "building" || d.state == "unknown" }
+
+/// The state words of a deploy row.
+func deployStateText(_ d: Deploy) -> String {
+    switch d.state {
+    case "building": return "deploying…"
+    case "live": return "live ✓"
+    case "unknown": return unknownNote(d)
+    default: return "✗ deploy failed"
+    }
+}
+
+private func unknownNote(_ d: Deploy) -> String {
+    let n = d.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return n.isEmpty ? "unknown, check Railway" : n
+}
+
 /// Building deploys first (newest start first), then the newest finished one if it ended within `recent` seconds. At most `limit`.
 func deployRows(_ deploys: [Deploy], now: Date, recent: TimeInterval = 600, limit: Int = 2) -> [Deploy] {
     func started(_ d: Deploy) -> Date { parseRunDate(d.startedAt) ?? .distantPast }
-    let building = deploys.filter { $0.state == "building" }.sorted { started($0) > started($1) }
-    let done = deploys.filter { $0.state != "building" && (parseRunDate($0.finishedAt).map { now.timeIntervalSince($0) <= recent } ?? false) }
+    let building = deploys.filter(deployOpen).sorted { started($0) > started($1) }
+    let done = deploys.filter { !deployOpen($0) && (parseRunDate($0.finishedAt).map { now.timeIntervalSince($0) <= recent } ?? false) }
         .max { (parseRunDate($0.finishedAt) ?? .distantPast) < (parseRunDate($1.finishedAt) ?? .distantPast) }
     return Array((building + [done].compactMap { $0 }).prefix(limit))
 }
 
 /// Seconds a deploy has run: to `finishedAt` once finished, else to `now`.
 func deployElapsed(_ d: Deploy, now: Date) -> TimeInterval? {
-    parseRunDate(d.startedAt).map { (d.state == "building" ? now : parseRunDate(d.finishedAt) ?? now).timeIntervalSince($0) }
+    parseRunDate(d.startedAt).map { (deployOpen(d) ? now : parseRunDate(d.finishedAt) ?? now).timeIntervalSince($0) }
 }
 
 /// The deploy URL if it is a web link (the row opens it in the browser).
@@ -287,6 +306,7 @@ struct DeployWings {
     private var seen: [String: String]?
     private var stale = true
     private var building: Deploy?
+    private var unknown: Deploy?
     private var flash: (label: String, failed: Bool)?
     /// Bumps with every flash, so a stale 6s timer can tell it no longer owns the flash.
     private(set) var flashGen = 0
@@ -294,6 +314,7 @@ struct DeployWings {
     var kind: WingKind? {
         if let f = flash, !f.failed { return .deployed(f.label, failed: false) }
         if let b = building { return .deploying(deployLabel(b)) }
+        if let u = unknown { return .deployUnknown(deployLabel(u), note: unknownNote(u)) }
         if let f = flash { return .deployed(f.label, failed: true) }
         return nil
     }
@@ -302,18 +323,20 @@ struct DeployWings {
     /// Feeds the latest deploys. True when a live flash just started (the caller arms the 6s expiry).
     /// No baseline until loaded and online, nor from the empty list offline leaves behind: deploys already finished then show nothing.
     mutating func ingest(_ deploys: [Deploy], offline: Bool, loaded: Bool) -> Bool {
-        if !loaded || offline { seen = nil; stale = true; building = nil; flash = nil; return false }
+        if !loaded || offline { seen = nil; stale = true; building = nil; unknown = nil; flash = nil; return false }
         if stale && deploys.isEmpty { return false }
         let old = seen
         stale = false
         seen = Dictionary(deploys.map { ($0.key, $0.state) }, uniquingKeysWith: { _, b in b })
         building = deploys.filter { $0.state == "building" }.max { (parseRunDate($0.startedAt) ?? .distantPast) < (parseRunDate($1.startedAt) ?? .distantPast) }
+        unknown = deploys.filter { $0.state == "unknown" }.max { (parseRunDate($0.startedAt) ?? .distantPast) < (parseRunDate($1.startedAt) ?? .distantPast) }
         guard let old else { return false }
         var live = false
         for d in deploys where old[d.key] != d.state {
             switch d.state {
             case "building": if flash?.failed == true { flash = nil } // the next deploy
             case "failed": flash = (deployLabel(d), true); flashGen += 1
+            case "unknown": break // shown from `unknown` while serve reports it; not a live flash
             default: flash = (deployLabel(d), false); flashGen += 1; live = true
             }
         }

@@ -361,10 +361,12 @@ struct DeployRow: View {
     let deploy: Deploy
     let now: Date
 
-    private var color: Color { deploy.state == "live" ? OT.C.green : deploy.state == "failed" ? OT.C.red : OT.C.claude }
+    private var color: Color {
+        switch deploy.state { case "live": OT.C.green; case "failed": OT.C.red; case "unknown": OT.C.orangeText; default: OT.C.claude }
+    }
 
     var body: some View {
-        let state = deploy.state == "building" ? "deploying…" : deploy.state == "live" ? "live ✓" : "✗ deploy failed"
+        let state = deployStateText(deploy)
         let url = deployURL(deploy)
         HStack(spacing: 6) {
             Circle().fill(color).frame(width: 6, height: 6)

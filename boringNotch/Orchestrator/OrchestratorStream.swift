@@ -61,7 +61,7 @@ struct SSELineParser {
             return (try? dec.decode(OrchestratorApproval.self, from: data)).map { .approval($0) } // malformed: keep current
         case "deploy":
             if let list = (try? dec.decode(StateResponse.self, from: data))?.deploys { return .deploys(list) }
-            if let list = try? dec.decode([Deploy].self, from: data) { return .deploys(list) }
+            if let list = decodeDeployList(data) { return .deploys(list) }
             return (try? dec.decode(Deploy.self, from: data)).map { .deploy($0) }
         case "agents": return decodeBgTasks(data).map { .background($0) }
         case "agent": return decodeBgTask(data).map { .backgroundOne($0) }
