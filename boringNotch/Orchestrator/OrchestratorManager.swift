@@ -291,9 +291,7 @@ final class OrchestratorManager: ObservableObject {
                         guard let ev = parser.feed(line) else { continue }
                         switch ev {
                         case .state(let st): self.applyState(st)
-                        case .chat(let r):
-                            await self.applyChat(r)
-                            if r.running == false { OrchestratorTranscriptStore.shared.ingestBlocks(running: false, blocks: [], reset: true) }
+                        case .chat(let r): await self.applyChat(r)
                         case .blocks(let running, let blocks, let reset):
                             // First event of a connection: blocks after `since` (appended), or everything (replaces; pending rows survive).
                             let store = OrchestratorTranscriptStore.shared
@@ -406,6 +404,7 @@ final class OrchestratorManager: ObservableObject {
         let mine = applySeq
         markReachable()
         let running = r.running ?? false
+        let cameBack = running && !chatRunning
         if chatRunning != running { chatRunning = running }
         if !running { setBackground([]) } // a new session starts clean
         if claude != r.claude { claude = r.claude }
@@ -426,7 +425,7 @@ final class OrchestratorManager: ObservableObject {
         // Blocks first: a new card must appear with its context (Phase 8: ingest blocks before publishing a prompt).
         // While streaming, blocks arrive as events, except a chat event with a new prompt, which fetches them first.
         let newPrompt = pc != nil && pc != prompt || !po.isEmpty && po != promptOptions
-        if shouldFetchBlocks(streaming: streaming, running: running, newPrompt: newPrompt) {
+        if shouldFetchBlocks(streaming: streaming, running: running, newPrompt: newPrompt, cameBack: cameBack) {
             await OrchestratorTranscriptStore.shared.refresh(base: Self.baseURL, session: session, chatRunning: running)
             guard mine == applySeq else { return } // a newer chat payload applied while we were suspended
         }
@@ -445,6 +444,7 @@ final class OrchestratorManager: ObservableObject {
         let blocks = OrchestratorTranscriptStore.shared.blocks
         let turn = blocks.last { $0.kind == .user }?.id
         if turn != liveIgnoredTurn { liveIgnored = []; liveIgnoredTurn = turn }
+        OrchestratorTranscriptStore.shared.noteTurn(live: working || prompt != nil)
         let next = nextLiveReply(previous: liveReply, screen: screen, blocks: blocks, working: working, cardUp: prompt != nil, ignore: liveIgnored)
         if liveReply != next { liveReply = next }
         if !liveEndDue(working: working, hasRow: liveReply != nil, cardUp: prompt != nil, screen: screen) { liveEnd?.cancel(); liveEnd = nil }

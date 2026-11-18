@@ -40,6 +40,11 @@ final class OrchestratorTranscriptStore: ObservableObject {
     private var draining = false
 
     private var needsFull = true
+    /// When the last turn ended; nil while one is live (sent rows don't go stale mid-turn).
+    private var idleSince: Date? = .distantPast
+    func noteTurn(live: Bool) {
+        if live { idleSince = nil } else if idleSince == nil { idleSince = Date() }
+    }
     private var polls = 0
 
     /// Input box + idle status from a chat payload (polled or pushed). Phase 8: serve's `input` wins over the heuristic.
@@ -54,25 +59,22 @@ final class OrchestratorTranscriptStore: ObservableObject {
     }
 
     func refresh(base: URL, session: URLSession, chatRunning: Bool) async {
-        guard chatRunning else {
-            if !blocks.isEmpty { blocks = [] }
-            if !askOpen.isEmpty { askOpen = [] }
-            needsFull = true
-            return
-        }
-        guard OrchestratorManager.shared.notchOpen else { return }
+        // Chat not running (or one transient running:false): keep the history, resync in full when it is back.
+        guard chatRunning else { needsFull = true; return }
+        guard OrchestratorManager.shared.notchOpen || needsFull else { return } // a pending resync runs even when closed
         // ponytail: full resync about every 15th open poll (~30 s) for what the overlap check can't see
         // (e.g. /clear with no new blocks yet); SSE in Phase 8 removes it.
         let full = needsFull || polls % 15 == 0
         polls += 1
 
         let sinceSent = !full && !blocks.isEmpty
+        let snapshot = blocks
         guard let decoded = await fetchBlocks(base: base, session: session, since: sinceSent ? blocks.last?.id : nil) else {
             fetchFailed()
             return
         }
         if sinceSent { await ingestSince(running: decoded.running, blocks: decoded.blocks, base: base, session: session) }
-        else { ingestFull(decoded) }
+        else { ingestFull(decoded, snapshot: snapshot) }
     }
 
     /// Blocks asked for after our last id (poll or stream reconnect): appended, unless they share no id with ours
@@ -82,25 +84,31 @@ final class OrchestratorTranscriptStore: ObservableObject {
             ingestBlocks(running: running, blocks: incoming, reset: false)
             return
         }
+        let snapshot = blocks
         guard let all = await fetchBlocks(base: base, session: session, since: nil) else { fetchFailed(); return }
-        ingestFull(all)
+        ingestFull(all, snapshot: snapshot)
     }
 
-    /// A full fetch still holding our last block merges; without it the conversation changed (/clear): replace.
-    private func ingestFull(_ d: (running: Bool?, blocks: [ChatBlock])) {
-        ingestBlocks(running: d.running, blocks: d.blocks, reset: !d.blocks.contains { $0.id == blocks.last?.id })
+    /// A full fetch still holding the last block we had when it began merges; without it the conversation changed
+    /// (/clear): replace. Blocks the stream delivered while it was in flight are kept (mergeFullFetch).
+    private func ingestFull(_ d: (running: Bool?, blocks: [ChatBlock]), snapshot: [ChatBlock]) {
+        if d.running == false && d.blocks.isEmpty { return ingestBlocks(running: false, blocks: [], reset: true) }
+        apply(mergeFullFetch(current: blocks, snapshot: snapshot, incoming: d.blocks))
     }
 
     /// The one place blocks enter the store (polled or pushed). `reset` replaces the rows; pending rows are kept and reconciled.
     func ingestBlocks(running: Bool?, blocks incoming: [ChatBlock], reset: Bool) {
         if running == false && incoming.isEmpty {
-            if !blocks.isEmpty { blocks = [] }
-            fallback = true
+            // Never wipe the history: a stopped chat keeps its rows; the next session's full fetch replaces them.
+            if blocks.isEmpty { fallback = true }
             needsFull = true
             return
         }
-        let m = mergeChatBlocks(blocks, incoming, reset: reset)
-        if m.blocks != blocks { blocks = m.blocks }
+        apply(mergeChatBlocks(blocks, incoming, reset: reset).blocks)
+    }
+
+    private func apply(_ merged: [ChatBlock]) {
+        if merged != blocks { blocks = merged }
         if fallback { fallback = false }
         needsFull = false
         reconcile()
@@ -110,7 +118,7 @@ final class OrchestratorTranscriptStore: ObservableObject {
 
     private func reconcile() {
         guard !pending.isEmpty else { return }
-        let r = reconcilePending(pending, blocks: blocks, known: knownUserIDs, now: Date())
+        let r = reconcilePending(pending, blocks: blocks, known: knownUserIDs, now: Date(), idleSince: idleSince)
         if r.known != knownUserIDs { knownUserIDs = r.known }
         if r.pending != pending { pending = r.pending }
     }

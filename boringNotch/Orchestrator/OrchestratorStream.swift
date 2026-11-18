@@ -84,7 +84,8 @@ func caretVisible(live: Bool?, working: Bool, kind: ChatBlock.Kind, id: String, 
 
 /// Whether applyChat must GET /api/chat/blocks itself. Polling always does; while streaming the `blocks`
 /// event feeds the store, except when a chat event brings a NEW prompt: its context rows must be in the
-/// store before the card is published (the blocks event may arrive after the chat event).
-func shouldFetchBlocks(streaming: Bool, running: Bool, newPrompt: Bool) -> Bool {
-    !(streaming && running) || newPrompt
+/// store before the card is published (the blocks event may arrive after the chat event). Also when the chat comes
+/// back from running:false: the stream's blocks cursor won't resend the history, so the store resyncs in full.
+func shouldFetchBlocks(streaming: Bool, running: Bool, newPrompt: Bool, cameBack: Bool = false) -> Bool {
+    !(streaming && running) || newPrompt || cameBack
 }
